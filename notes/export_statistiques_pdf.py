@@ -1734,7 +1734,7 @@ def exporter_conseils_pdf(request):
             c.drawString(margin, y, "COUPON-RÉPONSE À RETOURNER À L'ÉCOLE")
             y -= 0.5*cm
             
-            titre_rdv = lettre.get('titre_enseignant', 'le professeur principal').lower()
+            titre_rdv = lettre.get('titre_enseignant', 'la Direction').lower()
             c.setFont("Helvetica", 8)
             c.setFillColor(colors.black)
             c.drawString(margin, y, f"Je soussigné(e) _________________________, parent de {eleve.prenom} {eleve.nom},")
