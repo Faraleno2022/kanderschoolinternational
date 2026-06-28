@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "kinder",
+      "runtimeExecutable": "venv\\Scripts\\python.exe",
+      "runtimeArgs": ["manage.py", "runserver", "127.0.0.1:8732"],
+      "port": 8732
+    }
+  ]
+}

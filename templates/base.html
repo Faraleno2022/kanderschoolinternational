@@ -5,45 +5,46 @@
     {% load static_versioned %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}G.S HKD{% endblock %}</title>
+    <title>{% block title %}Kinder School International{% endblock %}</title>
 
     {# SEO : description par défaut, écrasable par les pages via le bloc meta_description #}
-    <meta name="description" content="{% block meta_description %}Myschool — système de gestion scolaire moderne : élèves, paiements, salaires, transport, notes et statistiques pour les établissements en Guinée.{% endblock %}">
+    <meta name="description" content="{% block meta_description %}Kinder School International — Crèche, Garderie et Maternelle bilingue (français-anglais) à Conakry, pour les enfants à partir de 3 mois.{% endblock %}">
     <meta name="robots" content="{% block meta_robots %}index,follow{% endblock %}">
-    <meta name="theme-color" content="#0d6efd">
+    <meta name="theme-color" content="#3563AE">
     <link rel="canonical" href="{% block canonical_url %}{{ request.build_absolute_uri }}{% endblock %}">
 
     {# Open Graph (Facebook, WhatsApp, LinkedIn, etc.) #}
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Myschool">
-    <meta property="og:title" content="{% block og_title %}{{ self.title|default:'Myschool' }}{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}Gestion scolaire moderne — automatisation des inscriptions, paiements, notes et bulletins.{% endblock %}">
+    <meta property="og:site_name" content="Kinder School International">
+    <meta property="og:title" content="{% block og_title %}{{ self.title|default:'Kinder School International' }}{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Crèche, Garderie et Maternelle bilingue à Conakry — un environnement chaleureux et stimulant pour les enfants à partir de 3 mois.{% endblock %}">
     <meta property="og:url" content="{% block og_url %}{{ request.build_absolute_uri }}{% endblock %}">
-    <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}{% endblock %}">
+    <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/og_kinder.jpg' %}{% endblock %}">
     <meta property="og:locale" content="fr_FR">
 
     {# Twitter Card #}
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="{% block twitter_title %}{{ self.title|default:'Myschool' }}{% endblock %}">
-    <meta name="twitter:description" content="{% block twitter_description %}Gestion scolaire moderne, automatisée et fiable pour les établissements scolaires.{% endblock %}">
-    <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}{% endblock %}">
+    <meta name="twitter:title" content="{% block twitter_title %}{{ self.title|default:'Kinder School International' }}{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}Crèche, Garderie et Maternelle bilingue (français-anglais) à Conakry, pour les enfants à partir de 3 mois.{% endblock %}">
+    <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/og_kinder.jpg' %}{% endblock %}">
 
     {% block structured_data %}
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "Myschool GN",
-      "applicationCategory": "EducationalApplication",
-      "operatingSystem": "Web",
-      "url": "https://www.myschoolgn.space/",
-      "description": "Logiciel de gestion scolaire pour les etablissements en Guinee : eleves, paiements, salaires, transport, notes et rapports scolaires.",
-      "publisher": {
-        "@type": "EducationalOrganization",
-        "name": "Myschool GN",
-        "email": "contact@myschoolgn.space",
-        "telephone": "+224622613559"
-      }
+      "@type": "Preschool",
+      "name": "Kinder School International",
+      "description": "Crèche, Garderie et Maternelle bilingue (français-anglais) à Conakry, pour les enfants à partir de 3 mois.",
+      "url": "https://www.kinderschoolinternational.com/",
+      "email": "info@kinderschoolinternational.com",
+      "telephone": "+224628613566",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "Lambanyi, Commune de Lambanyi",
+        "addressLocality": "Conakry",
+        "addressCountry": "GN"
+      },
+      "openingHours": ["Mo-Th 06:30-16:00", "Fr 06:30-13:00"]
     }
     </script>
     {% endblock %}
@@ -66,10 +67,45 @@
     {% endif %}
 
     <style>
+        /* ===== Charte graphique Kinder School International ===== */
+        :root {
+            --kinder-blue: #3563AE;
+            --kinder-blue-dark: #244A8A;
+            --kinder-blue-light: #5B86D6;
+            --kinder-yellow: #FFC83D;
+            --kinder-green: #5BB94B;
+            --kinder-orange: #F5933B;
+            --kinder-pink: #EC6B9D;
+            --kinder-cyan: #2FB7E6;
+            /* Surcharge des variables Bootstrap */
+            --bs-primary: #3563AE;
+            --bs-primary-rgb: 53, 99, 174;
+            --bs-link-color: #3563AE;
+            --bs-link-color-rgb: 53, 99, 174;
+            --bs-link-hover-color: #244A8A;
+        }
+        .bg-primary { background-color: var(--kinder-blue) !important; }
+        .text-primary { color: var(--kinder-blue) !important; }
+        .border-primary { border-color: var(--kinder-blue) !important; }
+        .btn-primary {
+            --bs-btn-bg: #3563AE; --bs-btn-border-color: #3563AE;
+            --bs-btn-hover-bg: #2c5396; --bs-btn-hover-border-color: #274d8c;
+            --bs-btn-active-bg: #244A8A; --bs-btn-active-border-color: #244A8A;
+            --bs-btn-disabled-bg: #3563AE; --bs-btn-disabled-border-color: #3563AE;
+        }
+        .btn-outline-primary {
+            --bs-btn-color: #3563AE; --bs-btn-border-color: #3563AE;
+            --bs-btn-hover-bg: #3563AE; --bs-btn-hover-border-color: #3563AE;
+            --bs-btn-active-bg: #244A8A; --bs-btn-active-border-color: #244A8A;
+        }
+        .card-stats { border-left-color: var(--kinder-blue) !important; }
+        a { color: var(--kinder-blue); }
         body { padding-top: 70px; }
         .navbar-brand {
             font-weight: bold;
         }
+        .navbar-brand .brand-text { line-height: 1; }
+        .navbar-brand .brand-text small { font-size: .62rem; letter-spacing: .14em; opacity: .85; font-weight: 600; }
         .navbar-brand img {
             height: 36px;
             width: auto;
@@ -204,8 +240,11 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{% url 'home' %}">
-                <img src="{% static_versioned 'logos/logo.png' %}" alt="Logo Myschool" width="36" height="36" loading="eager" decoding="async" fetchpriority="high">
-                <span>Myschool</span>
+                <img src="{% static_versioned 'logos/logo.png' %}" alt="Logo Kinder School International" width="40" height="40" loading="eager" decoding="async" fetchpriority="high">
+                <span class="brand-text d-flex flex-column">
+                    <span>Kinder School</span>
+                    <small>INTERNATIONAL</small>
+                </span>
             </a>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -222,13 +261,18 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'fonctionnalites' %}">
-                                <i class="fas fa-list-check me-1"></i>Fonctionnalités
+                            <a class="nav-link" href="{% url 'home' %}#formules">
+                                <i class="fas fa-child-reaching me-1"></i>Nos formules
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'tarifs' %}">
-                                <i class="fas fa-tags me-1"></i>Tarifs
+                            <a class="nav-link" href="{% url 'home' %}#services">
+                                <i class="fas fa-star me-1"></i>Services
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'home' %}#galerie">
+                                <i class="fas fa-images me-1"></i>Galerie
                             </a>
                         </li>
                         <li class="nav-item">
@@ -650,22 +694,38 @@
 
     <!-- Footer -->
     <footer class="site-footer bg-dark text-light mt-4">
-        <div class="container py-3">
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <small>
-                        &copy; {% now "Y" %} Myschool. Tous droits réservés.
-                    </small>
+        <div class="container py-4">
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="d-flex align-items-center mb-2">
+                        <img src="{% static 'logos/logo.png' %}" alt="Kinder School International" width="38" height="38" class="bg-white rounded p-1 me-2">
+                        <span class="fw-bold">Kinder School International</span>
+                    </div>
+                    <p class="small text-light-emphasis mb-0">
+                        Crèche · Garderie · Maternelle bilingue (français-anglais)
+                        pour les enfants à partir de 3 mois.
+                    </p>
                 </div>
-                <div class="col-md-6 text-md-end mt-2 mt-md-0">
-                    <a href="{% url 'home' %}" class="text-light text-decoration-none me-3">
-                        <i class="fas fa-home me-1"></i>Accueil
-                    </a>
-                    <span class="me-3"><i class="fas fa-phone me-1"></i> +224 622613559</span>
-                    <a href="mailto:contact@myschoolgn.space" class="text-light text-decoration-none">
-                        <i class="fas fa-envelope me-1"></i> contact@myschoolgn.space
-                    </a>
+                <div class="col-md-4">
+                    <h6 class="text-uppercase small fw-bold mb-2">Contact</h6>
+                    <ul class="list-unstyled small mb-0">
+                        <li class="mb-1"><i class="fas fa-map-marker-alt me-2"></i>Lambanyi, Commune de Lambanyi — Conakry, Guinée</li>
+                        <li class="mb-1"><i class="fas fa-phone me-2"></i><a href="tel:+224628613566" class="text-light text-decoration-none">+224 628 61 35 66</a> · <a href="tel:+224628049446" class="text-light text-decoration-none">+224 628 04 94 46</a></li>
+                        <li class="mb-1"><i class="fas fa-envelope me-2"></i><a href="mailto:info@kinderschoolinternational.com" class="text-light text-decoration-none">info@kinderschoolinternational.com</a></li>
+                        <li><i class="fas fa-globe me-2"></i>www.kinderschoolinternational.com</li>
+                    </ul>
                 </div>
+                <div class="col-md-4">
+                    <h6 class="text-uppercase small fw-bold mb-2">Liens</h6>
+                    <a href="{% url 'home' %}" class="d-block text-light text-decoration-none small mb-1"><i class="fas fa-home me-2"></i>Accueil</a>
+                    <a href="{% url 'contact' %}" class="d-block text-light text-decoration-none small mb-1"><i class="fas fa-envelope me-2"></i>Contact &amp; Inscription</a>
+                    <a href="{% url 'rapport_scolaire' %}" class="d-block text-light text-decoration-none small mb-1"><i class="fas fa-file-alt me-2"></i>Rapport scolaire</a>
+                    <a href="{% url 'utilisateurs:login' %}" class="d-block text-light text-decoration-none small"><i class="fas fa-lock me-2"></i>Espace de gestion</a>
+                </div>
+            </div>
+            <hr class="border-secondary my-3">
+            <div class="text-center small text-light-emphasis">
+                &copy; {% now "Y" %} Kinder School International. Tous droits réservés.
             </div>
             {% block footer_extra %}{% endblock %}
         </div>

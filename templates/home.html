@@ -2,613 +2,446 @@
 {% load static %}
 {% load static_versioned %}
 
-{% block title %}Myschool GN - Logiciel de gestion scolaire en Guinée{% endblock %}
-{% block meta_description %}MySchoolGN est le système de gestion scolaire conçu pour les réalités des écoles guinéennes : paiements, bulletins, parents, offline et pilotage directeur.{% endblock %}
-{% block og_title %}Myschool GN - Logiciel de gestion scolaire en Guinée{% endblock %}
-{% block og_description %}Le système de gestion scolaire conçu pour les réalités des écoles guinéennes.{% endblock %}
-{% block twitter_title %}Myschool GN - Logiciel de gestion scolaire en Guinée{% endblock %}
-{% block twitter_description %}Paiements, bulletins, parents, offline et pilotage directeur pour les écoles en Guinée.{% endblock %}
+{% block title %}Kinder School International — Crèche, Garderie & Maternelle bilingue à Conakry{% endblock %}
+{% block meta_description %}Kinder School International : crèche, garderie et maternelle bilingue (français-anglais) à Lambanyi, Conakry. Accueil des enfants à partir de 3 mois dans un environnement chaleureux, sûr et stimulant.{% endblock %}
+{% block og_title %}Kinder School International — Crèche, Garderie & Maternelle{% endblock %}
+{% block og_description %}École bilingue à Conakry pour les enfants à partir de 3 mois : cantine, salle de jeux, bibliothèque et activités périscolaires.{% endblock %}
+{% block twitter_title %}Kinder School International{% endblock %}
+{% block twitter_description %}Crèche, garderie et maternelle bilingue à Conakry, pour les enfants à partir de 3 mois.{% endblock %}
 
 {% block extra_css %}
 <style>
-  /* Hero section plein écran */
-  .hero-wrapper {
-    margin-top: -70px; /* Compenser la navbar fixe */
-    margin-left: -15px;
-    margin-right: -15px;
+  /* ===================== HERO ===================== */
+  .ksi-hero {
+    margin: -70px -15px 0;
     position: relative;
+    min-height: 92vh;
+    display: flex;
+    align-items: center;
     overflow: hidden;
-    /* Utiliser une couleur neutre claire pour éviter l'effet d'écran noir */
-    background-color: #f3f4f6;
+    background: linear-gradient(135deg, #244A8A 0%, #3563AE 60%, #5B86D6 100%);
   }
-
-  .hero-image {
-    width: 100vw; /* Pleine largeur de la fenêtre */
-    height: 100vh; /* Pleine hauteur de la fenêtre */
+  .ksi-hero__img {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
     object-fit: cover;
-    object-position: center center;
-    border-radius: 0;
-    display: block;
-    /* Optimisations de performance */
-    will-change: transform;
-    transform: translateZ(0);
-    /* Fond neutre sous l'image, évite le flash noir avant chargement */
-    background-color: transparent;
+    z-index: 0;
+  }
+  .ksi-hero__overlay {
+    position: absolute; inset: 0; z-index: 1;
+    background: linear-gradient(105deg, rgba(36,74,138,.92) 0%, rgba(53,99,174,.78) 45%, rgba(53,99,174,.30) 100%);
+  }
+  .ksi-hero__inner { position: relative; z-index: 2; color: #fff; padding: 5rem 0; }
+  .ksi-hero__badge {
+    width: 92px; height: 92px; border-radius: 24px;
+    background: #fff; padding: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.25);
+    margin-bottom: 1.5rem;
+  }
+  .ksi-hero__pills { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.2rem; }
+  .ksi-pill {
+    display: inline-flex; align-items: center; gap: .4rem;
+    font-weight: 700; font-size: .85rem; letter-spacing: .03em;
+    padding: .45rem 1rem; border-radius: 50px; color: #fff;
+  }
+  .ksi-pill--creche { background: var(--kinder-orange); }
+  .ksi-pill--garderie { background: var(--kinder-green); }
+  .ksi-pill--maternelle { background: var(--kinder-cyan); }
+  .ksi-hero h1 {
+    font-weight: 800; font-size: clamp(2.2rem, 5vw, 3.6rem);
+    line-height: 1.05; text-shadow: 0 2px 14px rgba(0,0,0,.35); margin-bottom: 1rem;
+  }
+  .ksi-hero h1 .accent { color: var(--kinder-yellow); }
+  .ksi-hero__lead { font-size: 1.2rem; max-width: 620px; opacity: .96; margin-bottom: 1.8rem; }
+  .ksi-hero__actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+  .ksi-hero__actions .btn { min-height: 50px; font-weight: 700; border-radius: 50px; padding: 0 1.6rem; display: inline-flex; align-items: center; gap: .5rem; }
+  .btn-sun { background: var(--kinder-yellow); color: #5a4500; border: none; }
+  .btn-sun:hover { background: #ffd566; color: #5a4500; }
+
+  /* ===================== QUICK INFO STRIP ===================== */
+  .ksi-quick { margin-top: -3.5rem; position: relative; z-index: 5; }
+  .ksi-quick .card {
+    border: none; border-radius: 18px; box-shadow: 0 10px 30px rgba(36,74,138,.12);
+    transition: transform .25s ease, box-shadow .25s ease; height: 100%;
+  }
+  .ksi-quick .card:hover { transform: translateY(-6px); box-shadow: 0 16px 38px rgba(36,74,138,.2); }
+  .ksi-quick .ksi-ico {
+    width: 54px; height: 54px; border-radius: 14px; display: inline-flex;
+    align-items: center; justify-content: center; font-size: 1.4rem; color: #fff; margin-bottom: .8rem;
   }
 
-  /* Overlay pour améliorer la lisibilité du texte */
-  .hero-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(
-      135deg,
-      rgba(0, 123, 255, 0.1) 0%,
-      rgba(0, 0, 0, 0.3) 100%
-    );
-    z-index: 1;
-  }
+  /* ===================== SECTIONS ===================== */
+  .ksi-section { padding: 4.5rem 0; }
+  .ksi-eyebrow { color: var(--kinder-orange); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; font-size: .8rem; }
+  .ksi-title { font-weight: 800; color: var(--kinder-blue-dark); font-size: clamp(1.7rem, 3.5vw, 2.4rem); }
+  .ksi-lead { color: #5a6675; font-size: 1.08rem; line-height: 1.7; }
 
-  /* Texte superposé sur l'image */
-  .hero-content {
-    position: absolute;
-    bottom: 50px;
-    left: 50px;
-    right: 50px;
-    z-index: 2;
-    color: white;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
-  }
+  /* Formules */
+  .ksi-formule { border: none; border-radius: 22px; overflow: hidden; height: 100%; box-shadow: 0 10px 28px rgba(0,0,0,.08); transition: transform .25s ease; }
+  .ksi-formule:hover { transform: translateY(-8px); }
+  .ksi-formule__head { padding: 1.4rem 1.5rem; color: #fff; }
+  .ksi-formule__head h3 { font-weight: 800; margin: 0; }
+  .ksi-formule__head .age { font-size: .9rem; opacity: .92; }
+  .ksi-formule__body { padding: 1.5rem; }
+  .ksi-formule ul { list-style: none; padding: 0; margin: 0; }
+  .ksi-formule li { padding: .4rem 0 .4rem 1.7rem; position: relative; color: #4a5663; }
+  .ksi-formule li::before { content: "\f1ae"; font-family: "Font Awesome 6 Free"; font-weight: 900; position: absolute; left: 0; top: .45rem; color: var(--kinder-blue-light); }
 
-  .hero-title {
-    font-size: 3.5rem;
-    font-weight: bold;
-    margin-bottom: 1rem;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-  }
+  /* Services */
+  .ksi-service { text-align: center; padding: 2rem 1.2rem; border-radius: 20px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.06); height: 100%; transition: transform .25s ease, box-shadow .25s ease; }
+  .ksi-service:hover { transform: translateY(-6px); box-shadow: 0 14px 32px rgba(0,0,0,.12); }
+  .ksi-service .ksi-ico { width: 70px; height: 70px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.7rem; color: #fff; margin-bottom: 1rem; }
+  .ksi-service h5 { font-weight: 700; color: var(--kinder-blue-dark); }
 
-  .hero-subtitle {
-    font-size: 1.5rem;
-    font-weight: 300;
-    opacity: 0.9;
-  }
+  /* Galerie */
+  .ksi-gallery img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; transition: transform .4s ease; display: block; }
+  .ksi-gallery .g-item { overflow: hidden; border-radius: 16px; box-shadow: 0 8px 22px rgba(0,0,0,.1); }
+  .ksi-gallery .g-item:hover img { transform: scale(1.07); }
+  .ksi-gallery .g-tall { grid-row: span 2; }
 
-  .hero-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-top: 1.5rem;
-  }
+  /* Horaires */
+  .ksi-hours { background: linear-gradient(135deg, #244A8A, #3563AE); border-radius: 26px; color: #fff; overflow: hidden; }
+  .ksi-hours__card { background: rgba(255,255,255,.1); border-radius: 18px; padding: 1.5rem; height: 100%; backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,.15); }
+  .ksi-hours__card h5 { font-weight: 800; color: var(--kinder-yellow); }
+  .ksi-hours__time { font-size: 1.5rem; font-weight: 800; }
 
-  .hero-actions .btn {
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    text-shadow: none;
-    font-weight: 600;
-  }
+  /* CTA contact */
+  .ksi-cta { background: var(--kinder-yellow); border-radius: 26px; }
+  .ksi-contact-ico { width: 46px; height: 46px; border-radius: 12px; background: rgba(53,99,174,.12); color: var(--kinder-blue); display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; }
 
-  .hero-positioning {
-    font-size: 1.2rem;
-    max-width: 720px;
-    line-height: 1.55;
-  }
+  .scroll-indicator { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 3; color: #fff; font-size: 1.6rem; cursor: pointer; animation: ksibounce 2s infinite; }
+  @keyframes ksibounce { 0%,20%,50%,80%,100%{transform:translateX(-50%) translateY(0);} 40%{transform:translateX(-50%) translateY(-10px);} 60%{transform:translateX(-50%) translateY(-5px);} }
 
-  .strategy-strip {
-    background: #0d6efd;
-    color: #fff;
-    border-radius: 0.5rem;
-    padding: 1.25rem;
-  }
-
-  .strategy-strip .item {
-    display: flex;
-    gap: 0.75rem;
-    align-items: flex-start;
-  }
-
-  .strategy-strip i {
-    font-size: 1.4rem;
-    margin-top: 0.15rem;
-  }
-
-  /* Bouton de défilement */
-  .scroll-indicator {
-    position: absolute;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 3;
-    color: white;
-    font-size: 2rem;
-    animation: bounce 2s infinite;
-    cursor: pointer;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
-  }
-
-  @keyframes bounce {
-    0%, 20%, 50%, 80%, 100% {
-      transform: translateX(-50%) translateY(0);
-    }
-    40% {
-      transform: translateX(-50%) translateY(-10px);
-    }
-    60% {
-      transform: translateX(-50%) translateY(-5px);
-    }
-  }
-
-  /* Section de contenu avec espacement */
-  .content-section {
-    margin-top: 2rem;
-    padding-top: 3rem;
-  }
-
-  .presentation-card {
-    border: 1px solid #e9ecef;
-    border-radius: 0.5rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-  }
-
-  .presentation-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
-  }
-
-  .presentation-body {
-    padding: 2.5rem !important;
-  }
-
-  .presentation-title {
-    font-size: 1.75rem;
-    color: #007bff;
-  }
-
-  .presentation-body p {
-    font-size: 1.1rem;
-    line-height: 1.7;
-    color: #555;
-  }
-
-  .audience-card,
-  .trust-item {
-    height: 100%;
-    border: 1px solid #e9ecef;
-    border-radius: 0.5rem;
-    background: #fff;
-  }
-
-  .audience-card {
-    padding: 1.5rem;
-  }
-
-  .audience-card i {
-    width: 42px;
-    height: 42px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: #eef5ff;
-    color: #0d6efd;
-    margin-bottom: 1rem;
-  }
-
-  .trust-item {
-    padding: 1.25rem;
-    text-align: center;
-  }
-
-  /* Images des cartes avec lazy loading */
-  .image-card {
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-  }
-
-  .image-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
-  }
-
-  .image-card .card-img-top {
-    width: 100%;
-    height: 360px;
-    object-fit: cover;
-    border-top-left-radius: 0.5rem;
-    border-top-right-radius: 0.5rem;
-    transition: transform 0.3s ease;
-    /* Optimisations de performance */
-    will-change: transform;
-    transform: translateZ(0);
-    /* Couleur neutre pour le placeholder au lieu du noir */
-    background-color: #f3f4f6;
-  }
-
-  .image-card:hover .card-img-top {
-    transform: scale(1.05);
-  }
-
-  /* Responsive design */
-  @media (max-width: 768px) {
-    .hero-title {
-      font-size: 2.5rem;
-    }
-
-    .hero-subtitle {
-      font-size: 1.2rem;
-    }
-
-    .hero-content {
-      bottom: 30px;
-      left: 20px;
-      right: 20px;
-    }
-
-    .hero-image {
-      height: 70vh; /* Réduire la hauteur sur mobile */
-    }
-  }
-
-  @media (max-width: 480px) {
-    .hero-title {
-      font-size: 2rem;
-    }
-
-    .hero-subtitle {
-      font-size: 1rem;
-    }
-
-    .hero-image {
-      height: 60vh;
-    }
-
-    .hero-actions .btn {
-      width: 100%;
-      justify-content: center;
-    }
-  }
-
-  /* Placeholder de chargement (neutre, sans shimmer pour ne pas ralentir) */
-  .image-loading { background: #f3f4f6; }
+  @media (max-width: 991px){ .ksi-hero{ min-height: auto; } .ksi-gallery .g-tall{ grid-row: span 1; } }
 </style>
-<!-- Préchargement critique de l'image héro optimisée (WebP pour vitesse maximale) -->
-<link rel="preload" as="image" href="{% static 'images/optimized/ecole.webp' %}" type="image/webp" imagesizes="100vw">
-{# Les images des cartes sont sous le pli : on laisse le navigateur les charger en lazy plutôt que de les précharger #}
+<link rel="preload" as="image" href="{% static 'images/optimized/hero_kinder.webp' %}" type="image/webp">
 {% endblock %}
 
 {% block breadcrumb %}{% endblock %}
 
 {% block content %}
-<div class="hero-wrapper">
 
-  <!-- Image héro optimisée avec WebP et fallback JPEG -->
+<!-- ===================== HERO ===================== -->
+<header class="ksi-hero">
   <picture>
-    <source type="image/webp"
-            srcset="{% static 'images/optimized/ecole.webp' %}"
-            media="(min-width: 1px)">
-    <img src="{% static 'images/optimized/ecole_optimized.jpg' %}"
-         alt="Myschool"
-         class="hero-image"
-         loading="eager"
-         decoding="sync"
-         fetchpriority="high"
-         width="1920"
-         height="1080">
+    <source type="image/webp" srcset="{% static 'images/optimized/hero_kinder.webp' %}">
+    <img src="{% static 'images/optimized/hero_kinder.jpg' %}" alt="Façade de Kinder School International à Conakry"
+         class="ksi-hero__img" loading="eager" decoding="async" fetchpriority="high">
   </picture>
-
-
-  <!-- Overlay pour améliorer la lisibilité -->
-  <div class="hero-overlay"></div>
-
-  <!-- Contenu superposé -->
-  <div class="hero-content">
-    <h1 class="hero-title">MySchoolGN</h1>
-    <p class="hero-subtitle" style="display:none;"></p>
-    <p class="hero-positioning mt-3">
-      Le système de gestion scolaire conçu pour les réalités des écoles guinéennes.
-      Paiements, bulletins, parents, offline et pilotage directeur.
-    </p>
-    <div class="hero-actions" aria-label="Actions principales">
-      <a href="{% url 'contact' %}" class="btn btn-light btn-lg">
-        <i class="fas fa-calendar-check"></i>Demander une démonstration
-      </a>
-      <a href="{% url 'utilisateurs:login' %}" class="btn btn-primary btn-lg">
-        <i class="fas fa-lock"></i>Accéder à mon école
-      </a>
-      <a href="{% url 'rapport_scolaire' %}" class="btn btn-outline-light btn-lg">
-        <i class="fas fa-file-alt"></i>Voir le rapport scolaire
-      </a>
-    </div>
-  </div>
-
-  <!-- Indicateur de défilement -->
-  <div class="scroll-indicator" onclick="scrollToContent()">
-    <i class="fas fa-chevron-down"></i>
-  </div>
-</div>
-
-<!-- Section de contenu -->
-<div class="container content-section py-5" id="content-section">
-  <div class="strategy-strip shadow-sm mb-4">
-    <div class="row g-3">
-      <div class="col-lg-4">
-        <div class="item">
-          <i class="fas fa-money-bill-wave"></i>
-          <div>
-            <h2 class="h5 mb-1">Finance sans confusion</h2>
-            <p class="mb-0">Impayés, reçus, tranches, remises, soldes et prévisions.</p>
-          </div>
+  <div class="ksi-hero__overlay"></div>
+  <div class="container ksi-hero__inner">
+    <div class="row">
+      <div class="col-lg-9">
+        <img src="{% static 'logos/logo.png' %}" alt="Logo Kinder School International" class="ksi-hero__badge">
+        <div class="ksi-hero__pills">
+          <span class="ksi-pill ksi-pill--creche"><i class="fas fa-baby"></i>Crèche</span>
+          <span class="ksi-pill ksi-pill--garderie"><i class="fas fa-puzzle-piece"></i>Garderie</span>
+          <span class="ksi-pill ksi-pill--maternelle"><i class="fas fa-graduation-cap"></i>Maternelle</span>
         </div>
-      </div>
-      <div class="col-lg-4">
-        <div class="item">
-          <i class="fas fa-file-signature"></i>
-          <div>
-            <h2 class="h5 mb-1">Bulletins professionnels</h2>
-            <p class="mb-0">Rangs, moyennes, QR Code, signatures et PDF élégants.</p>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-4">
-        <div class="item">
-          <i class="fas fa-user-check"></i>
-          <div>
-            <h2 class="h5 mb-1">Simple pour l'équipe</h2>
-            <p class="mb-0">Une secrétaire doit comprendre l'essentiel en une journée.</p>
-          </div>
+        <h1>Là où chaque enfant <span class="accent">grandit, joue et apprend</span></h1>
+        <p class="ksi-hero__lead">
+          École <strong>bilingue (français&nbsp;–&nbsp;anglais)</strong> à Conakry, qui accueille
+          vos enfants <strong>à partir de 3 mois</strong> dans un cadre chaleureux, sécurisé et stimulant.
+        </p>
+        <div class="ksi-hero__actions">
+          <a href="{% url 'contact' %}" class="btn btn-sun btn-lg"><i class="fas fa-pen-to-square"></i>Inscrire mon enfant</a>
+          <a href="tel:+224628613566" class="btn btn-light btn-lg"><i class="fas fa-phone"></i>+224 628 61 35 66</a>
+          <a href="#formules" class="btn btn-outline-light btn-lg"><i class="fas fa-circle-info"></i>Découvrir l'école</a>
         </div>
       </div>
     </div>
   </div>
+  <div class="scroll-indicator" onclick="scrollToContent()"><i class="fas fa-chevron-down"></i></div>
+</header>
 
-  <div class="card presentation-card mb-4">
-    <div class="card-body presentation-body">
-      <h2 class="presentation-title">
-        <i class="fas fa-school me-2"></i>Pourquoi MySchoolGN ?
-      </h2>
-      <p class="mb-3">
-        MySchoolGN n'est pas seulement un logiciel scolaire. C'est un outil pensé pour la gestion réelle des écoles guinéennes :
-        direction, comptabilité, secrétariat, enseignants, surveillants et parents travaillent avec les mêmes informations fiables.
-      </p>
-      <div class="row g-4">
-        <div class="col-md-6">
-          <h5 class="text-primary mb-2"><i class="fas fa-money-bill-wave me-2"></i>Gestion financière</h5>
-          <ul class="mb-3">
-            <li>Paiements par tranche, soldes et reçus PDF</li>
-            <li>Identification rapide des impayés et retards</li>
-            <li>Remises, bourses, pénalités et prévisions</li>
-            <li>Préparation aux paiements Mobile Money</li>
-          </ul>
-          <h5 class="text-success mb-2"><i class="fas fa-users-cog me-2"></i>Ressources humaines</h5>
-          <ul class="mb-3">
-            <li>Salaires, présences et suivi enseignants</li>
-            <li>Emplois du temps et cahier de texte numérique</li>
-          </ul>
-        </div>
-        <div class="col-md-6">
-          <h5 class="text-warning mb-2"><i class="fas fa-bus me-2"></i>Vie scolaire</h5>
-          <ul class="mb-3">
-            <li>Absences, retards, discipline et convocations</li>
-            <li>Notes, bulletins modernes et QR Code de vérification</li>
-            <li>Cartes scolaires, transport et cantine</li>
-          </ul>
-          <h5 class="text-info mb-2"><i class="fas fa-chart-line me-2"></i>Suivi et analyse</h5>
-          <ul class="mb-0">
-            <li>Tableau de bord directeur : recettes, impayés, effectifs</li>
-            <li>Statistiques pour repérer les élèves faibles et les tendances</li>
-          </ul>
-        </div>
-      </div>
-      <div class="alert alert-success mt-4 mb-0" role="alert">
-        Avec MySchoolGN, l'école gagne du temps, réduit les erreurs administratives et présente une image plus professionnelle aux parents.
+<!-- ===================== QUICK INFO ===================== -->
+<div class="container ksi-quick" id="content-section">
+  <div class="row g-3">
+    <div class="col-6 col-lg-3">
+      <div class="card p-3 text-center">
+        <div class="ksi-ico mx-auto" style="background: var(--kinder-orange);"><i class="fas fa-baby"></i></div>
+        <h6 class="fw-bold mb-1">À partir de 3 mois</h6>
+        <p class="text-muted small mb-0">Accueil des tout-petits</p>
       </div>
     </div>
-  </div>
-
-  <section class="mb-4" id="fonctionnalites">
-    <div class="mb-3">
-      <h2 class="presentation-title mb-2">
-        <i class="fas fa-users me-2"></i>Pour qui ?
-      </h2>
-      <p class="text-muted mb-0">Myschool GN accompagne les équipes qui gèrent l'école au quotidien, du bureau administratif jusqu'au suivi des familles.</p>
-    </div>
-    <div class="row g-3">
-      <div class="col-md-6 col-lg-3">
-        <div class="audience-card shadow-sm">
-          <i class="fas fa-school"></i>
-          <h5>Fondateurs d'école</h5>
-          <p class="text-muted mb-0">Vue claire sur l'activité, les effectifs, les finances et les décisions importantes.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-3">
-        <div class="audience-card shadow-sm">
-          <i class="fas fa-calculator"></i>
-          <h5>Comptables</h5>
-          <p class="text-muted mb-0">Paiements, relances, dépenses et états financiers regroupés dans un espace fiable.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-3">
-        <div class="audience-card shadow-sm">
-          <i class="fas fa-user-shield"></i>
-          <h5>Surveillants</h5>
-          <p class="text-muted mb-0">Suivi des élèves, classes, activités journalières et informations utiles à la vie scolaire.</p>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-3">
-        <div class="audience-card shadow-sm">
-          <i class="fas fa-people-roof"></i>
-          <h5>Parents</h5>
-          <p class="text-muted mb-0">Accès au rapport scolaire pour consulter les notes, classements et paiements disponibles.</p>
-        </div>
+    <div class="col-6 col-lg-3">
+      <div class="card p-3 text-center">
+        <div class="ksi-ico mx-auto" style="background: var(--kinder-green);"><i class="fas fa-language"></i></div>
+        <h6 class="fw-bold mb-1">Bilingue</h6>
+        <p class="text-muted small mb-0">Français &amp; Anglais</p>
       </div>
     </div>
-  </section>
-
-  <!-- Carte rapport scolaire pour les parents -->
-  <div class="card mb-4 border-0 shadow-sm" style="border-left: 5px solid #0d6efd !important;">
-    <div class="card-body d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between">
-      <div class="mb-3 mb-md-0">
-        <h5 class="mb-1"><i class="fas fa-file-pdf text-primary me-2"></i>Espace Parents — Rapport Scolaire</h5>
-        <p class="text-muted mb-0">Téléchargez le rapport scolaire complet de votre enfant : notes, classements, activités journalières.</p>
+    <div class="col-6 col-lg-3">
+      <div class="card p-3 text-center">
+        <div class="ksi-ico mx-auto" style="background: var(--kinder-cyan);"><i class="fas fa-clock"></i></div>
+        <h6 class="fw-bold mb-1">Garderie 6h30–18h</h6>
+        <p class="text-muted small mb-0">Du lundi au vendredi</p>
       </div>
-      <a href="{% url 'rapport_scolaire' %}" class="btn btn-outline-primary btn-lg" target="_blank" rel="noopener">
-        <i class="fas fa-download me-2"></i>Accéder au rapport
-      </a>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card p-3 text-center">
+        <div class="ksi-ico mx-auto" style="background: var(--kinder-blue);"><i class="fas fa-location-dot"></i></div>
+        <h6 class="fw-bold mb-1">Lambanyi</h6>
+        <p class="text-muted small mb-0">Conakry, Guinée</p>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- Section des images de présentation -->
-<div class="container pb-5">
-  <div class="row g-4">
-    <div class="col-md-6">
-      <div class="card shadow-sm image-card">
-
-        <!-- Image optimisée WebP avec fallback JPEG (lazy : sous le pli) -->
-        <picture>
-          <source type="image/webp"
-                  srcset="{% static 'images/optimized/carte1.webp' %}"
-                  sizes="(min-width: 992px) 545px, (min-width: 768px) 50vw, 100vw">
-          <img src="{% static 'images/optimized/carte1_optimized.jpg' %}"
-               alt="Nos installations modernes"
-               class="card-img-top"
-               loading="lazy"
-               decoding="async"
-               sizes="(min-width: 992px) 545px, (min-width: 768px) 50vw, 100vw"
-               width="1200"
-               height="800">
-        </picture>
-
-        <div class="card-body">
-          <h5 class="card-title text-primary">
-            <i class="fas fa-building me-2"></i>Installations Modernes
-          </h5>
-          <p class="card-text text-muted">
-            Des espaces d'apprentissage équipés des dernières technologies pour offrir
-            une éducation de qualité dans un environnement stimulant.
-          </p>
+<!-- ===================== À PROPOS ===================== -->
+<section class="ksi-section">
+  <div class="container">
+    <div class="row align-items-center g-5">
+      <div class="col-lg-6">
+        <div class="ksi-gallery">
+          <div class="g-item"><img src="{% static 'images/10.jpeg' %}" alt="Espace d'apprentissage Kinder School International" loading="lazy"></div>
         </div>
       </div>
+      <div class="col-lg-6">
+        <p class="ksi-eyebrow mb-2">Bienvenue chez nous</p>
+        <h2 class="ksi-title mb-3">Un premier pas vers l'avenir, dans la joie et la confiance</h2>
+        <p class="ksi-lead mb-3">
+          À <strong>Kinder School International</strong>, nous croyons que les premières années sont
+          les plus précieuses. Notre équipe accompagne chaque enfant avec bienveillance pour développer
+          son autonomie, sa curiosité et son goût d'apprendre, en français comme en anglais.
+        </p>
+        <ul class="ksi-lead list-unstyled">
+          <li class="mb-2"><i class="fas fa-heart text-danger me-2"></i>Un encadrement chaleureux et attentif</li>
+          <li class="mb-2"><i class="fas fa-shield-halved text-success me-2"></i>Des locaux modernes, propres et sécurisés</li>
+          <li class="mb-2"><i class="fas fa-palette text-warning me-2"></i>Un éveil par le jeu, l'art et la découverte</li>
+        </ul>
+        <a href="{% url 'contact' %}" class="btn btn-primary btn-lg rounded-pill mt-2"><i class="fas fa-calendar-check me-2"></i>Planifier une visite</a>
+      </div>
     </div>
-    <div class="col-md-6">
-      <div class="card shadow-sm image-card">
+  </div>
+</section>
 
-
-        <!-- Image optimisée WebP avec fallback JPEG (lazy : sous le pli) -->
-        <picture>
-          <source type="image/webp"
-                  srcset="{% static 'images/optimized/carte2.webp' %}"
-                  sizes="(min-width: 992px) 545px, (min-width: 768px) 50vw, 100vw">
-          <img src="{% static 'images/optimized/carte2_optimized.jpg' %}"
-               alt="Notre équipe pédagogique"
-               class="card-img-top"
-               loading="lazy"
-               decoding="async"
-               sizes="(min-width: 992px) 545px, (min-width: 768px) 50vw, 100vw"
-               width="1200"
-               height="800">
-        </picture>
-
-        <div class="card-body">
-          <h5 class="card-title text-primary">
-            <i class="fas fa-users me-2"></i>Équipe Pédagogique
-          </h5>
-          <p class="card-text text-muted">
-            Une équipe d'enseignants qualifiés et dévoués, engagés dans la réussite
-            et l'épanouissement de chaque élève.
-          </p>
+<!-- ===================== FORMULES ===================== -->
+<section class="ksi-section bg-light" id="formules">
+  <div class="container">
+    <div class="text-center mb-5">
+      <p class="ksi-eyebrow mb-2">Nos formules</p>
+      <h2 class="ksi-title">Un accueil adapté à chaque âge</h2>
+    </div>
+    <div class="row g-4">
+      <div class="col-md-4">
+        <div class="ksi-formule">
+          <div class="ksi-formule__head" style="background: var(--kinder-orange);">
+            <h3>Crèche</h3>
+            <span class="age">À partir de 3 mois</span>
+          </div>
+          <div class="ksi-formule__body">
+            <ul>
+              <li>Soins attentifs des bébés</li>
+              <li>Éveil sensoriel et moteur</li>
+              <li>Rythme respecté (repas, sieste)</li>
+              <li>Environnement doux et sécurisé</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="ksi-formule">
+          <div class="ksi-formule__head" style="background: var(--kinder-green);">
+            <h3>Garderie</h3>
+            <span class="age">Lundi au vendredi · 6h30 – 18h</span>
+          </div>
+          <div class="ksi-formule__body">
+            <ul>
+              <li>Horaires souples pour les parents</li>
+              <li>Activités ludiques encadrées</li>
+              <li>Espaces de jeux intérieurs &amp; extérieurs</li>
+              <li>Repas et goûters équilibrés</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="ksi-formule">
+          <div class="ksi-formule__head" style="background: var(--kinder-cyan);">
+            <h3>Maternelle</h3>
+            <span class="age">Programme bilingue</span>
+          </div>
+          <div class="ksi-formule__body">
+            <ul>
+              <li>Apprentissage français &amp; anglais</li>
+              <li>Lecture, écriture et calcul ludiques</li>
+              <li>Développement de l'autonomie</li>
+              <li>Préparation à l'école primaire</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
   </div>
+</section>
 
-  <!-- Engagements publics -->
-  <div class="row mt-5 g-3">
-    <div class="col-md-3 col-sm-6 mb-3">
-      <div class="trust-item shadow-sm">
-        <div class="display-4 text-primary mb-2">
-          <i class="fas fa-shield-alt"></i>
-        </div>
-        <h4 class="text-primary">Sécurité</h4>
-        <p class="text-muted mb-0">Accès contrôlé et séparation entre vitrine publique et espace de gestion.</p>
-      </div>
+<!-- ===================== SERVICES ===================== -->
+<section class="ksi-section" id="services">
+  <div class="container">
+    <div class="text-center mb-5">
+      <p class="ksi-eyebrow mb-2">Nos services</p>
+      <h2 class="ksi-title">Tout ce qu'il faut pour s'épanouir</h2>
     </div>
-    <div class="col-md-3 col-sm-6 mb-3">
-      <div class="trust-item shadow-sm">
-        <div class="display-4 text-success mb-2">
-          <i class="fas fa-file-invoice"></i>
+    <div class="row g-4">
+      <div class="col-6 col-lg-3">
+        <div class="ksi-service">
+          <div class="ksi-ico" style="background: var(--kinder-orange);"><i class="fas fa-utensils"></i></div>
+          <h5>Cantine scolaire</h5>
+          <p class="text-muted small mb-0">Des repas sains et équilibrés préparés pour les enfants.</p>
         </div>
-        <h4 class="text-success">Rapports</h4>
-        <p class="text-muted mb-0">Documents scolaires accessibles et prêts à imprimer selon les besoins.</p>
       </div>
-    </div>
-    <div class="col-md-3 col-sm-6 mb-3">
-      <div class="trust-item shadow-sm">
-        <div class="display-4 text-warning mb-2">
-          <i class="fas fa-chart-line"></i>
+      <div class="col-6 col-lg-3">
+        <div class="ksi-service">
+          <div class="ksi-ico" style="background: var(--kinder-green);"><i class="fas fa-shapes"></i></div>
+          <h5>Salle de jeux</h5>
+          <p class="text-muted small mb-0">Un espace coloré et sécurisé pour apprendre en s'amusant.</p>
         </div>
-        <h4 class="text-warning">Pilotage</h4>
-        <p class="text-muted mb-0">Tableaux de bord pour suivre paiements, notes, salaires et transport.</p>
       </div>
-    </div>
-    <div class="col-md-3 col-sm-6 mb-3">
-      <div class="trust-item shadow-sm">
-        <div class="display-4 text-info mb-2">
-          <i class="fas fa-headset"></i>
+      <div class="col-6 col-lg-3">
+        <div class="ksi-service">
+          <div class="ksi-ico" style="background: var(--kinder-cyan);"><i class="fas fa-book-open-reader"></i></div>
+          <h5>Bibliothèque</h5>
+          <p class="text-muted small mb-0">Des livres adaptés pour éveiller le goût de la lecture.</p>
         </div>
-        <h4 class="text-info">Support</h4>
-        <p class="text-muted mb-0">Contact direct avec l'administrateur pour l'activation et l'assistance.</p>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="ksi-service">
+          <div class="ksi-ico" style="background: var(--kinder-pink);"><i class="fas fa-palette"></i></div>
+          <h5>Activités périscolaires</h5>
+          <p class="text-muted small mb-0">Peinture, pâtisserie et musique pour révéler les talents.</p>
+        </div>
       </div>
     </div>
   </div>
-</div>
+</section>
+
+<!-- ===================== GALERIE ===================== -->
+<section class="ksi-section bg-light" id="galerie">
+  <div class="container">
+    <div class="text-center mb-5">
+      <p class="ksi-eyebrow mb-2">Galerie</p>
+      <h2 class="ksi-title">Découvrez notre univers</h2>
+    </div>
+    <div class="ksi-gallery" style="display:grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 180px; gap: 16px;">
+      <div class="g-item g-tall"><img src="{% static 'images/3.jpeg' %}" alt="Salle de classe lumineuse" loading="lazy"></div>
+      <div class="g-item"><img src="{% static 'images/1.jpeg' %}" alt="Aire de jeux extérieure" loading="lazy"></div>
+      <div class="g-item"><img src="{% static 'images/16.jpeg' %}" alt="Bibliothèque de l'école" loading="lazy"></div>
+      <div class="g-item g-tall"><img src="{% static 'images/20.jpeg' %}" alt="Espace d'accueil et de réception" loading="lazy"></div>
+      <div class="g-item"><img src="{% static 'images/2.jpeg' %}" alt="Jeux et tricycles" loading="lazy"></div>
+      <div class="g-item"><img src="{% static 'images/15.jpeg' %}" alt="Matériel pédagogique en classe" loading="lazy"></div>
+      <div class="g-item"><img src="{% static 'images/11.jpeg' %}" alt="Coin de jeux coloré" loading="lazy"></div>
+      <div class="g-item"><img src="{% static 'images/7.jpeg' %}" alt="Salle de classe équipée" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== HORAIRES ===================== -->
+<section class="ksi-section">
+  <div class="container">
+    <div class="ksi-hours p-4 p-lg-5">
+      <div class="row align-items-center g-4">
+        <div class="col-lg-4">
+          <p class="ksi-eyebrow mb-2" style="color: var(--kinder-yellow);">Horaires</p>
+          <h2 class="fw-bold mb-2">Nos heures d'ouverture</h2>
+          <p class="mb-0 opacity-75">Des horaires pensés pour s'adapter au quotidien des familles.</p>
+        </div>
+        <div class="col-lg-8">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <div class="ksi-hours__card text-center">
+                <h5 class="mb-2">Lundi – Jeudi</h5>
+                <div class="ksi-hours__time">06h30 – 16h</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="ksi-hours__card text-center">
+                <h5 class="mb-2">Vendredi</h5>
+                <div class="ksi-hours__time">06h30 – 13h</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="ksi-hours__card text-center">
+                <h5 class="mb-2">Garderie</h5>
+                <div class="ksi-hours__time">06h30 – 18h</div>
+                <small class="opacity-75">Lundi au vendredi</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CONTACT / CTA ===================== -->
+<section class="ksi-section pt-0">
+  <div class="container">
+    <div class="ksi-cta p-4 p-lg-5">
+      <div class="row align-items-center g-4">
+        <div class="col-lg-7">
+          <h2 class="fw-bold mb-2" style="color: var(--kinder-blue-dark);">Prêt à offrir le meilleur départ à votre enfant&nbsp;?</h2>
+          <p class="mb-4" style="color:#5a4500;">Contactez-nous dès aujourd'hui pour une visite ou une inscription. Notre équipe se fera un plaisir de vous accueillir.</p>
+          <div class="row g-3">
+            <div class="col-sm-6 d-flex align-items-center gap-3">
+              <span class="ksi-contact-ico"><i class="fas fa-phone"></i></span>
+              <div><div class="small text-muted">Téléphone</div><a href="tel:+224628613566" class="fw-bold text-decoration-none" style="color: var(--kinder-blue-dark);">+224 628 61 35 66</a></div>
+            </div>
+            <div class="col-sm-6 d-flex align-items-center gap-3">
+              <span class="ksi-contact-ico"><i class="fas fa-phone"></i></span>
+              <div><div class="small text-muted">WhatsApp</div><a href="tel:+224628049446" class="fw-bold text-decoration-none" style="color: var(--kinder-blue-dark);">+224 628 04 94 46</a></div>
+            </div>
+            <div class="col-sm-6 d-flex align-items-center gap-3">
+              <span class="ksi-contact-ico"><i class="fas fa-envelope"></i></span>
+              <div><div class="small text-muted">E-mail</div><a href="mailto:info@kinderschoolinternational.com" class="fw-bold text-decoration-none" style="color: var(--kinder-blue-dark);">info@kinderschoolinternational.com</a></div>
+            </div>
+            <div class="col-sm-6 d-flex align-items-center gap-3">
+              <span class="ksi-contact-ico"><i class="fas fa-location-dot"></i></span>
+              <div><div class="small text-muted">Adresse</div><span class="fw-bold" style="color: var(--kinder-blue-dark);">Lambanyi, Conakry — Guinée</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-5 text-lg-end">
+          <a href="{% url 'contact' %}" class="btn btn-primary btn-lg rounded-pill mb-2 w-100 w-lg-auto"><i class="fas fa-pen-to-square me-2"></i>Demander une inscription</a>
+          <br>
+          <a href="{% url 'rapport_scolaire' %}" class="btn btn-outline-dark btn-lg rounded-pill w-100 w-lg-auto"><i class="fas fa-file-alt me-2"></i>Espace parents — Rapport scolaire</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Accès gestion (discret) -->
+    <div class="text-center mt-4">
+      <a href="{% url 'utilisateurs:login' %}" class="text-muted small text-decoration-none">
+        <i class="fas fa-lock me-1"></i>Espace de gestion réservé au personnel
+      </a>
+    </div>
+  </div>
+</section>
+
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/image-reload.js' %}"></script>
 <script>
-// Fonction de défilement fluide
 function scrollToContent() {
-  document.getElementById('content-section').scrollIntoView({
-    behavior: 'smooth',
-    block: 'start'
-  });
+  document.getElementById('content-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-
-// Optimisations de performance - Version allégée pour vitesse maximale
-document.addEventListener('DOMContentLoaded', function() {
-  // Animation d'entrée légère pour les cartes (sans observer lourd)
-  const cards = document.querySelectorAll('.image-card, .presentation-card');
-
-  // Animation simple avec délai progressif (plus rapide que IntersectionObserver)
-  cards.forEach((card, index) => {
-    card.style.opacity = '0';
-    card.style.transform = 'translateY(20px)';
-    card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-
-    // Animation décalée simple
-    setTimeout(() => {
-      card.style.opacity = '1';
-      card.style.transform = 'translateY(0)';
-    }, 100 * index);
+document.addEventListener('DOMContentLoaded', function () {
+  const items = document.querySelectorAll('.ksi-quick .card, .ksi-formule, .ksi-service, .ksi-gallery .g-item');
+  if (!('IntersectionObserver' in window)) return;
+  const obs = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: .12 });
+  items.forEach(function (el, i) {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(24px)';
+    el.style.transition = 'opacity .5s ease ' + (i % 4 * 60) + 'ms, transform .5s ease ' + (i % 4 * 60) + 'ms';
+    obs.observe(el);
   });
-});
-
-// Optimisation du redimensionnement
-let resizeTimeout;
-window.addEventListener('resize', function() {
-  clearTimeout(resizeTimeout);
-  resizeTimeout = setTimeout(function() {
-    // Recalculer les dimensions si nécessaire
-    const heroImage = document.querySelector('.hero-image');
-    if (heroImage) {
-      heroImage.style.height = window.innerHeight + 'px';
-    }
-  }, 250);
 });
 </script>
 {% endblock %}

@@ -1,32 +1,147 @@
 {% extends 'base.html' %}
+{% load static %}
 
-{% block title %}Contact - Myschool GN{% endblock %}
-{% block meta_description %}Contactez l'administrateur Myschool GN pour une démonstration, une licence ou une assistance.{% endblock %}
+{% block title %}Contact & Inscription — Kinder School International{% endblock %}
+{% block meta_description %}Contactez Kinder School International à Lambanyi, Conakry pour une visite ou une inscription : crèche, garderie et maternelle bilingue à partir de 3 mois.{% endblock %}
+
+{% block extra_css %}
+<style>
+  .ksi-contact-head { background: linear-gradient(135deg, #244A8A, #3563AE); color:#fff; border-radius: 0 0 28px 28px; margin: -70px -15px 0; padding: 6rem 0 3rem; }
+  .ksi-info-ico { width:46px;height:46px;border-radius:12px;background:rgba(53,99,174,.12);color:var(--kinder-blue);display:inline-flex;align-items:center;justify-content:center;font-size:1.1rem;flex:0 0 auto; }
+  .ksi-card { border:none;border-radius:20px;box-shadow:0 10px 28px rgba(36,74,138,.1); }
+  .ksi-form-control { border-radius:12px; }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}{% endblock %}
 
 {% block content %}
+<section class="ksi-contact-head text-center">
+  <div class="container">
+    <img src="{% static 'logos/logo.png' %}" alt="Kinder School International" width="74" height="74" class="bg-white rounded-4 p-2 mb-3">
+    <h1 class="fw-bold mb-2">Contact &amp; Inscription</h1>
+    <p class="lead mb-0 opacity-90">Nous serions ravis d'accueillir votre enfant. Planifiez une visite ou demandez une inscription.</p>
+  </div>
+</section>
+
 <section class="container py-5">
-  <div class="row justify-content-center">
-    <div class="col-lg-8">
-      <h1 class="text-primary fw-bold mb-3">Contact</h1>
-      <p class="lead text-muted">Pour une démonstration, une activation de licence ou une assistance, contactez l'administrateur.</p>
-      <div class="card shadow-sm">
+  <div class="row g-4">
+    <!-- Coordonnées -->
+    <div class="col-lg-5">
+      <div class="card ksi-card h-100">
         <div class="card-body p-4">
-          <h2 class="h4 mb-3">Administrateur Myschool GN</h2>
-          <p class="mb-2">
-            <i class="fas fa-user-shield text-primary me-2"></i>
-            FARA LENO
-          </p>
-          <p class="mb-2">
-            <i class="fas fa-phone text-success me-2"></i>
-            <a href="tel:+224622613559">+224 622 61 35 59</a>
-          </p>
-          <p class="mb-0">
-            <i class="fas fa-envelope text-info me-2"></i>
-            <a href="mailto:contact@myschoolgn.space">contact@myschoolgn.space</a>
-          </p>
+          <h2 class="h4 fw-bold mb-4" style="color:var(--kinder-blue-dark);">Nos coordonnées</h2>
+
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <span class="ksi-info-ico"><i class="fas fa-location-dot"></i></span>
+            <div><div class="fw-semibold">Adresse</div><div class="text-muted">Lambanyi, Commune de Lambanyi<br>Conakry, République de Guinée</div></div>
+          </div>
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <span class="ksi-info-ico"><i class="fas fa-phone"></i></span>
+            <div><div class="fw-semibold">Téléphone</div>
+              <a href="tel:+224628613566" class="text-decoration-none d-block">+224 628 61 35 66</a>
+              <a href="tel:+224628049446" class="text-decoration-none d-block">+224 628 04 94 46</a>
+            </div>
+          </div>
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <span class="ksi-info-ico"><i class="fab fa-whatsapp"></i></span>
+            <div><div class="fw-semibold">WhatsApp</div>
+              <a href="https://wa.me/224628049446" target="_blank" rel="noopener" class="text-decoration-none">Écrire sur WhatsApp</a>
+            </div>
+          </div>
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <span class="ksi-info-ico"><i class="fas fa-envelope"></i></span>
+            <div><div class="fw-semibold">E-mail</div>
+              <a href="mailto:info@kinderschoolinternational.com" class="text-decoration-none">info@kinderschoolinternational.com</a>
+            </div>
+          </div>
+          <div class="d-flex align-items-start gap-3">
+            <span class="ksi-info-ico"><i class="fas fa-clock"></i></span>
+            <div><div class="fw-semibold">Horaires</div>
+              <div class="text-muted">Lun – Jeu : 06h30 – 16h<br>Vendredi : 06h30 – 13h<br>Garderie : 06h30 – 18h (lun–ven)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Formulaire de demande -->
+    <div class="col-lg-7">
+      <div class="card ksi-card h-100">
+        <div class="card-body p-4">
+          <h2 class="h4 fw-bold mb-1" style="color:var(--kinder-blue-dark);">Demande d'inscription / d'information</h2>
+          <p class="text-muted small mb-4">Remplissez ce formulaire : votre message s'ouvrira dans WhatsApp ou votre messagerie, prêt à être envoyé.</p>
+
+          <form id="ksiContactForm" data-no-fast-submit>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold">Nom du parent *</label>
+                <input type="text" id="f_parent" class="form-control ksi-form-control" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold">Téléphone *</label>
+                <input type="tel" id="f_tel" class="form-control ksi-form-control" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold">Nom de l'enfant</label>
+                <input type="text" id="f_enfant" class="form-control ksi-form-control">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold">Formule souhaitée</label>
+                <select id="f_formule" class="form-select ksi-form-control">
+                  <option value="">— Choisir —</option>
+                  <option>Crèche (à partir de 3 mois)</option>
+                  <option>Garderie</option>
+                  <option>Maternelle</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="form-label small fw-semibold">Message</label>
+                <textarea id="f_message" rows="4" class="form-control ksi-form-control" placeholder="Votre demande, l'âge de l'enfant, vos disponibilités pour une visite…"></textarea>
+              </div>
+              <div class="col-12 d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary btn-lg rounded-pill"><i class="fab fa-whatsapp me-2"></i>Envoyer via WhatsApp</button>
+                <button type="button" id="ksiMailBtn" class="btn btn-outline-primary btn-lg rounded-pill"><i class="fas fa-envelope me-2"></i>Envoyer par e-mail</button>
+              </div>
+            </div>
+          </form>
         </div>
       </div>
     </div>
   </div>
 </section>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  var form = document.getElementById('ksiContactForm');
+  function buildMessage(){
+    var parent = (document.getElementById('f_parent').value||'').trim();
+    var tel = (document.getElementById('f_tel').value||'').trim();
+    var enfant = (document.getElementById('f_enfant').value||'').trim();
+    var formule = (document.getElementById('f_formule').value||'').trim();
+    var msg = (document.getElementById('f_message').value||'').trim();
+    var lines = ['Bonjour Kinder School International,', ''];
+    lines.push('Demande d\'inscription / information :');
+    if(parent) lines.push('• Parent : ' + parent);
+    if(tel) lines.push('• Téléphone : ' + tel);
+    if(enfant) lines.push('• Enfant : ' + enfant);
+    if(formule) lines.push('• Formule : ' + formule);
+    if(msg) lines.push('• Message : ' + msg);
+    return lines.join('\n');
+  }
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    var url = 'https://wa.me/224628049446?text=' + encodeURIComponent(buildMessage());
+    window.open(url, '_blank', 'noopener');
+  });
+  document.getElementById('ksiMailBtn').addEventListener('click', function(){
+    var subject = 'Demande d\'inscription — Kinder School International';
+    window.location.href = 'mailto:info@kinderschoolinternational.com?subject=' +
+      encodeURIComponent(subject) + '&body=' + encodeURIComponent(buildMessage());
+  });
+})();
+</script>
 {% endblock %}
