@@ -89,10 +89,17 @@
   .ksi-formule li::before { content: "\f1ae"; font-family: "Font Awesome 6 Free"; font-weight: 900; position: absolute; left: 0; top: .45rem; color: var(--kinder-blue-light); }
 
   /* Services */
-  .ksi-service { text-align: center; padding: 2rem 1.2rem; border-radius: 20px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.06); height: 100%; transition: transform .25s ease, box-shadow .25s ease; }
+  .ksi-service { text-align: center; padding: 2rem 1.5rem; border-radius: 20px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.06); height: 100%; transition: transform .25s ease, box-shadow .25s ease; }
   .ksi-service:hover { transform: translateY(-6px); box-shadow: 0 14px 32px rgba(0,0,0,.12); }
-  .ksi-service .ksi-ico { width: 70px; height: 70px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.7rem; color: #fff; margin-bottom: 1rem; }
-  .ksi-service h5 { font-weight: 700; color: var(--kinder-blue-dark); }
+  .ksi-service .ksi-ico { width: 80px; height: 80px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 2rem; color: #fff; margin-bottom: 1rem; }
+  .ksi-service h5 { font-weight: 700; color: var(--kinder-blue-dark); font-size: 1.2rem; }
+  .ksi-service p { font-size: 1rem; }
+  @media (max-width: 575px) {
+    .ksi-service { padding: 2rem 2rem; display: flex; align-items: center; gap: 1.5rem; text-align: left; border-radius: 18px; }
+    .ksi-service .ksi-ico { flex: 0 0 70px; width: 70px; height: 70px; margin-bottom: 0; font-size: 1.8rem; }
+    .ksi-service h5 { margin-bottom: .3rem; font-size: 1.1rem; }
+    .ksi-service p { margin-bottom: 0; font-size: .95rem; }
+  }
 
   /* Galerie */
   .ksi-gallery img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; transition: transform .4s ease; display: block; }
@@ -299,32 +306,40 @@
       <h2 class="ksi-title">Tout ce qu'il faut pour s'épanouir</h2>
     </div>
     <div class="row g-4">
-      <div class="col-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3">
         <div class="ksi-service">
           <div class="ksi-ico" style="background: var(--kinder-orange);"><i class="fas fa-utensils"></i></div>
-          <h5>Cantine scolaire</h5>
-          <p class="text-muted small mb-0">Des repas sains et équilibrés préparés pour les enfants.</p>
+          <div>
+            <h5>Cantine scolaire</h5>
+            <p class="text-muted mb-0">Des repas sains et équilibrés préparés pour les enfants.</p>
+          </div>
         </div>
       </div>
-      <div class="col-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3">
         <div class="ksi-service">
           <div class="ksi-ico" style="background: var(--kinder-green);"><i class="fas fa-shapes"></i></div>
-          <h5>Salle de jeux</h5>
-          <p class="text-muted small mb-0">Un espace coloré et sécurisé pour apprendre en s'amusant.</p>
+          <div>
+            <h5>Salle de jeux</h5>
+            <p class="text-muted mb-0">Un espace coloré et sécurisé pour apprendre en s'amusant.</p>
+          </div>
         </div>
       </div>
-      <div class="col-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3">
         <div class="ksi-service">
           <div class="ksi-ico" style="background: var(--kinder-cyan);"><i class="fas fa-book-open-reader"></i></div>
-          <h5>Bibliothèque</h5>
-          <p class="text-muted small mb-0">Des livres adaptés pour éveiller le goût de la lecture.</p>
+          <div>
+            <h5>Bibliothèque</h5>
+            <p class="text-muted mb-0">Des livres adaptés pour éveiller le goût de la lecture.</p>
+          </div>
         </div>
       </div>
-      <div class="col-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-3">
         <div class="ksi-service">
           <div class="ksi-ico" style="background: var(--kinder-pink);"><i class="fas fa-palette"></i></div>
-          <h5>Activités périscolaires</h5>
-          <p class="text-muted small mb-0">Peinture, pâtisserie et musique pour révéler les talents.</p>
+          <div>
+            <h5>Activités périscolaires</h5>
+            <p class="text-muted mb-0">Peinture, pâtisserie et musique pour révéler les talents.</p>
+          </div>
         </div>
       </div>
     </div>
