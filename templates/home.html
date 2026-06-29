@@ -15,7 +15,7 @@
   .ksi-hero {
     margin: -70px -15px 0;
     position: relative;
-    min-height: 92vh;
+    min-height: 100vh;           /* plein écran */
     display: flex;
     align-items: center;
     overflow: hidden;
@@ -97,7 +97,13 @@
   .ksi-gallery img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; transition: transform .4s ease; display: block; }
   .ksi-gallery .g-item { overflow: hidden; border-radius: 16px; box-shadow: 0 8px 22px rgba(0,0,0,.1); }
   .ksi-gallery .g-item:hover img { transform: scale(1.07); }
-  .ksi-gallery .g-tall { grid-row: span 2; }
+  .ksi-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: 240px;            /* images plus grandes */
+    gap: 18px;
+  }
+  .ksi-gallery-grid .g-tall { grid-row: span 2; }
 
   /* Horaires */
   .ksi-hours { background: linear-gradient(135deg, #244A8A, #3563AE); border-radius: 26px; color: #fff; overflow: hidden; }
@@ -112,7 +118,15 @@
   .scroll-indicator { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 3; color: #fff; font-size: 1.6rem; cursor: pointer; animation: ksibounce 2s infinite; }
   @keyframes ksibounce { 0%,20%,50%,80%,100%{transform:translateX(-50%) translateY(0);} 40%{transform:translateX(-50%) translateY(-10px);} 60%{transform:translateX(-50%) translateY(-5px);} }
 
-  @media (max-width: 991px){ .ksi-hero{ min-height: auto; } .ksi-gallery .g-tall{ grid-row: span 1; } }
+  /* Tablette : galerie sur 2 colonnes */
+  @media (max-width: 991px){
+    .ksi-gallery-grid { grid-template-columns: repeat(2, 1fr); grid-auto-rows: 230px; }
+    .ksi-gallery-grid .g-tall { grid-row: span 1; }
+  }
+  /* Téléphone : 1 image par ligne, en grand */
+  @media (max-width: 575px){
+    .ksi-gallery-grid { grid-template-columns: 1fr; grid-auto-rows: 250px; }
+  }
 </style>
 <link rel="preload" as="image" href="{% static 'images/optimized/hero_kinder.webp' %}" type="image/webp">
 {% endblock %}
@@ -323,7 +337,7 @@
       <p class="ksi-eyebrow mb-2">Galerie</p>
       <h2 class="ksi-title">Découvrez notre univers</h2>
     </div>
-    <div class="ksi-gallery" style="display:grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 180px; gap: 16px;">
+    <div class="ksi-gallery ksi-gallery-grid">
       <div class="g-item g-tall"><img src="{% static 'images/3.jpeg' %}" alt="Salle de classe lumineuse" loading="lazy"></div>
       <div class="g-item"><img src="{% static 'images/1.jpeg' %}" alt="Aire de jeux extérieure" loading="lazy"></div>
       <div class="g-item"><img src="{% static 'images/16.jpeg' %}" alt="Bibliothèque de l'école" loading="lazy"></div>
