@@ -1,96 +1,130 @@
 {% extends 'base.html' %}
+{% load static %}
 
-{% block title %}Tarifs - MySchoolGN Guinée{% endblock %}
-{% block meta_description %}Tarifs MySchoolGN : Starter, Pro et installation offline pour les écoles guinéennes. Contactez FARA LENO pour une offre adaptée.{% endblock %}
+{% block title %}Tarifs & Frais de scolarité — Kinder School International{% endblock %}
+{% block meta_description %}Frais de scolarité Kinder School International à Conakry : Crèche 18 000 000 GNF/an, Maternelle 15 000 000 GNF/an, paiement en 3 versements, cantine scolaire 25 000 GNF/jour, réduction famille à partir de 3 enfants.{% endblock %}
+{% block og_title %}Tarifs — Kinder School International{% endblock %}
+{% block og_description %}Frais de scolarité Crèche et Maternelle, paiement en 3 versements, cantine scolaire et réduction famille.{% endblock %}
+
+{% block extra_css %}
+<style>
+  .ksi-tarifs-head { background: linear-gradient(135deg, #244A8A, #3563AE); color:#fff; border-radius: 0 0 28px 28px; margin: -70px -15px 0; padding: 6rem 0 3rem; text-align:center; }
+  .ksi-price-card { border:none; border-radius:22px; overflow:hidden; box-shadow:0 10px 28px rgba(0,0,0,.08); height:100%; }
+  .ksi-price-card__head { padding:1.6rem; color:#fff; text-align:center; }
+  .ksi-price-card__head h2 { font-weight:800; margin-bottom:.25rem; }
+  .ksi-price-card__amount { font-size:2.1rem; font-weight:800; }
+  .ksi-price-card__body { padding:1.8rem; }
+  .ksi-install { display:flex; justify-content:space-between; align-items:center; padding:.7rem 0; border-bottom:1px dashed #e2e6ea; }
+  .ksi-install:last-child { border-bottom:none; }
+  .ksi-install .num { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:#eef2fb; color:var(--kinder-blue); font-weight:700; font-size:.85rem; margin-right:.6rem; }
+  .ksi-addon { border-radius:20px; background:#fff; box-shadow:0 8px 22px rgba(0,0,0,.06); padding:1.6rem; height:100%; }
+  .ksi-addon .ksi-ico { width:56px; height:56px; border-radius:14px; display:inline-flex; align-items:center; justify-content:center; font-size:1.4rem; color:#fff; margin-bottom:.8rem; }
+  .ksi-discount { background: linear-gradient(135deg, var(--kinder-yellow), #ffe08a); border-radius:22px; padding:1.8rem 2rem; }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}{% endblock %}
 
 {% block content %}
+<section class="ksi-tarifs-head">
+  <div class="container">
+    <img src="{% static 'logos/logo.png' %}" alt="Kinder School International" width="70" height="70" class="bg-white rounded-4 p-2 mb-3">
+    <h1 class="fw-bold mb-2">Frais de scolarité</h1>
+    <p class="lead mb-0 opacity-90">Des formules claires, en 3 versements, pour accompagner sereinement la scolarité de votre enfant.</p>
+  </div>
+</section>
+
 <section class="container py-5">
-  <div class="text-center mb-5">
-    <span class="badge text-bg-primary mb-3">Offres adaptées aux écoles guinéennes</span>
-    <h1 class="text-primary fw-bold">Tarifs MySchoolGN</h1>
-    <p class="lead text-muted mx-auto" style="max-width: 760px;">
-      Choisissez une formule selon la taille de votre école, le nombre d'utilisateurs et le mode de déploiement souhaité.
-      Les montants finaux sont confirmés après démonstration et analyse de vos besoins.
-    </p>
-  </div>
-
-  <div class="row g-4 mb-5">
-    <div class="col-lg-4">
-      <div class="card h-100 shadow-sm">
-        <div class="card-body p-4">
-          <h2 class="h4">Starter</h2>
-          <p class="text-muted">Pour les petites écoles qui veulent commencer proprement.</p>
-          <p class="display-6 fw-bold text-primary">300 000 - 500 000 GNF</p>
-          <p class="text-muted">par mois, selon configuration</p>
-          <ul class="text-muted">
-            <li>Gestion élèves et classes</li>
-            <li>Paiements et reçus</li>
-            <li>Notes et bulletins</li>
-            <li>Rapport scolaire parent</li>
-            <li>Support de démarrage</li>
-          </ul>
-          <a href="{% url 'contact' %}" class="btn btn-outline-primary w-100">Demander Starter</a>
-        </div>
-      </div>
-    </div>
-    <div class="col-lg-4">
-      <div class="card h-100 shadow border-primary">
-        <div class="card-body p-4">
-          <span class="badge text-bg-success mb-2">Recommandé</span>
-          <h2 class="h4">Pro</h2>
-          <p class="text-muted">Pour les groupes scolaires et écoles qui veulent piloter toute l'administration.</p>
-          <p class="display-6 fw-bold text-primary">1 - 3 millions GNF</p>
-          <p class="text-muted">par mois, selon modules</p>
-          <ul class="text-muted">
-            <li>Tout Starter</li>
-            <li>Multi-utilisateurs et permissions</li>
-            <li>Comptabilité, dépenses et salaires</li>
-            <li>SMS/WhatsApp et relances</li>
-            <li>Statistiques avancées directeur</li>
-          </ul>
-          <a href="{% url 'demo' %}" class="btn btn-primary w-100">Voir Pro en démonstration</a>
-        </div>
-      </div>
-    </div>
-    <div class="col-lg-4">
-      <div class="card h-100 shadow-sm">
-        <div class="card-body p-4">
-          <h2 class="h4">Offline / Hybride</h2>
-          <p class="text-muted">Pour les écoles qui veulent fonctionner localement même sans connexion stable.</p>
-          <p class="display-6 fw-bold text-primary">Sur devis</p>
-          <p class="text-muted">installation, formation et licence</p>
-          <ul class="text-muted">
-            <li>Installation locale Windows</li>
-            <li>Licence école ou distribuable</li>
-            <li>Formation du personnel</li>
-            <li>Sauvegarde et maintenance</li>
-            <li>Option synchronisation cloud</li>
-          </ul>
-          <a href="{% url 'contact' %}" class="btn btn-outline-primary w-100">Demander Offline</a>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="row g-4 align-items-stretch">
+  <div class="row g-4 mb-4">
+    <!-- Crèche -->
     <div class="col-lg-6">
-      <div class="card h-100 shadow-sm">
+      <div class="ksi-price-card">
+        <div class="ksi-price-card__head" style="background: var(--kinder-orange);">
+          <h2><i class="fas fa-baby me-2"></i>Crèche</h2>
+          <div class="ksi-price-card__amount">18 000 000 GNF</div>
+          <div class="opacity-90">par année scolaire</div>
+        </div>
+        <div class="ksi-price-card__body">
+          <div class="ksi-install">
+            <span><span class="num">1</span>1er versement</span>
+            <strong>7 500 000 GNF</strong>
+          </div>
+          <div class="ksi-install">
+            <span><span class="num">2</span>2ème versement</span>
+            <strong>6 300 000 GNF</strong>
+          </div>
+          <div class="ksi-install">
+            <span><span class="num">3</span>3ème versement</span>
+            <strong>4 200 000 GNF</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Maternelle -->
+    <div class="col-lg-6">
+      <div class="ksi-price-card">
+        <div class="ksi-price-card__head" style="background: var(--kinder-cyan);">
+          <h2><i class="fas fa-graduation-cap me-2"></i>Maternelle</h2>
+          <div class="ksi-price-card__amount">15 000 000 GNF</div>
+          <div class="opacity-90">par année scolaire</div>
+        </div>
+        <div class="ksi-price-card__body">
+          <div class="ksi-install">
+            <span><span class="num">1</span>1er versement</span>
+            <strong>6 300 000 GNF</strong>
+          </div>
+          <div class="ksi-install">
+            <span><span class="num">2</span>2ème versement</span>
+            <strong>5 500 000 GNF</strong>
+          </div>
+          <div class="ksi-install">
+            <span><span class="num">3</span>3ème versement</span>
+            <strong>3 200 000 GNF</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-md-6">
+      <div class="ksi-addon">
+        <div class="ksi-ico" style="background: var(--kinder-green);"><i class="fas fa-utensils"></i></div>
+        <h5 class="fw-bold" style="color: var(--kinder-blue-dark);">Cantine scolaire</h5>
+        <p class="text-muted mb-0">Repas chauds et équilibrés préparés sur place : <strong>25 000 GNF par jour</strong>, en supplément des frais de scolarité.</p>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="ksi-discount h-100 d-flex flex-column justify-content-center">
+        <h5 class="fw-bold mb-1" style="color:#5a4500;"><i class="fas fa-people-roof me-2"></i>Réduction famille</h5>
+        <p class="mb-0" style="color:#5a4500;">Une réduction est accordée <strong>à partir du 3ème enfant</strong> inscrit dans la même famille. Contactez-nous pour connaître le montant applicable à votre situation.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <div class="card h-100 shadow-sm border-0">
         <div class="card-body p-4">
-          <h2 class="h4">Pourquoi ces formules ?</h2>
-          <p class="text-muted mb-0">
-            Le but est d'éviter un prix trop bas qui empêche le support, et un prix trop élevé qui bloque les écoles.
-            Chaque formule doit rester rentable, accompagnée et adaptée à la réalité du terrain.
-          </p>
+          <h2 class="h5 fw-bold" style="color: var(--kinder-blue-dark);">Bon à savoir</h2>
+          <ul class="text-muted mb-0">
+            <li>Paiement possible en 3 versements échelonnés sur l'année scolaire</li>
+            <li>La cantine est facturée séparément, selon la fréquentation</li>
+            <li>Réduction famille applicable à partir de 3 enfants inscrits</li>
+            <li>Montants confirmés lors de l'inscription</li>
+          </ul>
         </div>
       </div>
     </div>
     <div class="col-lg-6">
       <div class="card h-100 shadow-sm bg-light border-0">
         <div class="card-body p-4">
-          <h2 class="h4">Contact commercial</h2>
-          <p class="text-muted">Pour une offre précise, contactez l'administrateur FARA LENO.</p>
-          <p class="mb-2"><i class="fas fa-phone text-success me-2"></i><a href="tel:+224622613559">+224 622 61 35 59</a></p>
-          <p class="mb-0"><i class="fas fa-envelope text-info me-2"></i><a href="mailto:contact@myschoolgn.space">contact@myschoolgn.space</a></p>
+          <h2 class="h5 fw-bold" style="color: var(--kinder-blue-dark);">Une question sur les tarifs ?</h2>
+          <p class="text-muted">Notre équipe se fera un plaisir de vous renseigner et de planifier une visite.</p>
+          <p class="mb-2"><i class="fas fa-phone text-success me-2"></i><a href="tel:+224628613566" class="text-decoration-none">+224 628 61 35 66</a></p>
+          <p class="mb-3"><i class="fas fa-envelope text-info me-2"></i><a href="mailto:info@kinderschoolinternational.com" class="text-decoration-none">info@kinderschoolinternational.com</a></p>
+          <a href="{% url 'contact' %}" class="btn btn-primary rounded-pill"><i class="fas fa-pen-to-square me-2"></i>Demander une inscription</a>
         </div>
       </div>
     </div>
