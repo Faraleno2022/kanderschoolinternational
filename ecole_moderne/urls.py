@@ -34,6 +34,7 @@ def google_site_verification(request):
 
 
 def robots_txt(request):
+    base = request.build_absolute_uri('/').rstrip('/')
     content = "\n".join([
         "User-agent: *",
         "Allow: /",
@@ -45,24 +46,25 @@ def robots_txt(request):
         "Disallow: /salaires/",
         "Disallow: /notes/",
         "Disallow: /chatbot/",
-        "Sitemap: https://www.myschoolgn.space/sitemap.xml",
+        f"Sitemap: {base}/sitemap.xml",
         "",
     ])
     return HttpResponse(content, content_type="text/plain")
 
 
 def sitemap_xml(request):
-    urls = [
-        ("https://www.myschoolgn.space/", "1.0"),
-        ("https://www.myschoolgn.space/fonctionnalites/", "0.9"),
-        ("https://www.myschoolgn.space/rapport-scolaire/", "0.8"),
-        ("https://www.myschoolgn.space/contact/", "0.8"),
-        ("https://www.myschoolgn.space/demo/", "0.8"),
-        ("https://www.myschoolgn.space/tarifs/", "0.6"),
+    base = request.build_absolute_uri('/').rstrip('/')
+    paths = [
+        ("/", "1.0"),
+        ("/fonctionnalites/", "0.7"),
+        ("/tarifs/", "0.6"),
+        ("/demo/", "0.8"),
+        ("/contact/", "0.9"),
+        ("/rapport-scolaire/", "0.8"),
     ]
     items = "\n".join(
-        f"  <url><loc>{loc}</loc><changefreq>weekly</changefreq><priority>{priority}</priority></url>"
-        for loc, priority in urls
+        f"  <url><loc>{base}{path}</loc><changefreq>weekly</changefreq><priority>{priority}</priority></url>"
+        for path, priority in paths
     )
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
