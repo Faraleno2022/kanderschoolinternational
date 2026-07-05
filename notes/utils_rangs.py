@@ -563,8 +563,10 @@ def calculer_rangs_maternelle(classe_note, periode: str, eleves) -> Dict[int, di
                 nb_appreciations += 1
         
         # Calculer la moyenne en pourcentage (sur 100)
-        if nb_appreciations > 0:
-            moyenne_points = total_points / nb_appreciations
+        # On divise par nb_matieres (total activités) et non nb_appreciations
+        # pour que les activités non saisies comptent comme 0
+        if nb_matieres > 0:
+            moyenne_points = total_points / nb_matieres
             moyenne_pourcentage = (moyenne_points / MAX_POINTS) * 100
             moyenne_pourcentage = round(moyenne_pourcentage, 2)
             
