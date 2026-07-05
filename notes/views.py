@@ -6779,8 +6779,11 @@ def consulter_notes(request):
                 # Semestres
                 ('SEMESTRE_1', '1er Semestre'),
                 ('SEMESTRE_2', '2ème Semestre'),
+                # Résultat annuel
+                ('ANNUEL_TRIM', 'Résultat Annuel (Trimestres)'),
+                ('ANNUEL_SEM', 'Résultat Annuel (Semestres)'),
             ]
-        
+
         # Récupérer les élèves
         try:
             # Mapping spécial pour les classes avec noms différents
@@ -6832,7 +6835,8 @@ def consulter_notes(request):
             periodes_mensuelles = ['OCTOBRE', 'NOVEMBRE', 'DECEMBRE', 'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN']
             periodes_trimestrielles = ['TRIMESTRE_1', 'TRIMESTRE_2', 'TRIMESTRE_3']
             periodes_semestrielles = ['SEMESTRE_1', 'SEMESTRE_2']
-            
+            periodes_annuelles = ['ANNUEL_TRIM', 'ANNUEL_SEM']
+
             # Import des modèles nécessaires (une seule fois)
             from .models import NoteMensuelle, CompositionNote, AppreciationMaternelle
             
@@ -6975,6 +6979,36 @@ def consulter_notes(request):
                             notes_matiere['moyenne'] = 0.0
                         
                         notes_par_matiere[matiere.id] = notes_matiere
+                elif periode_classement in periodes_annuelles:
+                    # Résultat annuel - moyenne de chaque matière sur les 3 trimestres ou 2 semestres
+                    from .calculs_moyennes import calculer_moyenne_annuelle_matiere
+                    system_type_annuel = 'annuel_trimestriel' if periode_classement == 'ANNUEL_TRIM' else 'annuel_semestriel'
+                    for matiere in matieres:
+                        eval_factice = type('EvalFactice', (), {
+                            'titre': 'Moy. Annuelle',
+                            'periode': periode_classement,
+                            'coefficient': 1,
+                            'date_evaluation': None
+                        })()
+
+                        notes_matiere = {
+                            'evaluations': [eval_factice],
+                            'notes': [],
+                            'moyenne': None
+                        }
+
+                        result_matiere = calculer_moyenne_annuelle_matiere(eleve, matiere, system_type_annuel)
+                        moyenne_annuelle_matiere = result_matiere.get('moyenne_annuelle')
+
+                        notes_matiere['notes'].append({
+                            'evaluation': eval_factice,
+                            'note': moyenne_annuelle_matiere,
+                            'absent': False,
+                        })
+
+                        notes_matiere['moyenne'] = moyenne_annuelle_matiere if moyenne_annuelle_matiere is not None else 0.0
+
+                        notes_par_matiere[matiere.id] = notes_matiere
                 else:
                     # Système trimestriel/semestriel - OPTIMISATION: utiliser le dictionnaire pré-chargé
                     for matiere in matieres:
@@ -6985,33 +7019,33 @@ def consulter_notes(request):
                             'coefficient': 1,
                             'date_evaluation': None
                         })()
-                        
+
                         notes_matiere = {
                             'evaluations': [eval_factice],
                             'notes': [],
                             'moyenne': None
                         }
-                        
+
                         # OPTIMISATION: Utiliser le dictionnaire pré-chargé
                         compo_data = compositions_dict.get((eleve.id, matiere.id))
                         note_value = compo_data['note'] if compo_data else None
                         absent_value = compo_data['absent'] if compo_data else False
-                        
+
                         # Ajouter la note trouvée ou une note vide
                         notes_matiere['notes'].append({
                             'evaluation': eval_factice,
                             'note': note_value,
                             'absent': absent_value,
                         })
-                        
+
                         # Calculer la moyenne pour cette matière
                         if note_value is not None and not absent_value:
                             notes_matiere['moyenne'] = float(note_value)
                         else:
                             notes_matiere['moyenne'] = 0.0
-                        
+
                         notes_par_matiere[matiere.id] = notes_matiere
-                
+
                 eleves_toutes_notes.append({
                     'eleve': eleve,
                     'notes_par_matiere': notes_par_matiere,
@@ -7033,7 +7067,8 @@ def consulter_notes(request):
     periodes_mensuelles_list = ['OCTOBRE', 'NOVEMBRE', 'DECEMBRE', 'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN']
     periodes_trimestrielles_list = ['TRIMESTRE_1', 'TRIMESTRE_2', 'TRIMESTRE_3']
     periodes_semestrielles_list = ['SEMESTRE_1', 'SEMESTRE_2']
-    
+    periodes_annuelles_list = ['ANNUEL_TRIM', 'ANNUEL_SEM']
+
     for matiere in matieres:
         if periode_classement in periodes_mensuelles_list:
             # Pour les mois: une seule colonne "Note"
@@ -7050,6 +7085,16 @@ def consulter_notes(request):
             eval_factice = type('EvalFactice', (), {
                 'id': f'compo_{matiere.id}',
                 'titre': 'Compo',
+                'periode': periode_classement,
+                'coefficient': 1,
+                'date_evaluation': None
+            })()
+            evaluations_par_matiere[matiere.id] = [eval_factice]
+        elif periode_classement in periodes_annuelles_list:
+            # Pour le résultat annuel: une seule colonne "Moy. Annuelle"
+            eval_factice = type('EvalFactice', (), {
+                'id': f'annuel_{matiere.id}',
+                'titre': 'Moy. Annuelle',
                 'periode': periode_classement,
                 'coefficient': 1,
                 'date_evaluation': None
