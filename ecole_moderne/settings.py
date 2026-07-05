@@ -66,6 +66,9 @@ else:
         'myschoolgn.space',
         'www.myschoolgn.space',
         'myschool-rn3d.onrender.com',
+        'webapp-3123625.pythonanywhere.com',
+        'kinderschoolinternational.com',
+        'www.kinderschoolinternational.com',
     ] + _env_list('DJANGO_ALLOWED_HOSTS')
     if RENDER_EXTERNAL_HOSTNAME:
         ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
@@ -76,6 +79,9 @@ else:
         'https://myschoolgn.space',
         'https://www.myschoolgn.space',
         'https://myschool-rn3d.onrender.com',
+        'https://webapp-3123625.pythonanywhere.com',
+        'https://kinderschoolinternational.com',
+        'https://www.kinderschoolinternational.com',
     ] + _env_list('DJANGO_CSRF_TRUSTED_ORIGINS')
     if RENDER_EXTERNAL_HOSTNAME:
         CSRF_TRUSTED_ORIGINS.append(f'https://{RENDER_EXTERNAL_HOSTNAME}')
