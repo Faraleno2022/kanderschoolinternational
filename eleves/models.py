@@ -4,6 +4,7 @@ from django.core.validators import RegexValidator
 from decimal import Decimal
 import unicodedata
 from synchronisation.mixins import SyncTrackedModel
+from eleves.validators import validate_photo_size, validate_logo_size
 
 class Ecole(SyncTrackedModel):
     """Modèle pour représenter une école"""
@@ -33,10 +34,14 @@ class Ecole(SyncTrackedModel):
     email = models.EmailField(blank=True, null=True, verbose_name="Email")
     directeur = models.CharField(max_length=100, verbose_name="Directeur")
     censeur = models.CharField(max_length=100, blank=True, null=True, verbose_name="Censeur de l'établissement")
-    logo = models.ImageField(upload_to='ecoles/logos/', blank=True, null=True)
+    logo = models.ImageField(
+        upload_to='ecoles/logos/', blank=True, null=True,
+        validators=[validate_logo_size]
+    )
     image = models.ImageField(upload_to='ecoles/images/', blank=True, null=True,
                               verbose_name="Photo de l'ecole",
-                              help_text="Photo du batiment de l'ecole (affichee sur le livret scolaire)")
+                              help_text="Photo du batiment de l'ecole (affichee sur le livret scolaire)",
+                              validators=[validate_photo_size])
     # Préfixe explicite pour les matricules (ex: "AL-FUR/")
     code_prefixe = models.CharField(
         max_length=20,
@@ -407,7 +412,10 @@ class Eleve(SyncTrackedModel):
     sexe = models.CharField(max_length=1, choices=SEXE_CHOICES, verbose_name="Sexe")
     date_naissance = models.DateField(verbose_name="Date de naissance", blank=True, null=True)
     lieu_naissance = models.CharField(max_length=100, verbose_name="Lieu de naissance", blank=True, null=True)
-    photo = models.ImageField(upload_to='eleves/photos/', blank=True, null=True, verbose_name="Photo")
+    photo = models.ImageField(
+        upload_to='eleves/photos/', blank=True, null=True, verbose_name="Photo",
+        validators=[validate_photo_size]
+    )
 
     # Informations médicales
     GROUPE_SANGUIN_CHOICES = [

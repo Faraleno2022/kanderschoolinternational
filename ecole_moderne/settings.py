@@ -199,9 +199,15 @@ AXES_RESET_ON_SUCCESS = True        # Réinitialiser le compteur après un login
 AXES_ENABLE_ADMIN = True            # Voir les tentatives dans l'admin Django
 AXES_LOCKOUT_URL = '/utilisateurs/login/'  # Rediriger vers le login après blocage
 AXES_SENSITIVE_PARAMETERS = ['password']
-# Ne surveiller QUE la page de login (ne pas bloquer les autres POST publics)
+# Ne surveiller QUE les pages de login (ne pas bloquer les autres POST publics)
 import re as _re
-AXES_URL_REGEX = _re.compile(r'^/utilisateurs/login/$')
+AXES_URL_REGEX = _re.compile(r'^/(utilisateurs/login|admin/login)/$')
+
+# =================== Whitelist IP pour /admin/ (optionnelle) ===================
+# Vide par defaut = aucune restriction supplementaire (comportement actuel inchange).
+# Pour activer: definir la variable d'environnement ADMIN_WHITELIST_IPS avec une
+# liste d'IP separees par des virgules (ex: "41.85.12.34,102.10.5.6").
+ADMIN_WHITELIST_IPS = _env_list('ADMIN_WHITELIST_IPS')
 
 ROOT_URLCONF = 'ecole_moderne.urls'
 
