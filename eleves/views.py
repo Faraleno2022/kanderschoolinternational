@@ -2319,20 +2319,24 @@ def fiche_inscription_pdf(request, eleve_id):
     right_col = 10*cm
     line_height = 0.6*cm
     
+    date_inscription_str = eleve.date_inscription.strftime('%d/%m/%Y') if eleve.date_inscription else "Non renseignée"
+    date_naissance_str = eleve.date_naissance.strftime('%d/%m/%Y') if eleve.date_naissance else "Non renseignée"
+    age_str = f"{eleve.age} ans" if eleve.age is not None else "Non renseigné"
+
     c.drawString(left_col, y, f"Matricule: {eleve.matricule}")
-    c.drawString(right_col, y, f"Date d'inscription: {eleve.date_inscription.strftime('%d/%m/%Y')}")
+    c.drawString(right_col, y, f"Date d'inscription: {date_inscription_str}")
     y -= line_height
-    
+
     c.drawString(left_col, y, f"Nom: {eleve.nom}")
     c.drawString(right_col, y, f"Prénom: {eleve.prenom}")
     y -= line_height
-    
+
     c.drawString(left_col, y, f"Sexe: {eleve.get_sexe_display()}")
-    c.drawString(right_col, y, f"Date de naissance: {eleve.date_naissance.strftime('%d/%m/%Y')}")
+    c.drawString(right_col, y, f"Date de naissance: {date_naissance_str}")
     y -= line_height
-    
+
     c.drawString(left_col, y, f"Lieu de naissance: {eleve.lieu_naissance}")
-    c.drawString(right_col, y, f"Âge: {eleve.age} ans")
+    c.drawString(right_col, y, f"Âge: {age_str}")
     y -= line_height
     
     c.drawString(left_col, y, f"Statut: {eleve.get_statut_display()}")
