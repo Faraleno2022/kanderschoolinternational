@@ -138,9 +138,11 @@ class EleveForm(forms.ModelForm):
     class Meta:
         model = Eleve
         fields = [
-            'matricule', 'prenom', 'nom', 'sexe', 'date_naissance', 
-            'lieu_naissance', 'photo', 'classe', 'date_inscription', 
-            'statut', 'responsable_principal', 'responsable_secondaire'
+            'matricule', 'prenom', 'nom', 'sexe', 'date_naissance',
+            'lieu_naissance', 'photo', 'classe', 'date_inscription',
+            'statut', 'responsable_principal', 'responsable_secondaire',
+            'groupe_sanguin', 'allergies', 'maladies_chroniques',
+            'traitement_en_cours', 'observations_medicales',
         ]
         widgets = {
             'matricule': forms.TextInput(attrs={
@@ -192,6 +194,29 @@ class EleveForm(forms.ModelForm):
             }),
             'responsable_secondaire': forms.Select(attrs={
                 'class': 'form-select'
+            }),
+            'groupe_sanguin': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'allergies': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 2,
+                'placeholder': 'Ex: Arachides, pénicilline... (laisser vide si aucune)'
+            }),
+            'maladies_chroniques': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 2,
+                'placeholder': 'Ex: Asthme, épilepsie... (laisser vide si aucune)'
+            }),
+            'traitement_en_cours': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 2,
+                'placeholder': 'Médicaments et posologie (laisser vide si aucun)'
+            }),
+            'observations_medicales': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 2,
+                'placeholder': 'Régime alimentaire particulier, informations utiles pour l\'équipe...'
             }),
         }
     

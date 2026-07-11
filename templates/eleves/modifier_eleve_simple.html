@@ -475,6 +475,63 @@
                         </div>
                     </div>
 
+                    <!-- Informations médicales (optionnel) -->
+                    <h4 class="section-title mt-4"><i class="fas fa-notes-medical me-2"></i>Informations médicales (optionnel)</h4>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label class="form-label">Groupe sanguin</label>
+                                {{ form.groupe_sanguin }}
+                                {% if form.groupe_sanguin.errors %}
+                                    <div class="text-danger small mt-1">{{ form.groupe_sanguin.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="form-group">
+                                <label class="form-label">Allergies</label>
+                                {{ form.allergies }}
+                                {% if form.allergies.errors %}
+                                    <div class="text-danger small mt-1">{{ form.allergies.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Maladies chroniques / antécédents médicaux</label>
+                                {{ form.maladies_chroniques }}
+                                {% if form.maladies_chroniques.errors %}
+                                    <div class="text-danger small mt-1">{{ form.maladies_chroniques.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Traitement en cours</label>
+                                {{ form.traitement_en_cours }}
+                                {% if form.traitement_en_cours.errors %}
+                                    <div class="text-danger small mt-1">{{ form.traitement_en_cours.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="form-group">
+                                <label class="form-label">Observations médicales</label>
+                                {{ form.observations_medicales }}
+                                {% if form.observations_medicales.errors %}
+                                    <div class="text-danger small mt-1">{{ form.observations_medicales.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Photo -->
                     <h4 class="section-title mt-4"><i class="fas fa-camera me-2"></i>Photo</h4>
                     <div class="row">

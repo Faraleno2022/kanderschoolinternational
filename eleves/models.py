@@ -408,7 +408,34 @@ class Eleve(SyncTrackedModel):
     date_naissance = models.DateField(verbose_name="Date de naissance", blank=True, null=True)
     lieu_naissance = models.CharField(max_length=100, verbose_name="Lieu de naissance", blank=True, null=True)
     photo = models.ImageField(upload_to='eleves/photos/', blank=True, null=True, verbose_name="Photo")
-    
+
+    # Informations médicales
+    GROUPE_SANGUIN_CHOICES = [
+        ('A+', 'A+'), ('A-', 'A-'),
+        ('B+', 'B+'), ('B-', 'B-'),
+        ('AB+', 'AB+'), ('AB-', 'AB-'),
+        ('O+', 'O+'), ('O-', 'O-'),
+    ]
+    groupe_sanguin = models.CharField(
+        max_length=3, choices=GROUPE_SANGUIN_CHOICES, blank=True, null=True,
+        verbose_name="Groupe sanguin"
+    )
+    allergies = models.TextField(
+        blank=True, null=True, verbose_name="Allergies",
+        help_text="Allergies connues (alimentaires, médicamenteuses, etc.)"
+    )
+    maladies_chroniques = models.TextField(
+        blank=True, null=True, verbose_name="Maladies chroniques / antécédents médicaux"
+    )
+    traitement_en_cours = models.TextField(
+        blank=True, null=True, verbose_name="Traitement en cours",
+        help_text="Médicaments pris régulièrement, posologie"
+    )
+    observations_medicales = models.TextField(
+        blank=True, null=True, verbose_name="Observations médicales",
+        help_text="Toute autre information utile pour le personnel encadrant (régime alimentaire, peur particulière, etc.)"
+    )
+
     # Scolarité
     classe = models.ForeignKey(Classe, on_delete=models.CASCADE, related_name='eleves')
     date_inscription = models.DateField(verbose_name="Date d'inscription", blank=True, null=True)
