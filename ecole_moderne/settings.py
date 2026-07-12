@@ -201,9 +201,17 @@ AXES_ENABLE_ADMIN = True            # Voir les tentatives dans l'admin Django
 AXES_LOCKOUT_URL = '/utilisateurs/login/'  # Rediriger vers le login après blocage
 AXES_LOCKOUT_TEMPLATE = 'utilisateurs/locked_out.html'
 AXES_SENSITIVE_PARAMETERS = ['password']
+# =================== URL admin personnalisable ===================
+# Par defaut 'admin/'. En production, definir DJANGO_ADMIN_URL dans le .env
+# (ex: DJANGO_ADMIN_URL=gestion-secrete-2026/) pour masquer l'admin aux robots.
+# Le secret ne doit JAMAIS etre commite dans ce fichier (depot public).
+ADMIN_URL_PATH = os.environ.get('DJANGO_ADMIN_URL', 'admin/').strip('/') + '/'
+
 # Ne surveiller QUE les pages de login (ne pas bloquer les autres POST publics)
 import re as _re
-AXES_URL_REGEX = _re.compile(r'^/(utilisateurs/login|admin/login)/$')
+AXES_URL_REGEX = _re.compile(
+    r'^/(utilisateurs/login|' + _re.escape(ADMIN_URL_PATH.rstrip('/')) + r'/login)/$'
+)
 
 # =================== Whitelist IP pour /admin/ (optionnelle) ===================
 # Vide par defaut = aucune restriction supplementaire (comportement actuel inchange).

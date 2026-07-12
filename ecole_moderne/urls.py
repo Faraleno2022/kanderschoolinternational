@@ -75,7 +75,7 @@ def sitemap_xml(request):
 
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path(settings.ADMIN_URL_PATH, admin.site.urls),
     path('activer/', activer_licence, name='activer_licence'),
     path('api/v1/license/activate', activate_license, name='license_api_activate'),
     path('api/v1/license/activate/', activate_license, name='license_api_activate_slash'),

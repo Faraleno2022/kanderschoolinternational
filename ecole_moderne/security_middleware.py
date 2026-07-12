@@ -82,13 +82,14 @@ class SecurityMiddleware(MiddlewareMixin):
         client_ip = self.get_client_ip(request)
         user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
         
-        # -2. Bloquer l'accès public à /admin/ par IP (actif uniquement si
+        # -2. Bloquer l'accès public à l'admin par IP (actif uniquement si
         #     ADMIN_WHITELIST_IPS contient au moins une IP ; sinon aucun effet,
         #     pour éviter de se verrouiller soi-même hors de l'admin).
+        admin_prefix = '/' + getattr(settings, 'ADMIN_URL_PATH', 'admin/')
         try:
             path = request.path or ''
             whitelist = getattr(settings, 'ADMIN_WHITELIST_IPS', []) or []
-            if path.startswith('/admin/') and whitelist:
+            if path.startswith(admin_prefix) and whitelist:
                 is_whitelisted = client_ip in whitelist
                 if not (hasattr(request, 'user') and request.user.is_authenticated and request.user.is_staff):
                     if not is_whitelisted:
@@ -119,7 +120,7 @@ class SecurityMiddleware(MiddlewareMixin):
         
         # 0. Bypass sécurisé pour l'admin avec utilisateur staff authentifié
         try:
-            if request.path.startswith('/admin/') and hasattr(request, 'user') and request.user.is_authenticated and request.user.is_staff:
+            if request.path.startswith(admin_prefix) and hasattr(request, 'user') and request.user.is_authenticated and request.user.is_staff:
                 # On applique seulement rate limiting et blocage IP existant, pas de détection agressive
                 if self.is_ip_blocked(client_ip):
                     logger.info(f"Accès admin refusé pour IP bloquée: {client_ip}")
@@ -292,11 +293,12 @@ class SessionSecurityMiddleware(MiddlewareMixin):
             try:
                 path = request.path or ''
                 # Routes exemptées
+                admin_prefix = '/' + getattr(settings, 'ADMIN_URL_PATH', 'admin/')
                 exempt = (
                     path.startswith('/utilisateurs/login/') or
                     path.startswith('/utilisateurs/logout/') or
                     path.startswith('/utilisateurs/verify-phone/') or
-                    path.startswith('/admin/') or
+                    path.startswith(admin_prefix) or
                     path.startswith('/static/') or
                     path.startswith('/media/')
                 )
