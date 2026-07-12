@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block title %}Activités culturelles{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active">Activités culturelles</li>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'notes:ajouter_activite_culturelle' %}" class="btn btn-primary">
+    <i class="fas fa-plus me-1"></i>Nouvelle activité
+</a>
+<a href="{% url 'activites_publiques' %}" class="btn btn-outline-secondary" target="_blank" rel="noopener">
+    <i class="fas fa-eye me-1"></i>Voir la page publique
+</a>
+{% endblock %}
+
+{% block content %}
+<p class="text-muted">
+    Les activités <strong>publiées</strong> apparaissent automatiquement sur la page d'accueil du site
+    et sur la page publique <a href="{% url 'activites_publiques' %}" target="_blank" rel="noopener">Activités</a>.
+</p>
+
+<div class="row g-4">
+    {% for activite in page_activites %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card shadow-sm h-100">
+            <img src="{{ activite.image.url }}" alt="{{ activite.titre }}" class="card-img-top" style="height:200px;object-fit:cover;">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <h5 class="card-title mb-1">{{ activite.titre }}</h5>
+                    {% if activite.publie %}
+                        <span class="badge bg-success">Publié</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Masqué</span>
+                    {% endif %}
+                </div>
+                {% if activite.date_activite %}
+                <small class="text-muted"><i class="fas fa-calendar me-1"></i>{{ activite.date_activite|date:"d/m/Y" }}</small>
+                {% endif %}
+                <p class="card-text text-muted small mt-2">{{ activite.description|truncatechars:120 }}</p>
+            </div>
+            <div class="card-footer bg-white d-flex gap-2">
+                <a href="{% url 'notes:modifier_activite_culturelle' activite.id %}" class="btn btn-sm btn-outline-primary flex-fill">
+                    <i class="fas fa-pen me-1"></i>Modifier
+                </a>
+                <form method="post" action="{% url 'notes:basculer_publication_activite' activite.id %}" class="flex-fill">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-{% if activite.publie %}warning{% else %}success{% endif %} w-100">
+                        {% if activite.publie %}<i class="fas fa-eye-slash me-1"></i>Masquer{% else %}<i class="fas fa-eye me-1"></i>Publier{% endif %}
+                    </button>
+                </form>
+                <form method="post" action="{% url 'notes:supprimer_activite_culturelle' activite.id %}"
+                      onsubmit="return confirm('Supprimer cette activité ?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="text-center py-5">
+            <i class="fas fa-masks-theater fa-3x text-muted mb-3"></i>
+            <p class="text-muted">Aucune activité culturelle pour le moment.</p>
+            <a href="{% url 'notes:ajouter_activite_culturelle' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i>Ajouter la première activité
+            </a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if page_activites.has_other_pages %}
+<nav class="mt-4 d-flex justify-content-center">
+    <ul class="pagination">
+        {% if page_activites.has_previous %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_activites.previous_page_number }}">&laquo;</a></li>
+        {% endif %}
+        <li class="page-item disabled"><span class="page-link">{{ page_activites.number }}/{{ page_activites.paginator.num_pages }}</span></li>
+        {% if page_activites.has_next %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_activites.next_page_number }}">&raquo;</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

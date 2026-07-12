@@ -958,3 +958,47 @@ class HistoriqueEleve(SyncTrackedModel):
     
     def __str__(self):
         return f"{self.eleve.nom_complet} - {self.get_action_display()} ({self.date_action.strftime('%d/%m/%Y')})"
+
+
+class VisiteMedicale(models.Model):
+    """Passage d'un élève à l'infirmerie — suivi par l'infirmière."""
+    STATUT_CHOICES = [
+        ('RETOUR_CLASSE', 'Retourné en classe'),
+        ('EN_OBSERVATION', 'En observation'),
+        ('RENVOYE_MAISON', 'Renvoyé à la maison'),
+        ('HOPITAL', 'Orienté vers un centre de santé'),
+    ]
+
+    eleve = models.ForeignKey(
+        Eleve, on_delete=models.CASCADE, related_name='visites_medicales',
+        verbose_name="Élève"
+    )
+    date_visite = models.DateTimeField(verbose_name="Date et heure de la visite")
+    motif = models.CharField(max_length=200, verbose_name="Motif de la visite")
+    temperature = models.DecimalField(
+        max_digits=4, decimal_places=1, blank=True, null=True,
+        verbose_name="Température (°C)"
+    )
+    symptomes = models.TextField(blank=True, null=True, verbose_name="Symptômes observés")
+    soins = models.TextField(
+        blank=True, null=True, verbose_name="Soins / médicaments administrés"
+    )
+    statut = models.CharField(
+        max_length=20, choices=STATUT_CHOICES, default='RETOUR_CLASSE',
+        verbose_name="Suite donnée"
+    )
+    parent_contacte = models.BooleanField(default=False, verbose_name="Parent contacté")
+    observations = models.TextField(blank=True, null=True, verbose_name="Observations")
+    cree_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    date_creation = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Visite médicale"
+        verbose_name_plural = "Visites médicales"
+        ordering = ['-date_visite']
+        indexes = [
+            models.Index(fields=['eleve', '-date_visite']),
+        ]
+
+    def __str__(self):
+        return f"{self.eleve.nom_complet} - {self.motif} ({self.date_visite.strftime('%d/%m/%Y')})"

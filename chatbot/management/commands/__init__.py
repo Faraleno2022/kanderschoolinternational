@@ -1,1 +1,0 @@
-# Chatbot management commands

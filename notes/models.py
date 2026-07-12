@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from eleves.models import Ecole
+from eleves.validators import validate_photo_size
 from decimal import Decimal
 from synchronisation.mixins import SyncTrackedModel
 
@@ -804,3 +805,33 @@ class PieceJointeActivite(SyncTrackedModel):
     def is_image(self):
         ext = self.fichier.name.lower().split('.')[-1] if self.fichier else ''
         return ext in ('jpg', 'jpeg', 'png', 'gif', 'webp')
+
+
+class ActiviteCulturelle(models.Model):
+    """Activité culturelle de l'école (fête, sortie, spectacle...) publiée sur le site public."""
+    titre = models.CharField(max_length=200, verbose_name="Titre de l'activité")
+    description = models.TextField(verbose_name="Description")
+    image = models.ImageField(
+        upload_to='activites_culturelles/', verbose_name="Image",
+        help_text="Photo de l'activité (max 3 Mo)",
+        validators=[validate_photo_size]
+    )
+    date_activite = models.DateField(blank=True, null=True, verbose_name="Date de l'activité")
+    publie = models.BooleanField(
+        default=True, verbose_name="Publié sur le site",
+        help_text="Décocher pour masquer l'activité de la page publique"
+    )
+    ecole = models.ForeignKey(
+        Ecole, on_delete=models.CASCADE, related_name='activites_culturelles',
+        blank=True, null=True
+    )
+    cree_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    date_creation = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Activité culturelle"
+        verbose_name_plural = "Activités culturelles"
+        ordering = ['-date_activite', '-date_creation']
+
+    def __str__(self):
+        return self.titre

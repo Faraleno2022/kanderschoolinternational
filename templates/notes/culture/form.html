@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'notes:activites_culturelles' %}">Activités culturelles</a></li>
+<li class="breadcrumb-item active">{% if mode == 'ajout' %}Nouvelle{% else %}Modifier{% endif %}</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <i class="fas fa-masks-theater me-2"></i>{{ titre_page }}
+            </div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Titre <span class="text-danger">*</span></label>
+                        {{ form.titre }}
+                        {% if form.titre.errors %}<div class="text-danger small">{{ form.titre.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description <span class="text-danger">*</span></label>
+                        {{ form.description }}
+                        {% if form.description.errors %}<div class="text-danger small">{{ form.description.errors.0 }}</div>{% endif %}
+                        <div class="form-text">Ce texte sera affiché sur le site public, sous la photo.</div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Image {% if mode == 'ajout' %}<span class="text-danger">*</span>{% endif %}</label>
+                            {{ form.image }}
+                            {% if form.image.errors %}<div class="text-danger small">{{ form.image.errors.0 }}</div>{% endif %}
+                            <div class="form-text">JPG ou PNG, 3 Mo maximum.</div>
+                            {% if mode == 'modification' and activite.image %}
+                            <img src="{{ activite.image.url }}" alt="Image actuelle" class="rounded mt-2" style="max-width:160px;max-height:110px;object-fit:cover;">
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Date de l'activité</label>
+                            {{ form.date_activite }}
+                            <div class="form-check mt-3">
+                                {{ form.publie }}
+                                <label class="form-check-label" for="{{ form.publie.id_for_label }}">
+                                    Publier sur le site public
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Enregistrer
+                        </button>
+                        <a href="{% url 'notes:activites_culturelles' %}" class="btn btn-outline-secondary">Annuler</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

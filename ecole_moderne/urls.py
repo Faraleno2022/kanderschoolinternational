@@ -21,6 +21,7 @@ from django.conf.urls.static import static
 from django.http import HttpResponse
 from django.views.generic import TemplateView, RedirectView
 from .static_views import serve_static_no_cache
+from .public_views import home as home_view, activites_publiques
 from .activation_views import activer_licence
 from utilisateurs.license_api import activate_license, verify_license
 from notes.rapport_scolaire import rapport_scolaire_recherche, rapport_scolaire_detail, rapport_scolaire_pdf, rapport_scolaire_recu_pdf, rapport_scolaire_classes_ajax
@@ -45,7 +46,6 @@ def robots_txt(request):
         "Disallow: /depenses/",
         "Disallow: /salaires/",
         "Disallow: /notes/",
-        "Disallow: /chatbot/",
         f"Sitemap: {base}/sitemap.xml",
         "",
     ])
@@ -60,6 +60,7 @@ def sitemap_xml(request):
         ("/tarifs/", "0.6"),
         ("/demo/", "0.8"),
         ("/contact/", "0.9"),
+        ("/activites/", "0.7"),
         ("/rapport-scolaire/", "0.8"),
     ]
     items = "\n".join(
@@ -81,8 +82,9 @@ urlpatterns = [
     path('api/v1/license/activate/', activate_license, name='license_api_activate_slash'),
     path('api/v1/license/verify', verify_license, name='license_api_verify'),
     path('api/v1/license/verify/', verify_license, name='license_api_verify_slash'),
-    path('', TemplateView.as_view(template_name='home.html'), name='home'),
-    path('index/', TemplateView.as_view(template_name='home.html'), name='index'),
+    path('', home_view, name='home'),
+    path('index/', home_view, name='index'),
+    path('activites/', activites_publiques, name='activites_publiques'),
     path('robots.txt', robots_txt, name='robots_txt'),
     path('sitemap.xml', sitemap_xml, name='sitemap_xml'),
     path('fonctionnalites/', TemplateView.as_view(template_name='public/fonctionnalites.html'), name='fonctionnalites'),
@@ -110,7 +112,6 @@ urlpatterns = [
     path('bus/', include('bus.urls')),
     path('notes/', include('notes.urls')),
     path('abonnements/', include('abonnements.urls')),
-    path('chatbot/', include('chatbot.urls')),
     path('api/v1/sync/', include('synchronisation.urls')),
 ]
 

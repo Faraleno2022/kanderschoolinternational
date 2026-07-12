@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'eleves:infirmerie' %}">Infirmerie</a></li>
+<li class="breadcrumb-item"><a href="{% url 'eleves:sante_eleve' eleve.id %}">{{ eleve.nom_complet }}</a></li>
+<li class="breadcrumb-item active">{% if mode == 'ajout' %}Nouvelle visite{% else %}Modifier{% endif %}</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        {% if eleve.allergies or eleve.maladies_chroniques or eleve.traitement_en_cours %}
+        <div class="alert alert-danger">
+            <i class="fas fa-triangle-exclamation me-2"></i><strong>Alertes médicales :</strong>
+            {% if eleve.allergies %}<div><strong>Allergies :</strong> {{ eleve.allergies }}</div>{% endif %}
+            {% if eleve.maladies_chroniques %}<div><strong>Maladies chroniques :</strong> {{ eleve.maladies_chroniques }}</div>{% endif %}
+            {% if eleve.traitement_en_cours %}<div><strong>Traitement en cours :</strong> {{ eleve.traitement_en_cours }}</div>{% endif %}
+        </div>
+        {% endif %}
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <i class="fas fa-stethoscope me-2"></i>
+                {% if mode == 'ajout' %}Nouvelle visite — {{ eleve.nom_complet }}{% else %}Modifier la visite — {{ eleve.nom_complet }}{% endif %}
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Date et heure <span class="text-danger">*</span></label>
+                            {{ form.date_visite }}
+                            {% if form.date_visite.errors %}<div class="text-danger small">{{ form.date_visite.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Température (°C)</label>
+                            {{ form.temperature }}
+                            {% if form.temperature.errors %}<div class="text-danger small">{{ form.temperature.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Motif de la visite <span class="text-danger">*</span></label>
+                            {{ form.motif }}
+                            {% if form.motif.errors %}<div class="text-danger small">{{ form.motif.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Symptômes observés</label>
+                            {{ form.symptomes }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Soins / médicaments administrés</label>
+                            {{ form.soins }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Suite donnée <span class="text-danger">*</span></label>
+                            {{ form.statut }}
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check">
+                                {{ form.parent_contacte }}
+                                <label class="form-check-label" for="{{ form.parent_contacte.id_for_label }}">
+                                    Parent contacté
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Observations</label>
+                            {{ form.observations }}
+                        </div>
+                    </div>
+                    <div class="mt-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Enregistrer
+                        </button>
+                        <a href="{% url 'eleves:sante_eleve' eleve.id %}" class="btn btn-outline-secondary">Annuler</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

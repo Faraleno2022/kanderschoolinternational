@@ -1,6 +1,6 @@
 from django import forms
 from django.forms import ClearableFileInput
-from .models import ClasseNote, MatiereNote, Evaluation, NoteEleve, ThemeBulletin, ActiviteJournaliere, PieceJointeActivite
+from .models import ClasseNote, MatiereNote, Evaluation, NoteEleve, ThemeBulletin, ActiviteJournaliere, PieceJointeActivite, ActiviteCulturelle
 
 class ClasseNoteForm(forms.ModelForm):
     """Formulaire pour créer/modifier une classe"""
@@ -310,3 +310,26 @@ class PieceJointeActiviteForm(forms.Form):
             if f.size > max_size:
                 raise forms.ValidationError(f"Fichier trop volumineux (max 10 Mo) : {f.name}")
         return files
+
+
+class ActiviteCulturelleForm(forms.ModelForm):
+    """Formulaire de gestion des activités culturelles publiées sur le site"""
+
+    class Meta:
+        model = ActiviteCulturelle
+        fields = ['titre', 'description', 'image', 'date_activite', 'publie']
+        widgets = {
+            'titre': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': "Ex: Fête de fin d'année, Sortie au zoo..."
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control', 'rows': 4,
+                'placeholder': "Description de l'activité affichée sur le site public"
+            }),
+            'image': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
+            'date_activite': forms.DateInput(
+                attrs={'class': 'form-control', 'type': 'date'}, format='%Y-%m-%d'
+            ),
+            'publie': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }

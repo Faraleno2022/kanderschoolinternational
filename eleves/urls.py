@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import views_sante
 from .views_import import importer_eleves, telecharger_template_eleves, exporter_eleves_classe
 from .views_nouvelle_annee import (
     nouvelle_annee_apercu,
@@ -67,6 +68,13 @@ urlpatterns = [
     path('ajax/rechercher-responsable-telephone/', views.ajax_rechercher_responsable_telephone, name='ajax_rechercher_responsable_telephone'),
     path('ajax/modifier-telephone-responsable/', views.ajax_modifier_telephone_responsable, name='ajax_modifier_telephone_responsable'),
     
+    # Infirmerie — suivi santé des élèves
+    path('infirmerie/', views_sante.infirmerie_dashboard, name='infirmerie'),
+    path('<int:eleve_id>/sante/', views_sante.sante_eleve, name='sante_eleve'),
+    path('<int:eleve_id>/sante/visite/ajouter/', views_sante.ajouter_visite, name='ajouter_visite'),
+    path('infirmerie/visite/<int:visite_id>/modifier/', views_sante.modifier_visite, name='modifier_visite'),
+    path('infirmerie/visite/<int:visite_id>/supprimer/', views_sante.supprimer_visite, name='supprimer_visite'),
+
     # Import/Export d'élèves
     path('importer/', importer_eleves, name='importer_eleves'),
     path('template-eleves/', telecharger_template_eleves, name='telecharger_template_eleves'),

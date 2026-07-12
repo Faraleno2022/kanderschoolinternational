@@ -1,6 +1,6 @@
 from django import forms
 from django.core.validators import RegexValidator
-from .models import Eleve, Responsable, Classe, Ecole
+from .models import Eleve, Responsable, Classe, Ecole, VisiteMedicale
 from utilisateurs.utils import user_is_admin, user_school
 from datetime import date
 
@@ -523,3 +523,36 @@ class EcoleForm(forms.ModelForm):
         """Convertir le DESEE en majuscules"""
         desee = self.cleaned_data.get('desee', '')
         return desee.upper() if desee else ''
+
+
+class VisiteMedicaleForm(forms.ModelForm):
+    """Formulaire de saisie d'une visite à l'infirmerie"""
+
+    class Meta:
+        model = VisiteMedicale
+        fields = [
+            'date_visite', 'motif', 'temperature', 'symptomes',
+            'soins', 'statut', 'parent_contacte', 'observations',
+        ]
+        widgets = {
+            'date_visite': forms.DateTimeInput(
+                attrs={'class': 'form-control', 'type': 'datetime-local'},
+                format='%Y-%m-%dT%H:%M'
+            ),
+            'motif': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex: Fièvre, chute, maux de ventre...'
+            }),
+            'temperature': forms.NumberInput(attrs={
+                'class': 'form-control', 'step': '0.1', 'min': '30', 'max': '45',
+                'placeholder': 'Ex: 37.5'
+            }),
+            'symptomes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'soins': forms.Textarea(attrs={
+                'class': 'form-control', 'rows': 2,
+                'placeholder': 'Soins apportés, médicament administré...'
+            }),
+            'statut': forms.Select(attrs={'class': 'form-select'}),
+            'parent_contacte': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'observations': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+        }

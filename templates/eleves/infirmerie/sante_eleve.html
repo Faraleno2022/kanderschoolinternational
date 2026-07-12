@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+
+{% block title %}Fiche santé — {{ eleve.nom_complet }}{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'eleves:infirmerie' %}">Infirmerie</a></li>
+<li class="breadcrumb-item active">{{ eleve.nom_complet }}</li>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'eleves:ajouter_visite' eleve.id %}" class="btn btn-primary">
+    <i class="fas fa-plus me-1"></i>Nouvelle visite
+</a>
+<a href="{% url 'eleves:detail_eleve' eleve.id %}" class="btn btn-outline-secondary">
+    <i class="fas fa-user me-1"></i>Dossier élève
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Identité + infos médicales -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body text-center">
+                {% if eleve.photo %}
+                    <img src="{{ eleve.photo.url }}" alt="{{ eleve.nom_complet }}" class="rounded-circle mb-2" style="width:90px;height:90px;object-fit:cover;">
+                {% else %}
+                    <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-2" style="width:90px;height:90px;">
+                        <i class="fas fa-child fa-2x text-muted"></i>
+                    </div>
+                {% endif %}
+                <h5 class="mb-0">{{ eleve.nom_complet }}</h5>
+                <small class="text-muted">{{ eleve.matricule }} — {{ eleve.classe.nom }}</small>
+                {% if eleve.age %}<div><small class="text-muted">{{ eleve.age }} ans</small></div>{% endif %}
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header {% if eleve.allergies or eleve.maladies_chroniques %}bg-danger text-white{% else %}bg-light{% endif %}">
+                <i class="fas fa-notes-medical me-2"></i>Informations médicales
+            </div>
+            <div class="card-body">
+                <p class="mb-2"><strong>Groupe sanguin :</strong>
+                    {% if eleve.groupe_sanguin %}<span class="badge bg-danger">{{ eleve.groupe_sanguin }}</span>{% else %}<span class="text-muted">Non renseigné</span>{% endif %}
+                </p>
+                <p class="mb-2"><strong>Allergies :</strong><br>
+                    {% if eleve.allergies %}{{ eleve.allergies|linebreaksbr }}{% else %}<span class="text-muted">Aucune renseignée</span>{% endif %}
+                </p>
+                <p class="mb-2"><strong>Maladies chroniques :</strong><br>
+                    {% if eleve.maladies_chroniques %}{{ eleve.maladies_chroniques|linebreaksbr }}{% else %}<span class="text-muted">Aucune renseignée</span>{% endif %}
+                </p>
+                <p class="mb-2"><strong>Traitement en cours :</strong><br>
+                    {% if eleve.traitement_en_cours %}{{ eleve.traitement_en_cours|linebreaksbr }}{% else %}<span class="text-muted">Aucun</span>{% endif %}
+                </p>
+                {% if eleve.observations_medicales %}
+                <p class="mb-0"><strong>Observations :</strong><br>{{ eleve.observations_medicales|linebreaksbr }}</p>
+                {% endif %}
+                <hr>
+                <a href="{% url 'eleves:modifier_eleve' eleve.id %}" class="btn btn-sm btn-outline-primary w-100">
+                    <i class="fas fa-pen me-1"></i>Mettre à jour les infos médicales
+                </a>
+            </div>
+        </div>
+
+        {% if eleve.responsable_principal %}
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-light"><i class="fas fa-phone me-2"></i>Contact d'urgence</div>
+            <div class="card-body">
+                <p class="mb-1"><strong>{{ eleve.responsable_principal.nom_complet }}</strong>
+                    <small class="text-muted">({{ eleve.responsable_principal.get_relation_display }})</small></p>
+                <p class="mb-0"><a href="tel:{{ eleve.responsable_principal.telephone }}">
+                    <i class="fas fa-phone me-1"></i>{{ eleve.responsable_principal.telephone }}</a></p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Historique des visites -->
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-clock-rotate-left me-2"></i>Historique des visites ({{ visites|length }})</span>
+                <a href="{% url 'eleves:ajouter_visite' eleve.id %}" class="btn btn-sm btn-light">
+                    <i class="fas fa-plus me-1"></i>Ajouter
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% for visite in visites %}
+                <div class="border-bottom p-3">
+                    <div class="d-flex justify-content-between flex-wrap gap-2">
+                        <div>
+                            <strong>{{ visite.motif }}</strong>
+                            {% if visite.temperature %}<span class="badge bg-secondary ms-2">{{ visite.temperature }}°C</span>{% endif %}
+                            {% if visite.statut == 'RETOUR_CLASSE' %}<span class="badge bg-success ms-1">{{ visite.get_statut_display }}</span>
+                            {% elif visite.statut == 'EN_OBSERVATION' %}<span class="badge bg-warning text-dark ms-1">{{ visite.get_statut_display }}</span>
+                            {% elif visite.statut == 'RENVOYE_MAISON' %}<span class="badge bg-info text-dark ms-1">{{ visite.get_statut_display }}</span>
+                            {% else %}<span class="badge bg-danger ms-1">{{ visite.get_statut_display }}</span>{% endif %}
+                            {% if visite.parent_contacte %}<span class="badge bg-primary ms-1"><i class="fas fa-phone me-1"></i>Parent contacté</span>{% endif %}
+                        </div>
+                        <small class="text-muted">{{ visite.date_visite|date:"d/m/Y à H:i" }}</small>
+                    </div>
+                    {% if visite.symptomes %}<div class="small mt-2"><strong>Symptômes :</strong> {{ visite.symptomes }}</div>{% endif %}
+                    {% if visite.soins %}<div class="small"><strong>Soins :</strong> {{ visite.soins }}</div>{% endif %}
+                    {% if visite.observations %}<div class="small"><strong>Observations :</strong> {{ visite.observations }}</div>{% endif %}
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <small class="text-muted">{% if visite.cree_par %}Enregistré par {{ visite.cree_par.username }}{% endif %}</small>
+                        <div>
+                            <a href="{% url 'eleves:modifier_visite' visite.id %}" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-pen"></i>
+                            </a>
+                            <form method="post" action="{% url 'eleves:supprimer_visite' visite.id %}" class="d-inline"
+                                  onsubmit="return confirm('Supprimer cette visite ?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-muted text-center py-5 mb-0">Aucune visite enregistrée pour cet élève.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

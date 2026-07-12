@@ -34,6 +34,13 @@ from .views_activites import (
     supprimer_piece_jointe,
     api_eleves_par_classe_note,
 )
+from .views_culture import (
+    activites_culturelles,
+    ajouter_activite_culturelle,
+    modifier_activite_culturelle,
+    supprimer_activite_culturelle,
+    basculer_publication_activite,
+)
 from .whatsapp_bulletin import envoyer_bulletin_whatsapp, apercu_message_whatsapp
 from .export_resultats import exporter_resultats_pdf, exporter_resultats_excel
 from .export_notes_complet import exporter_notes_complet_pdf, exporter_notes_complet_excel
@@ -47,6 +54,12 @@ app_name = 'notes'
 
 urlpatterns = [
     path('', views.tableau_bord, name='tableau_bord'),
+    # Activités culturelles (publiées sur le site public)
+    path('culture/', activites_culturelles, name='activites_culturelles'),
+    path('culture/ajouter/', ajouter_activite_culturelle, name='ajouter_activite_culturelle'),
+    path('culture/<int:activite_id>/modifier/', modifier_activite_culturelle, name='modifier_activite_culturelle'),
+    path('culture/<int:activite_id>/supprimer/', supprimer_activite_culturelle, name='supprimer_activite_culturelle'),
+    path('culture/<int:activite_id>/publier/', basculer_publication_activite, name='basculer_publication_activite'),
     path('classes/', views.gerer_classes, name='gerer_classes'),
     path('classes/modifier/<int:classe_id>/', views.modifier_classe, name='modifier_classe'),
     path('classes/supprimer/<int:classe_id>/', views.supprimer_classe, name='supprimer_classe'),

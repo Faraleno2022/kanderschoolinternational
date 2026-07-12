@@ -150,7 +150,6 @@ INSTALLED_APPS = [
     'bus',
     'notes',
     'abonnements',
-    'chatbot',
     'synchronisation.apps.SynchronisationConfig',
     'axes',
 ]
