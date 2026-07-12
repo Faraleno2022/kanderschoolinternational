@@ -813,7 +813,7 @@ class ActiviteCulturelle(models.Model):
     description = models.TextField(verbose_name="Description")
     image = models.ImageField(
         upload_to='activites_culturelles/', verbose_name="Image",
-        help_text="Photo de l'activité (max 3 Mo)",
+        help_text="Photo de l'activité (max 15 Mo)",
         validators=[validate_photo_size]
     )
     date_activite = models.DateField(blank=True, null=True, verbose_name="Date de l'activité")

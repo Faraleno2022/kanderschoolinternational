@@ -351,8 +351,11 @@ LOGGING = {
 }
 
 # =================== Uploads ===================
-FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880
-DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880
+# Les fichiers de plus de 5 Mo sont écrits temporairement sur disque afin de
+# préserver la mémoire. La requête accepte jusqu'à 20 Mo pour permettre
+# l'envoi d'une image de 15 Mo avec l'enveloppe multipart du formulaire.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 5000
 
 # =================== Intégrations externes ===================
