@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q, Sum, Count, F
+from django.db.models import Q, Sum, Count, F, DecimalField, ExpressionWrapper
 from django.db import models
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
@@ -41,9 +41,11 @@ def dashboard_logistique(request):
     total_biens = biens_qs.count()
 
     # Valeur totale du stock
-    valeur_stock = articles_qs.aggregate(
-        total=Sum('stock_actuel') * Sum('prix_unitaire')
+    valeur_article = ExpressionWrapper(
+        F('stock_actuel') * F('prix_unitaire'),
+        output_field=DecimalField(max_digits=20, decimal_places=0),
     )
+    valeur_stock = articles_qs.aggregate(total=Sum(valeur_article))
 
     # Articles en alerte (stock minimum)
     articles_alerte = articles_qs.filter(
@@ -58,7 +60,12 @@ def dashboard_logistique(request):
     # Répartition par catégorie
     repartition_categories = CategorieArticle.objects.annotate(
         nb_articles=Count('articles'),
-        valeur_totale=Sum('articles__stock_actuel') * Sum('articles__prix_unitaire')
+        valeur_totale=Sum(
+            ExpressionWrapper(
+                F('articles__stock_actuel') * F('articles__prix_unitaire'),
+                output_field=DecimalField(max_digits=20, decimal_places=0),
+            )
+        ),
     ).filter(actif=True)
 
     # Biens nécessitant une maintenance

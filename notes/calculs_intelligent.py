@@ -75,12 +75,16 @@ def calculer_moyenne_annuelle(moyennes_periodes: List[Optional[Decimal]]) -> Opt
     Returns:
         Moyenne annuelle ou None
     """
-    moyennes_valides = [m for m in moyennes_periodes if m is not None]
-    
-    if not moyennes_valides:
+    if not moyennes_periodes or all(m is None for m in moyennes_periodes):
         return None
-    
-    moyenne_annuelle = sum(moyennes_valides) / len(moyennes_valides)
+
+    # Une période attendue mais non évaluée compte comme zéro, conformément
+    # au calcul centralisé des bulletins annuels dans calculs_moyennes.py.
+    moyennes_avec_absents = [
+        moyenne if moyenne is not None else Decimal('0')
+        for moyenne in moyennes_periodes
+    ]
+    moyenne_annuelle = sum(moyennes_avec_absents) / len(moyennes_avec_absents)
     return moyenne_annuelle.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
