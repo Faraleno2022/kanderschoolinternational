@@ -270,15 +270,23 @@ class AppreciationMaternelle(SyncTrackedModel):
         ('D', 'Éprouve des difficultés'),
     ]
     
-    TRIMESTRE_CHOICES = [
+    PERIODE_CHOICES = [
+        ('PERIODE_1', 'Première période'),
+        ('PERIODE_2', 'Deuxième période'),
+        ('PERIODE_3', 'Troisième période'),
+        ('PERIODE_4', 'Quatrième période'),
+        ('PERIODE_5', 'Cinquième période'),
+    ]
+    LEGACY_TRIMESTRE_CHOICES = [
         ('TRIMESTRE_1', 'Trimestre 1'),
         ('TRIMESTRE_2', 'Trimestre 2'),
         ('TRIMESTRE_3', 'Trimestre 3'),
     ]
+    TRIMESTRE_CHOICES = PERIODE_CHOICES + LEGACY_TRIMESTRE_CHOICES
     
     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='appreciations_maternelle')
     matiere = models.ForeignKey(MatiereNote, on_delete=models.CASCADE, related_name='appreciations_maternelle')
-    trimestre = models.CharField(max_length=20, choices=TRIMESTRE_CHOICES, verbose_name="Trimestre")
+    trimestre = models.CharField(max_length=20, choices=TRIMESTRE_CHOICES, verbose_name="Période")
     annee_scolaire = models.CharField(max_length=9, verbose_name="Année scolaire")
     appreciation = models.CharField(max_length=20, choices=APPRECIATION_CHOICES, verbose_name="Appréciation")
     commentaire = models.TextField(blank=True, null=True, verbose_name="Commentaire")
@@ -308,11 +316,19 @@ class BulletinMaternelle(SyncTrackedModel):
     """Bulletin maternelle avec analyses et recommandations"""
     from eleves.models import Eleve
     
-    TRIMESTRE_CHOICES = [
+    PERIODE_CHOICES = [
+        ('PERIODE_1', 'Première période'),
+        ('PERIODE_2', 'Deuxième période'),
+        ('PERIODE_3', 'Troisième période'),
+        ('PERIODE_4', 'Quatrième période'),
+        ('PERIODE_5', 'Cinquième période'),
+    ]
+    LEGACY_TRIMESTRE_CHOICES = [
         ('TRIMESTRE_1', 'Trimestre 1'),
         ('TRIMESTRE_2', 'Trimestre 2'),
         ('TRIMESTRE_3', 'Trimestre 3'),
     ]
+    TRIMESTRE_CHOICES = PERIODE_CHOICES + LEGACY_TRIMESTRE_CHOICES
     
     # Analyses du travail de l'enfant (champs booléens pour cases à cocher)
     ANALYSES_CHOICES = [
@@ -345,7 +361,7 @@ class BulletinMaternelle(SyncTrackedModel):
     
     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='bulletins_maternelle')
     classe = models.ForeignKey(ClasseNote, on_delete=models.CASCADE, related_name='bulletins_maternelle')
-    trimestre = models.CharField(max_length=20, choices=TRIMESTRE_CHOICES, verbose_name="Trimestre")
+    trimestre = models.CharField(max_length=20, choices=TRIMESTRE_CHOICES, verbose_name="Période")
     annee_scolaire = models.CharField(max_length=9, verbose_name="Année scolaire")
     
     # Analyses du travail (stockées en JSON pour flexibilité)
@@ -493,15 +509,31 @@ class EvaluationMaternelle(SyncTrackedModel):
         ('D', 'D - Éprouve des difficultés (3-4)'),
     ]
     
-    TRIMESTRE_CHOICES = [
+    PERIODE_CHOICES = [
+        ('PERIODE_1', 'Première période'),
+        ('PERIODE_2', 'Deuxième période'),
+        ('PERIODE_3', 'Troisième période'),
+        ('PERIODE_4', 'Quatrième période'),
+        ('PERIODE_5', 'Cinquième période'),
+    ]
+    LEGACY_TRIMESTRE_CHOICES = [
         ('TRIMESTRE_1', 'Trimestre 1'),
         ('TRIMESTRE_2', 'Trimestre 2'),
         ('TRIMESTRE_3', 'Trimestre 3'),
     ]
+    TRIMESTRE_CHOICES = PERIODE_CHOICES + LEGACY_TRIMESTRE_CHOICES
+
+    CALENDRIER_2026_2027 = {
+        'PERIODE_1': ('2026-09-07', '2026-10-29'),
+        'PERIODE_2': ('2026-11-09', '2026-12-17'),
+        'PERIODE_3': ('2027-01-04', '2027-02-24'),
+        'PERIODE_4': ('2027-03-08', '2027-04-22'),
+        'PERIODE_5': ('2027-05-03', '2027-06-11'),
+    }
     
     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='evaluations_maternelle')
     classe = models.ForeignKey(ClasseNote, on_delete=models.CASCADE, related_name='evaluations_maternelle')
-    trimestre = models.CharField(max_length=20, choices=TRIMESTRE_CHOICES, verbose_name="Trimestre")
+    trimestre = models.CharField(max_length=20, choices=TRIMESTRE_CHOICES, verbose_name="Période")
     annee_scolaire = models.CharField(max_length=9, verbose_name="Année scolaire")
     
     # Métadonnées
@@ -517,14 +549,72 @@ class EvaluationMaternelle(SyncTrackedModel):
     
     def __str__(self):
         return f"{self.eleve} - {self.get_trimestre_display()} ({self.annee_scolaire})"
+
+    @classmethod
+    def get_choix_periodes(cls, annee_scolaire):
+        """Utilise les cinq périodes dès 2026-2027 et garde les trimestres historiques."""
+        try:
+            annee_debut = int(str(annee_scolaire).split('-', 1)[0])
+        except (TypeError, ValueError):
+            annee_debut = 2026
+        return cls.PERIODE_CHOICES if annee_debut >= 2026 else cls.LEGACY_TRIMESTRE_CHOICES
+
+    @classmethod
+    def get_periode_par_defaut(cls, annee_scolaire):
+        return cls.get_choix_periodes(annee_scolaire)[0][0]
     
     def get_moyenne_generale(self):
-        """Calcule la moyenne générale des notes"""
-        notes = self.notes_matieres.exclude(note__isnull=True)
-        if not notes.exists():
+        """Calcule la moyenne de cette période, sans compter les absences comme zéro."""
+        notes = list(self.notes_matieres.exclude(note__isnull=True).values_list('note', flat=True))
+        if not notes:
             return None
-        total = sum(n.note for n in notes if n.note is not None)
-        return round(total / notes.count(), 2)
+        return round(sum(notes) / len(notes), 2)
+
+    @classmethod
+    def calculer_bilan_annuel(cls, eleve, classe, annee_scolaire):
+        """Calcule le bilan annuel à partir des cinq périodes maternelles renseignées.
+
+        Chaque période a le même poids. Une période sans aucune note est ignorée
+        au lieu d'être assimilée à zéro.
+        """
+        evaluations = {
+            evaluation.trimestre: evaluation
+            for evaluation in cls.objects.filter(
+                eleve=eleve,
+                classe=classe,
+                annee_scolaire=annee_scolaire,
+                trimestre__in=[code for code, _ in cls.get_choix_periodes(annee_scolaire)],
+            ).prefetch_related('notes_matieres')
+        }
+
+        resultats = []
+        for code, libelle in cls.get_choix_periodes(annee_scolaire):
+            evaluation = evaluations.get(code)
+            moyenne = evaluation.get_moyenne_generale() if evaluation else None
+            resultats.append({
+                'code': code,
+                'libelle': libelle,
+                'moyenne': moyenne,
+                'lettre': cls.note_vers_lettre(moyenne) if moyenne is not None else None,
+                'dates': cls.CALENDRIER_2026_2027.get(code),
+            })
+
+        moyennes = [item['moyenne'] for item in resultats if item['moyenne'] is not None]
+        nombre_periodes = len(moyennes)
+        nombre_periodes_attendues = len(resultats)
+        moyenne_provisoire = round(sum(moyennes) / nombre_periodes, 2) if moyennes else None
+        est_complet = nombre_periodes == nombre_periodes_attendues
+        moyenne_annuelle = moyenne_provisoire if est_complet else None
+        return {
+            'periodes': resultats,
+            'nombre_periodes_renseignees': nombre_periodes,
+            'nombre_periodes_attendues': nombre_periodes_attendues,
+            'est_complet': est_complet,
+            'moyenne_provisoire': moyenne_provisoire,
+            'lettre_provisoire': cls.note_vers_lettre(moyenne_provisoire) if moyenne_provisoire is not None else None,
+            'moyenne_annuelle': moyenne_annuelle,
+            'lettre_annuelle': cls.note_vers_lettre(moyenne_annuelle) if moyenne_annuelle is not None else None,
+        }
     
     def get_lettre_generale(self):
         """Retourne la lettre correspondant à la moyenne générale"""
