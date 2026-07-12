@@ -501,6 +501,30 @@
                 </tr>
             </tfoot>
         </table>
+
+        {% if bulletin.bilan_annuel.nombre_periodes_renseignees %}
+        <div style="border:1px solid #333;margin:10px 0;padding:8px;font-size:8pt;">
+            <div style="font-weight:bold;text-align:center;margin-bottom:6px;">BILAN DES CINQ PÉRIODES</div>
+            <table style="width:100%;border-collapse:collapse;">
+                <tr>
+                    {% for periode in bulletin.bilan_annuel.periodes %}
+                    <td style="border:1px solid #aaa;padding:4px;text-align:center;">
+                        {{ periode.libelle }}<br>
+                        <strong>{% if periode.moyenne != None %}{{ periode.moyenne }}/10{% else %}—{% endif %}</strong>
+                    </td>
+                    {% endfor %}
+                </tr>
+            </table>
+            <div style="text-align:center;margin-top:6px;font-weight:bold;">
+                {% if bulletin.bilan_annuel.est_complet %}
+                    Moyenne annuelle définitive : {{ bulletin.bilan_annuel.moyenne_annuelle }}/10 ({{ bulletin.bilan_annuel.lettre_annuelle }})
+                {% else %}
+                    Moyenne provisoire : {{ bulletin.bilan_annuel.moyenne_provisoire }}/10 ({{ bulletin.bilan_annuel.lettre_provisoire }}) —
+                    {{ bulletin.bilan_annuel.nombre_periodes_renseignees }}/{{ bulletin.bilan_annuel.nombre_periodes_attendues }} périodes
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
         
         <!-- Profil de l'enfant -->
         <table class="total-profil-table" style="width:100%;margin-top:15px;border-collapse:collapse;border:1px solid #333;">

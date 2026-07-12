@@ -29,6 +29,16 @@ def get_annee_scolaire_courante():
         return f"{today.year - 1}-{today.year}"
 
 
+def obtenir_periode_maternelle(request, annee_scolaire):
+    """Retourne uniquement une période autorisée pour l'année scolaire concernée."""
+    choix = EvaluationMaternelle.get_choix_periodes(annee_scolaire)
+    codes_autorises = {code for code, _ in choix}
+    periode = request.GET.get('trimestre', EvaluationMaternelle.get_periode_par_defaut(annee_scolaire))
+    if periode not in codes_autorises:
+        periode = EvaluationMaternelle.get_periode_par_defaut(annee_scolaire)
+    return periode, choix
+
+
 @login_required
 def saisie_evaluation_maternelle(request):
     """Vue principale pour la saisie des évaluations maternelle"""
@@ -52,7 +62,7 @@ def saisie_evaluation_maternelle(request):
     
     # Récupérer les paramètres de filtrage
     classe_id = request.GET.get('classe')
-    trimestre = request.GET.get('trimestre', 'TRIMESTRE_1')
+    trimestre, choix_periodes = obtenir_periode_maternelle(request, annee_scolaire)
     
     eleves = []
     matieres = []
@@ -61,6 +71,8 @@ def saisie_evaluation_maternelle(request):
     
     if classe_id:
         classe_selectionnee = get_object_or_404(ClasseNote, id=classe_id)
+        annee_scolaire = classe_selectionnee.annee_scolaire or annee_scolaire
+        trimestre, choix_periodes = obtenir_periode_maternelle(request, annee_scolaire)
         
         # Récupérer les élèves de cette classe depuis le module eleves
         # Utiliser l'année scolaire de la ClasseNote
@@ -102,7 +114,7 @@ def saisie_evaluation_maternelle(request):
         'eleves': eleves,
         'matieres': matieres,
         'trimestre': trimestre,
-        'trimestres': EvaluationMaternelle.TRIMESTRE_CHOICES,
+        'trimestres': choix_periodes,
         'annee_scolaire': annee_scolaire,
         'evaluations_existantes': evaluations_existantes,
         'lettres_choices': EvaluationMaternelle.LETTRE_CHOICES,
@@ -117,10 +129,9 @@ def saisie_eleve_maternelle(request, eleve_id):
     eleve = get_object_or_404(Eleve, id=eleve_id)
     
     classe_id = request.GET.get('classe')
-    trimestre = request.GET.get('trimestre', 'TRIMESTRE_1')
-    annee_scolaire = get_annee_scolaire_courante()
-    
     classe_note = get_object_or_404(ClasseNote, id=classe_id)
+    annee_scolaire = classe_note.annee_scolaire or get_annee_scolaire_courante()
+    trimestre, _ = obtenir_periode_maternelle(request, annee_scolaire)
     matieres = MatiereNote.objects.filter(classe=classe_note, actif=True).order_by('nom')
     
     # Récupérer ou créer l'évaluation
@@ -166,10 +177,13 @@ def sauvegarder_evaluation_maternelle(request, evaluation, matieres, analyse, re
     try:
         # Sauvegarder les notes par matière
         for matiere in matieres:
-            note_value = request.POST.get(f'note_{matiere.id}')
+            note_key = f'note_{matiere.id}'
+            if note_key not in request.POST:
+                continue
+            note_value = request.POST.get(note_key)
             commentaire = request.POST.get(f'commentaire_{matiere.id}', '')
             
-            if note_value:
+            if note_value and note_value.strip():
                 try:
                     note_decimal = float(note_value.replace(',', '.'))
                     if note_decimal < 0 or note_decimal > 10:
@@ -197,6 +211,19 @@ def sauvegarder_evaluation_maternelle(request, evaluation, matieres, analyse, re
                     )
                 except ValueError:
                     pass
+            else:
+                # Un champ vidé signifie que la note doit réellement être retirée
+                # de la période, ainsi que l'appréciation calculée correspondante.
+                NoteMaternelle.objects.filter(
+                    evaluation=evaluation,
+                    matiere=matiere,
+                ).delete()
+                AppreciationMaternelle.objects.filter(
+                    eleve=evaluation.eleve,
+                    matiere=matiere,
+                    trimestre=evaluation.trimestre,
+                    annee_scolaire=evaluation.annee_scolaire,
+                ).delete()
         
         # Sauvegarder l'analyse du travail
         analyse.comprend_demandes = request.POST.get('comprend_demandes') == 'on'
@@ -271,6 +298,9 @@ def bulletin_maternelle(request, evaluation_id):
     moyenne = evaluation.get_moyenne_generale()
     lettre_generale = evaluation.get_lettre_generale()
     mention_generale = EvaluationMaternelle.lettre_vers_mention(lettre_generale) if lettre_generale else ''
+    bilan_annuel = EvaluationMaternelle.calculer_bilan_annuel(
+        evaluation.eleve, evaluation.classe, evaluation.annee_scolaire
+    )
     
     # Récupérer l'école
     ecole = evaluation.classe.ecole
@@ -286,6 +316,7 @@ def bulletin_maternelle(request, evaluation_id):
         'moyenne': moyenne,
         'lettre_generale': lettre_generale,
         'mention_generale': mention_generale,
+        'bilan_annuel': bilan_annuel,
         'analyses_selectionnees': analyse.get_analyses_selectionnees() if analyse else [],
         'recommandations_selectionnees': recommandations.get_recommandations_selectionnees() if recommandations else [],
     }
@@ -320,6 +351,9 @@ def bulletin_maternelle_pdf(request, evaluation_id):
     moyenne = evaluation.get_moyenne_generale()
     lettre_generale = evaluation.get_lettre_generale()
     mention_generale = EvaluationMaternelle.lettre_vers_mention(lettre_generale) if lettre_generale else ''
+    bilan_annuel = EvaluationMaternelle.calculer_bilan_annuel(
+        evaluation.eleve, evaluation.classe, evaluation.annee_scolaire
+    )
     
     # Récupérer l'école et encoder le logo
     ecole = evaluation.classe.ecole
@@ -356,6 +390,7 @@ def bulletin_maternelle_pdf(request, evaluation_id):
         'moyenne': moyenne,
         'lettre_generale': lettre_generale,
         'mention_generale': mention_generale,
+        'bilan_annuel': bilan_annuel,
         'analyses_selectionnees': analyse.get_analyses_selectionnees() if analyse else [],
         'recommandations_selectionnees': recommandations.get_recommandations_selectionnees() if recommandations else [],
         'logo_base64': logo_base64,
@@ -386,14 +421,14 @@ def bulletins_classe_maternelle_pdf(request):
     import os
     
     classe_id = request.GET.get('classe')
-    trimestre = request.GET.get('trimestre', 'TRIMESTRE_1')
-    annee_scolaire = get_annee_scolaire_courante()
     
     if not classe_id:
         messages.error(request, "Veuillez sélectionner une classe")
         return redirect('notes:saisie_evaluation_maternelle')
     
     classe_note = get_object_or_404(ClasseNote, id=classe_id)
+    annee_scolaire = classe_note.annee_scolaire or get_annee_scolaire_courante()
+    trimestre, _ = obtenir_periode_maternelle(request, annee_scolaire)
     
     # Récupérer toutes les évaluations de la classe
     evaluations = EvaluationMaternelle.objects.filter(
@@ -407,7 +442,7 @@ def bulletins_classe_maternelle_pdf(request):
     ).order_by('eleve__nom', 'eleve__prenom')
     
     if not evaluations.exists():
-        messages.warning(request, "Aucune évaluation trouvée pour cette classe et ce trimestre")
+        messages.warning(request, "Aucune évaluation trouvée pour cette classe et cette période")
         return redirect('notes:saisie_evaluation_maternelle')
     
     # Encoder le logo
@@ -440,6 +475,9 @@ def bulletins_classe_maternelle_pdf(request):
         moyenne = evaluation.get_moyenne_generale()
         lettre_generale = evaluation.get_lettre_generale()
         mention_generale = EvaluationMaternelle.lettre_vers_mention(lettre_generale) if lettre_generale else ''
+        bilan_annuel = EvaluationMaternelle.calculer_bilan_annuel(
+            evaluation.eleve, evaluation.classe, evaluation.annee_scolaire
+        )
         
         # Photo de l'élève
         photo_base64 = ''
@@ -461,6 +499,7 @@ def bulletins_classe_maternelle_pdf(request):
             'moyenne': moyenne,
             'lettre_generale': lettre_generale,
             'mention_generale': mention_generale,
+            'bilan_annuel': bilan_annuel,
             'analyses_selectionnees': analyse.get_analyses_selectionnees() if analyse else [],
             'recommandations_selectionnees': recommandations.get_recommandations_selectionnees() if recommandations else [],
             'photo_base64': photo_base64,

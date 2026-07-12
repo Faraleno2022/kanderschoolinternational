@@ -256,6 +256,34 @@
                     </div>
                     {% endif %}
 
+                    {% if bilan_annuel.nombre_periodes_renseignees %}
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <strong>Bilan des cinq périodes</strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-2 text-center">
+                                {% for periode in bilan_annuel.periodes %}
+                                <div class="col">
+                                    <div class="border rounded p-2 h-100">
+                                        <small class="d-block text-muted">{{ periode.libelle }}</small>
+                                        <strong>{% if periode.moyenne != None %}{{ periode.moyenne }}/10{% else %}—{% endif %}</strong>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <div class="alert {% if bilan_annuel.est_complet %}alert-success{% else %}alert-info{% endif %} mt-3 mb-0 text-center">
+                                {% if bilan_annuel.est_complet %}
+                                    <strong>Moyenne annuelle définitive : {{ bilan_annuel.moyenne_annuelle }}/10 ({{ bilan_annuel.lettre_annuelle }})</strong>
+                                {% else %}
+                                    <strong>Moyenne provisoire : {{ bilan_annuel.moyenne_provisoire }}/10 ({{ bilan_annuel.lettre_provisoire }})</strong><br>
+                                    <small>{{ bilan_annuel.nombre_periodes_renseignees }} période(s) renseignée(s) sur {{ bilan_annuel.nombre_periodes_attendues }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <!-- Analyse du travail -->
                     {% if analyses_selectionnees %}
                     <div class="mb-4">

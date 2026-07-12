@@ -30,7 +30,7 @@
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-bold">Trimestre</label>
+                            <label class="form-label fw-bold">Période d'évaluation</label>
                             <select name="trimestre" class="form-select" onchange="this.form.submit()">
                                 {% for value, label in trimestres %}
                                 <option value="{{ value }}" {% if trimestre == value %}selected{% endif %}>

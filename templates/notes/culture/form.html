@@ -35,7 +35,7 @@
                             {% if form.image.errors %}<div class="text-danger small">{{ form.image.errors.0 }}</div>{% endif %}
                             <div class="form-text">JPG ou PNG, 15 Mo maximum.</div>
                             {% if mode == 'modification' and activite.image %}
-                            <img src="{{ activite.image.url }}" alt="Image actuelle" class="rounded mt-2" style="max-width:160px;max-height:110px;object-fit:cover;">
+                            <img src="{{ activite.image.url }}" alt="Image actuelle" class="rounded mt-2" style="width:160px;height:110px;object-fit:contain;object-position:center;background:#f3f4f6;">
                             {% endif %}
                         </div>
                         <div class="col-md-6">
