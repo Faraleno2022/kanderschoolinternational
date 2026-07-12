@@ -25,7 +25,7 @@
     {% for activite in page_activites %}
     <div class="col-md-6 col-lg-4">
         <div class="card shadow-sm h-100">
-            <img src="{{ activite.image.url }}" alt="{{ activite.titre }}" class="card-img-top" style="height:200px;object-fit:cover;">
+            <img src="{{ activite.image.url }}" alt="{{ activite.titre }}" class="card-img-top" style="height:200px;object-fit:contain;object-position:center;background:#f3f4f6;">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start">
                     <h5 class="card-title mb-1">{{ activite.titre }}</h5>
