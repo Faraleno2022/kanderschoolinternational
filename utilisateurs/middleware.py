@@ -175,3 +175,84 @@ class SchoolAccessMixin:
         if not check_school_access(self.request.user, obj, self.school_field):
             raise Http404("Objet non trouvé ou accès non autorisé.")
         return obj
+
+
+class MenuAccessMiddleware:
+    """
+    Application STRICTE des permissions de menus (Profil.allowed_menus).
+
+    Si un utilisateur non-admin a des restrictions enregistrées (allowed_menus
+    non vide), l'accès aux URL des modules non cochés est bloqué (403) —
+    pas seulement masqué dans la barre de navigation.
+
+    Si allowed_menus est vide : aucun changement (tous les menus accessibles).
+    """
+
+    # Ordre important : préfixes les plus spécifiques d'abord.
+    PREFIX_MENU_MAP = [
+        ('/eleves/infirmerie/', 'infirmerie'),
+        ('/eleves/ajax/', 'eleves'),
+        ('/depenses/bibliotheque/', 'bibliotheque'),
+        ('/notes/culture/', 'activites'),
+        ('/eleves/', 'eleves'),
+        ('/paiements/', 'paiements'),
+        ('/depenses/', 'depenses'),
+        ('/salaires/', 'salaires'),
+        ('/bus/', 'bus'),
+        ('/notes/', 'notes'),
+        ('/rapports/', 'rapports'),
+    ]
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        blocked = self._check_access(request)
+        if blocked is not None:
+            return blocked
+        return self.get_response(request)
+
+    def _menu_for_path(self, path):
+        import re
+        # Fiche santé d'un élève (/eleves/<id>/sante/...) relève de l'infirmerie
+        if re.match(r'^/eleves/\d+/sante/', path):
+            return 'infirmerie'
+        for prefix, menu in self.PREFIX_MENU_MAP:
+            if path.startswith(prefix):
+                return menu
+        return None
+
+    def _check_access(self, request):
+        user = getattr(request, 'user', None)
+        if user is None or not user.is_authenticated:
+            return None
+        if user.is_superuser or user.is_staff:
+            return None
+
+        profil = getattr(user, 'profil', None)
+        if profil is None:
+            return None
+        allowed = list(profil.allowed_menus or [])
+        if not allowed:
+            # Aucune restriction enregistrée : tout reste accessible
+            return None
+
+        menu = self._menu_for_path(request.path or '')
+        if menu is None or menu in allowed:
+            return None
+
+        logger.warning(
+            "Acces refuse (permission menu '%s' manquante) pour %s sur %s",
+            menu, user.username, request.path
+        )
+        from django.shortcuts import render
+        try:
+            return render(request, 'utilisateurs/acces_refuse_menu.html', {
+                'titre_page': 'Accès refusé',
+                'menu_requis': menu,
+            }, status=403)
+        except Exception:
+            return HttpResponseForbidden(
+                "Accès refusé : ce module ne fait pas partie de vos permissions. "
+                "Contactez l'administrateur."
+            )
