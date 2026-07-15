@@ -131,10 +131,13 @@ class Profil(models.Model):
 MENUS = [
     ('eleves', 'Élèves'),
     ('paiements', 'Paiements'),
-    ('depenses', 'Dépenses'),
+    ('depenses', 'Dépenses & Logistique'),
+    ('bibliotheque', 'Bibliothèque'),
     ('salaires', 'Salaires'),
-    ('bus', 'Bus scolaire'),
-    ('notes', 'Gestion de notes (DÉSACTIVÉ)'),  # Conservé pour compatibilité
+    ('bus', 'Transport & Cantine'),
+    ('notes', 'Gestion de notes'),
+    ('infirmerie', 'Infirmerie (suivi santé)'),
+    ('activites', 'Activités culturelles'),
     ('rapports', 'Rapports'),
 ]
 

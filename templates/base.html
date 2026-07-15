@@ -355,6 +355,8 @@
                                 </a></li>
                             </ul>
                         </li>
+                        {% endif %}
+                        {% if 'bibliotheque' in allowed or 'depenses' in allowed %}
                         <li class="nav-item dropdown">
                             <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="fas fa-book-reader me-1"></i>Bibliothèque
@@ -414,9 +416,18 @@
                                 <i class="fas fa-book me-1"></i>Notes
                             </a>
                         </li>
+                        {% endif %}
+                        {% if 'infirmerie' in allowed %}
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'eleves:infirmerie' %}">
                                 <i class="fas fa-notes-medical me-1"></i>Infirmerie
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if 'activites' in allowed %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'notes:activites_culturelles' %}">
+                                <i class="fas fa-masks-theater me-1"></i>Activités
                             </a>
                         </li>
                         {% endif %}
