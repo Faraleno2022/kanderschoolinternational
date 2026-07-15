@@ -163,9 +163,10 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    # Application stricte des permissions de menus (Profil.allowed_menus)
-    'utilisateurs.middleware.MenuAccessMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    # Application stricte des permissions de menus (Profil.allowed_menus)
+    # (après MessageMiddleware pour pouvoir afficher le message de redirection)
+    'utilisateurs.middleware.MenuAccessMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # Vérification licence : bloque l'accès web si essai/licence expiré
     'ecole_moderne.licence_middleware.LicenceMiddleware',

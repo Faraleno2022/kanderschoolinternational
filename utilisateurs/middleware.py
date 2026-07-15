@@ -182,8 +182,9 @@ class MenuAccessMiddleware:
     Application STRICTE des permissions de menus (Profil.allowed_menus).
 
     Si un utilisateur non-admin a des restrictions enregistrées (allowed_menus
-    non vide), l'accès aux URL des modules non cochés est bloqué (403) —
-    pas seulement masqué dans la barre de navigation.
+    non vide), l'accès aux URL des modules non cochés est bloqué : l'utilisateur
+    est redirigé automatiquement vers le premier module auquel il a droit,
+    avec un message explicatif.
 
     Si allowed_menus est vide : aucun changement (tous les menus accessibles).
     """
@@ -202,6 +203,20 @@ class MenuAccessMiddleware:
         ('/notes/', 'notes'),
         ('/rapports/', 'rapports'),
     ]
+
+    # Page d'atterrissage de chaque module (nom d'URL + libellé lisible)
+    MENU_HOME_URLS = {
+        'eleves': ('eleves:liste_eleves', 'Élèves'),
+        'paiements': ('paiements:tableau_bord', 'Paiements'),
+        'depenses': ('depenses:tableau_bord', 'Dépenses'),
+        'bibliotheque': ('depenses:dashboard_bibliotheque', 'Bibliothèque'),
+        'salaires': ('salaires:tableau_bord', 'Salaires'),
+        'bus': ('bus:index', 'Transport'),
+        'notes': ('notes:tableau_bord', 'Notes'),
+        'infirmerie': ('eleves:infirmerie', 'Infirmerie'),
+        'activites': ('notes:activites_culturelles', 'Activités culturelles'),
+        'rapports': ('rapports:rapport_remises', 'Rapports'),
+    }
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -245,14 +260,45 @@ class MenuAccessMiddleware:
             "Acces refuse (permission menu '%s' manquante) pour %s sur %s",
             menu, user.username, request.path
         )
-        from django.shortcuts import render
+        return self._rediriger_vers_module_autorise(request, allowed, menu)
+
+    def _rediriger_vers_module_autorise(self, request, allowed, menu_refuse):
+        """Redirige vers le premier module autorisé de l'utilisateur (ordre MENUS)."""
+        from .models import MENUS
+
+        # Libellé du module refusé pour le message
+        libelle_refuse = dict(
+            (k, v) for k, (_url, v) in self.MENU_HOME_URLS.items()
+        ).get(menu_refuse, menu_refuse)
+
+        # Parcourir MENUS (ordre stable) et retenir le premier menu autorisé
+        for key, _label in MENUS:
+            if key not in allowed:
+                continue
+            entry = self.MENU_HOME_URLS.get(key)
+            if not entry:
+                continue
+            url_name, libelle_cible = entry
+            try:
+                target = reverse(url_name)
+            except Exception:
+                continue
+            try:
+                messages.warning(
+                    request,
+                    f"Vous n'avez pas accès au module « {libelle_refuse} ». "
+                    f"Vous avez été redirigé vers « {libelle_cible} »."
+                )
+            except Exception:
+                pass
+            return redirect(target)
+
+        # Aucun module cible trouvé : retour à l'accueil
         try:
-            return render(request, 'utilisateurs/acces_refuse_menu.html', {
-                'titre_page': 'Accès refusé',
-                'menu_requis': menu,
-            }, status=403)
-        except Exception:
-            return HttpResponseForbidden(
-                "Accès refusé : ce module ne fait pas partie de vos permissions. "
-                "Contactez l'administrateur."
+            messages.warning(
+                request,
+                f"Vous n'avez pas accès au module « {libelle_refuse} »."
             )
+        except Exception:
+            pass
+        return redirect('/')
