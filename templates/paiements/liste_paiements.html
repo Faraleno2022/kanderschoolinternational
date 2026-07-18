@@ -53,6 +53,11 @@
             <a href="{% url 'paiements:liste_relances' %}" class="btn btn-outline-warning">
                 <i class="fas fa-bell me-1"></i>Relances
             </a>
+            {% if user.is_superuser or user.profil.role == 'ADMIN' or user.profil.peut_consulter_rapports %}
+            <a href="{% url 'paiements:rapport_comptable' %}" class="btn btn-outline-primary">
+                <i class="fas fa-file-invoice-dollar me-1"></i>Rapport comptable
+            </a>
+            {% endif %}
             {% if perms.utilisateurs.peut_consulter_rapports %}
             <a href="{% url 'paiements:rapport_remises' %}" class="btn btn-outline-success">
                 <i class="fas fa-percent me-1"></i>Rapport des remises
