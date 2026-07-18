@@ -169,6 +169,20 @@ class SchoolFilteringTests(TestCase):
         self.assertEqual(pdf["Content-Type"], "application/pdf")
         self.assertTrue(pdf.content.startswith(b"%PDF"))
 
+    def test_export_recap_par_classe_excel_filtre_par_ecole(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+
+        self.login1()
+        response = self.client.get(reverse("paiements:export_recap_par_classe_excel"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content.startswith(b"PK"))
+
+        workbook = load_workbook(BytesIO(response.content), read_only=True)
+        lignes = list(workbook.active.iter_rows(values_only=True))
+        self.assertTrue(any(self.ecole1.nom in ligne for ligne in lignes[1:]))
+        self.assertFalse(any(self.ecole2.nom in ligne for ligne in lignes[1:]))
+
     def test_api_paiement_detail_for_other_school_is_404(self):
         self.login1()
         url = reverse("paiements:api_paiement_detail", kwargs={"pk": self.paiement2.id})
