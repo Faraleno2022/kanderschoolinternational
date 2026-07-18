@@ -4,6 +4,11 @@ from .views_tranches import export_tranches_par_classe_pdf, export_tranches_par_
 from . import views_rappels
 from .whatsapp_recu import apercu_message_whatsapp_recu, apercu_message_whatsapp_note_rappel
 from .recu_public import recu_public_pdf, note_rappel_public_pdf
+from .views_rapport_comptable import (
+    rapport_comptable,
+    export_rapport_comptable_pdf,
+    export_rapport_comptable_excel,
+)
 
 app_name = 'paiements'
 
@@ -44,6 +49,9 @@ urlpatterns = [
     # Rapports
     path('rapport/retards/', views.rapport_retards, name='rapport_retards'),
     path('rapport/encaissements/', views.rapport_encaissements, name='rapport_encaissements'),
+    path('rapport/comptabilite/', rapport_comptable, name='rapport_comptable'),
+    path('rapport/comptabilite/pdf/', export_rapport_comptable_pdf, name='export_rapport_comptable_pdf'),
+    path('rapport/comptabilite/excel/', export_rapport_comptable_excel, name='export_rapport_comptable_excel'),
     
     # Élèves soldés (année scolaire réglée)
     path('eleves-soldes/', views.eleves_soldes_simple, name='liste_eleves_soldes'),
@@ -88,5 +96,4 @@ urlpatterns = [
     path('recu-public/<int:paiement_id>/', recu_public_pdf, name='recu_public_pdf'),
     path('note-rappel-public/<int:eleve_id>/', note_rappel_public_pdf, name='note_rappel_public_pdf'),
 ]
-
 

@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Rapport comptable{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Comptabilité</a></li>
+<li class="breadcrumb-item active">Rapport consolidé</li>
+{% endblock %}
+
+{% block page_actions %}
+<div class="d-flex flex-wrap gap-2">
+  <a id="exportPdf" class="btn btn-danger"><i class="fas fa-file-pdf me-1"></i>PDF</a>
+  <a id="exportExcel" class="btn btn-success"><i class="fas fa-file-excel me-1"></i>Excel</a>
+  <button class="btn btn-outline-secondary" onclick="window.print()"><i class="fas fa-print me-1"></i>Imprimer</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mb-4 d-print-none">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end" id="rapportFiltres">
+      <div class="col-md-3">
+        <label class="form-label">Classe</label>
+        <select name="classe" class="form-select">
+          <option value="">Tout l'établissement</option>
+          {% for classe in classes %}
+          <option value="{{ classe.id }}" {% if classe_id == classe.id|stringformat:'s' %}selected{% endif %}>{{ classe.nom }} — {{ classe.annee_scolaire }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2"><label class="form-label">Du</label><input type="date" name="date_debut" value="{{ date_debut|date:'Y-m-d' }}" class="form-control"></div>
+      <div class="col-md-2"><label class="form-label">Au</label><input type="date" name="date_fin" value="{{ date_fin|date:'Y-m-d' }}" class="form-control"></div>
+      <div class="col-md-2">
+        <label class="form-label">Statut des paiements</label>
+        <select name="statut" class="form-select">
+          <option value="VALIDE" {% if statut == 'VALIDE' %}selected{% endif %}>Validés</option>
+          <option value="EN_ATTENTE" {% if statut == 'EN_ATTENTE' %}selected{% endif %}>En attente</option>
+          <option value="REJETE" {% if statut == 'REJETE' %}selected{% endif %}>Rejetés</option>
+          <option value="REMBOURSE" {% if statut == 'REMBOURSE' %}selected{% endif %}>Remboursés</option>
+          <option value="TOUS" {% if statut == 'TOUS' %}selected{% endif %}>Tous</option>
+        </select>
+      </div>
+      <div class="col-md-3"><button class="btn btn-primary w-100"><i class="fas fa-filter me-1"></i>Actualiser le rapport</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="mb-3">
+  <h3 class="mb-1">Rapport comptable consolidé</h3>
+  <div class="text-muted">{% if ecole %}{{ ecole.nom }} — {% endif %}{% if classe_selectionnee %}{{ classe_selectionnee.nom }}{% else %}Tout l'établissement{% endif %}, du {{ date_debut|date:'d/m/Y' }} au {{ date_fin|date:'d/m/Y' }}</div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md"><div class="card h-100 border-primary"><div class="card-body"><small>Paiements</small><h4>{{ nombre_paiements|intcomma }}</h4></div></div></div>
+  <div class="col-md"><div class="card h-100 border-success"><div class="card-body"><small>Montant encaissé</small><h4>{{ total_paiements|floatformat:0|intcomma }} GNF</h4></div></div></div>
+  <div class="col-md"><div class="card h-100 border-danger"><div class="card-body"><small>Élèves en retard</small><h4>{{ nombre_retards|intcomma }}</h4></div></div></div>
+  <div class="col-md"><div class="card h-100 border-warning"><div class="card-body"><small>Retard total</small><h4>{{ total_retards|floatformat:0|intcomma }} GNF</h4></div></div></div>
+  <div class="col-md"><div class="card h-100 border-info"><div class="card-body"><small>Relances</small><h4>{{ nombre_relances|intcomma }}</h4></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-5"><div class="card h-100"><div class="card-header fw-bold">Rapprochement par mode de paiement</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Mode</th><th class="text-end">Opérations</th><th class="text-end">Montant</th><th class="text-end">%</th></tr></thead><tbody>{% for mode in modes %}<tr><td>{{ mode.nom }}</td><td class="text-end">{{ mode.nombre }}</td><td class="text-end">{{ mode.montant|floatformat:0|intcomma }}</td><td class="text-end">{{ mode.pourcentage|floatformat:2 }}%</td></tr>{% empty %}<tr><td colspan="4" class="text-muted text-center">Aucun paiement</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-lg-7"><div class="card h-100"><div class="card-header fw-bold">Synthèse par classe</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Classe</th><th class="text-end">Paiements</th><th class="text-end">Encaissé</th><th class="text-end">Retards</th><th class="text-end">Relances</th></tr></thead><tbody>{% for ligne in classes_stats %}<tr><td>{{ ligne.classe.nom }}</td><td class="text-end">{{ ligne.paiements }}</td><td class="text-end">{{ ligne.montant|floatformat:0|intcomma }}</td><td class="text-end text-danger">{{ ligne.retards|floatformat:0|intcomma }}</td><td class="text-end">{{ ligne.relances }}</td></tr>{% empty %}<tr><td colspan="5" class="text-muted text-center">Aucune donnée</td></tr>{% endfor %}</tbody></table></div></div></div>
+</div>
+
+<div class="card mb-4"><div class="card-header fw-bold">Paiements</div><div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead><tr><th>Date</th><th>Reçu</th><th>Élève</th><th>Classe</th><th>Type</th><th>Mode</th><th class="text-end">Montant</th><th>Statut</th></tr></thead><tbody>{% for p in paiements %}<tr><td>{{ p.date_paiement|date:'d/m/Y' }}</td><td>{{ p.numero_recu }}</td><td>{{ p.eleve.nom_complet }}</td><td>{{ p.eleve.classe.nom }}</td><td>{{ p.type_paiement.nom }}</td><td>{{ p.mode_paiement.nom }}</td><td class="text-end">{{ p.montant|floatformat:0|intcomma }}</td><td>{{ p.get_statut_display }}</td></tr>{% empty %}<tr><td colspan="8" class="text-center text-muted">Aucun paiement</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card mb-4"><div class="card-header fw-bold">Retards de paiement au {{ date_fin|date:'d/m/Y' }}</div><div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead><tr><th>Matricule</th><th>Élève</th><th>Classe</th><th>Année</th><th class="text-end">Retard</th></tr></thead><tbody>{% for r in retards %}<tr><td>{{ r.echeancier.eleve.matricule }}</td><td>{{ r.echeancier.eleve.nom_complet }}</td><td>{{ r.echeancier.eleve.classe.nom }}</td><td>{{ r.echeancier.annee_scolaire }}</td><td class="text-end text-danger fw-bold">{{ r.montant_retard|floatformat:0|intcomma }} GNF</td></tr>{% empty %}<tr><td colspan="5" class="text-center text-muted">Aucun retard</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card mb-4"><div class="card-header fw-bold">Relances</div><div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead><tr><th>Date</th><th>Élève</th><th>Classe</th><th>Canal</th><th>Statut</th><th class="text-end">Solde estimé</th></tr></thead><tbody>{% for r in relances %}<tr><td>{{ r.date_creation|date:'d/m/Y H:i' }}</td><td>{{ r.eleve.nom_complet }}</td><td>{{ r.eleve.classe.nom }}</td><td>{{ r.get_canal_display }}</td><td>{{ r.get_statut_display }}</td><td class="text-end">{{ r.solde_estime|floatformat:0|intcomma }}</td></tr>{% empty %}<tr><td colspan="6" class="text-center text-muted">Aucune relance</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function exportUrl(name) {
+  const params = new URLSearchParams(new FormData(document.getElementById('rapportFiltres')));
+  return name + '?' + params.toString();
+}
+document.getElementById('exportPdf').href = exportUrl('{% url "paiements:export_rapport_comptable_pdf" %}');
+document.getElementById('exportExcel').href = exportUrl('{% url "paiements:export_rapport_comptable_excel" %}');
+</script>
+{% endblock %}

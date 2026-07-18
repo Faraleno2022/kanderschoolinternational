@@ -1,13 +1,21 @@
-from django.test import TestCase
+from django.conf import settings
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from datetime import date
 
 from eleves.models import Ecole, Classe, Eleve, Responsable
-from paiements.models import Paiement, TypePaiement, ModePaiement
+from paiements.models import Paiement, TypePaiement, ModePaiement, EcheancierPaiement, Relance
 from utilisateurs.models import Profil
 
 
+TEST_MIDDLEWARE = [
+    middleware for middleware in settings.MIDDLEWARE
+    if middleware != 'ecole_moderne.licence_middleware.LicenceMiddleware'
+]
+
+
+@override_settings(MIDDLEWARE=TEST_MIDDLEWARE)
 class SchoolFilteringTests(TestCase):
     def setUp(self):
         # Schools (provide required fields)
@@ -74,20 +82,60 @@ class SchoolFilteringTests(TestCase):
             statut='VALIDE',
             date_paiement=date(2024, 9, 11),
         )
+        self.echeancier1 = EcheancierPaiement.objects.create(
+            eleve=self.eleve1, annee_scolaire="2024-2025",
+            frais_inscription_du=50000, frais_inscription_paye=30000,
+            date_echeance_inscription=date(2024, 9, 1),
+            date_echeance_tranche_1=date(2025, 1, 15),
+            date_echeance_tranche_2=date(2025, 3, 15),
+            date_echeance_tranche_3=date(2025, 5, 15),
+        )
+        self.echeancier2 = EcheancierPaiement.objects.create(
+            eleve=self.eleve2, annee_scolaire="2024-2025",
+            frais_inscription_du=60000, frais_inscription_paye=30000,
+            date_echeance_inscription=date(2024, 9, 1),
+            date_echeance_tranche_1=date(2025, 1, 15),
+            date_echeance_tranche_2=date(2025, 3, 15),
+            date_echeance_tranche_3=date(2025, 5, 15),
+        )
+        Relance.objects.create(
+            eleve=self.eleve1, canal="SMS", statut="ENVOYEE",
+            message="Rappel école A", solde_estime=20000,
+        )
+        Relance.objects.create(
+            eleve=self.eleve2, canal="SMS", statut="ENVOYEE",
+            message="Rappel école B", solde_estime=30000,
+        )
         # Users
         User = get_user_model()
         self.user1 = User.objects.create_user(username="u1", password="pass12345")
         self.user2 = User.objects.create_user(username="u2", password="pass12345")
-        Profil.objects.create(user=self.user1, role='COMPTABLE', ecole=self.ecole1, telephone="+224620000021", peut_consulter_rapports=True)
-        Profil.objects.create(user=self.user2, role='COMPTABLE', ecole=self.ecole2, telephone="+224620000022", peut_consulter_rapports=True)
+        Profil.objects.update_or_create(
+            user=self.user1,
+            defaults={
+                'role': 'COMPTABLE', 'ecole': self.ecole1,
+                'telephone': "+224620000021", 'peut_consulter_rapports': True,
+                'is_validated': True,
+            },
+        )
+        Profil.objects.update_or_create(
+            user=self.user2,
+            defaults={
+                'role': 'COMPTABLE', 'ecole': self.ecole2,
+                'telephone': "+224620000022", 'peut_consulter_rapports': True,
+                'is_validated': True,
+            },
+        )
+        self.user1.refresh_from_db()
+        self.user2.refresh_from_db()
 
     def login1(self):
         self.client.logout()
-        self.client.login(username="u1", password="pass12345")
+        self.client.force_login(self.user1)
 
     def login2(self):
         self.client.logout()
-        self.client.login(username="u2", password="pass12345")
+        self.client.force_login(self.user2)
 
     def test_api_paiements_list_filtered_by_school(self):
         self.login1()
@@ -98,6 +146,28 @@ class SchoolFilteringTests(TestCase):
         ids = [r["id"] for r in data.get("results", [])]
         self.assertIn(self.paiement1.id, ids)
         self.assertNotIn(self.paiement2.id, ids)
+
+    def test_rapport_comptable_filtre_par_ecole(self):
+        self.login1()
+        response = self.client.get(reverse("paiements:rapport_comptable"), {
+            "date_debut": "2024-01-01", "date_fin": "2026-12-31",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.eleve1.nom_complet)
+        self.assertNotContains(response, self.eleve2.nom_complet)
+
+    def test_exports_rapport_comptable(self):
+        self.login1()
+        params = {"date_debut": "2024-01-01", "date_fin": "2026-12-31"}
+        excel = self.client.get(reverse("paiements:export_rapport_comptable_excel"), params)
+        self.assertEqual(excel.status_code, 200)
+        self.assertIn("spreadsheetml", excel["Content-Type"])
+        self.assertTrue(excel.content.startswith(b"PK"))
+
+        pdf = self.client.get(reverse("paiements:export_rapport_comptable_pdf"), params)
+        self.assertEqual(pdf.status_code, 200)
+        self.assertEqual(pdf["Content-Type"], "application/pdf")
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
 
     def test_api_paiement_detail_for_other_school_is_404(self):
         self.login1()
