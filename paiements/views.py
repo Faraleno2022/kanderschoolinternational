@@ -1344,44 +1344,56 @@ def export_recap_par_classe_excel(request):
             Q(eleve__classe__nom__icontains=q) | Q(eleve__classe__ecole__nom__icontains=q)
         )
 
-    dues_sco_expr = (
-        Coalesce(F('tranche_1_due'), Value(0)) +
-        Coalesce(F('tranche_2_due'), Value(0)) +
-        Coalesce(F('tranche_3_due'), Value(0))
-    )
-    remises_expr = Coalesce(
-        Sum('eleve__paiements__remises__montant_remise', filter=Q(eleve__paiements__statut='VALIDE')),
-        Value(0),
-        output_field=DecimalField(max_digits=12, decimal_places=0),
-    )
-    try:
-        reinsc_subq = GrilleTarifaire.objects.filter(
-            ecole=OuterRef('eleve__classe__ecole'),
-            niveau=OuterRef('eleve__classe__niveau'),
-            annee_scolaire=OuterRef('annee_scolaire'),
-        ).values('frais_reinscription')[:1]
-        eche_qs = eche_qs.annotate(
-            reinsc_due=Case(
-                When(frais_inscription_du=Subquery(reinsc_subq), then=F('frais_inscription_du')),
-                default=Value(0),
-                output_field=DecimalField(max_digits=12, decimal_places=0),
-            )
-        )
-    except Exception:
-        pass
+    # Calculer les montants dus une seule fois par échéancier. L'ancienne
+    # agrégation joignait les échéanciers aux paiements puis aux remises :
+    # MySQL pouvait refuser la requête et les jointures multipliaient les dus.
+    echeanciers = list(eche_qs)
+    eleve_ids = [echeancier.eleve_id for echeancier in echeanciers]
 
-    detail_qs = (
-        eche_qs
-        .values('eleve__classe__ecole__nom', 'eleve__classe__nom')
-        .annotate(
-            eleves_count=Count('eleve', distinct=True),
-            dues_sco_sum=Coalesce(Sum(dues_sco_expr), Value(0)),
-            remises_sum=remises_expr,
-            frais_insc_sum=Coalesce(Sum(F('frais_inscription_du')), Value(0)),
-            reinsc_sum=Coalesce(Sum(F('reinsc_due')), Value(0)),
+    grille_map = {
+        (grille.ecole_id, grille.niveau, grille.annee_scolaire): grille.frais_reinscription or Decimal('0')
+        for grille in GrilleTarifaire.objects.filter(
+            ecole_id__in={e.eleve.classe.ecole_id for e in echeanciers}
         )
-        .order_by('eleve__classe__ecole__nom', 'eleve__classe__nom')
+    } if echeanciers else {}
+
+    remises_qs = PaiementRemise.objects.filter(
+        paiement__statut='VALIDE', paiement__eleve_id__in=eleve_ids
     )
+    remises_qs = filter_by_user_school(
+        remises_qs, request.user, 'paiement__eleve__classe__ecole'
+    )
+    remises_par_classe = {
+        row['paiement__eleve__classe_id']: row['total'] or Decimal('0')
+        for row in remises_qs.values('paiement__eleve__classe_id').annotate(total=Sum('montant_remise'))
+    }
+
+    details = {}
+    for echeancier in echeanciers:
+        classe = echeancier.eleve.classe
+        row = details.setdefault(classe.id, {
+            'ecole': classe.ecole.nom,
+            'classe': classe.nom,
+            'eleves_count': 0,
+            'dues_sco_sum': Decimal('0'),
+            'frais_insc_sum': Decimal('0'),
+            'reinsc_sum': Decimal('0'),
+        })
+        row['eleves_count'] += 1
+        row['dues_sco_sum'] += (
+            (echeancier.tranche_1_due or 0)
+            + (echeancier.tranche_2_due or 0)
+            + (echeancier.tranche_3_due or 0)
+        )
+        frais_inscription = echeancier.frais_inscription_du or Decimal('0')
+        row['frais_insc_sum'] += frais_inscription
+        frais_reinscription = grille_map.get(
+            (classe.ecole_id, classe.niveau, echeancier.annee_scolaire), Decimal('0')
+        )
+        if frais_reinscription and frais_inscription == frais_reinscription:
+            row['reinsc_sum'] += frais_inscription
+
+    detail_rows = sorted(details.items(), key=lambda item: (item[1]['ecole'], item[1]['classe']))
 
     wb = Workbook()
     ws = wb.active
@@ -1393,17 +1405,17 @@ def export_recap_par_classe_excel(request):
     ]
     ws.append(headers)
 
-    for row in detail_qs:
+    for classe_id, row in detail_rows:
         dues = int(row.get('dues_sco_sum') or 0)
-        rem = int(row.get('remises_sum') or 0)
+        rem = int(remises_par_classe.get(classe_id, 0) or 0)
         net_sco = max(dues - rem, 0)
         insc = int(row.get('frais_insc_sum') or 0)
         reinsc = int(row.get('reinsc_sum') or 0)
         tot = net_sco + insc
         pct = (reinsc / insc * 100.0) if insc > 0 else 0.0
         ws.append([
-            row.get('eleve__classe__ecole__nom'),
-            row.get('eleve__classe__nom'),
+            row.get('ecole'),
+            row.get('classe'),
             int(row.get('eleves_count') or 0),
             net_sco, insc, reinsc, round(pct, 2), tot
         ])
