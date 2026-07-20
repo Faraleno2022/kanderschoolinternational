@@ -111,6 +111,7 @@ urlpatterns = [
     path('rapports/', include('rapports.urls')),
     path('bus/', include('bus.urls')),
     path('notes/', include('notes.urls')),
+    path('vie-scolaire/', include('vie_scolaire.urls')),
     path('abonnements/', include('abonnements.urls')),
     path('api/v1/sync/', include('synchronisation.urls')),
 ]

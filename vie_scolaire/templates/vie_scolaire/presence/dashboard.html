@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+
+{% block title %}Pointage & Présence{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active">Pointage & Présence</li>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'vie_scolaire:rapport_presence' %}" class="btn btn-outline-primary">
+    <i class="fas fa-chart-line me-1"></i>Rapport de présence
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- Sélecteur de date -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label mb-1">Date du pointage</label>
+                <input type="date" name="date" value="{{ date_selection|date:'Y-m-d' }}" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-sync-alt me-1"></i>Afficher</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Statistiques du jour -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card card-stats success h-100"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <div><h3 class="mb-0">{{ stats.total_presents }}</h3><small class="text-muted">Présents</small></div>
+                <i class="fas fa-user-check fa-2x text-success"></i>
+            </div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card card-stats danger h-100"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <div><h3 class="mb-0">{{ stats.total_absents }}</h3><small class="text-muted">Absents</small></div>
+                <i class="fas fa-user-xmark fa-2x text-danger"></i>
+            </div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card card-stats warning h-100"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <div><h3 class="mb-0">{{ stats.total_retards }}</h3><small class="text-muted">Retards</small></div>
+                <i class="fas fa-clock fa-2x text-warning"></i>
+            </div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card card-stats h-100"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <div><h3 class="mb-0">{{ stats.total_excuses }}</h3><small class="text-muted">Absences excusées</small></div>
+                <i class="fas fa-file-medical fa-2x text-primary"></i>
+            </div>
+        </div></div>
+    </div>
+</div>
+
+<!-- Alertes taux d'absence élevé -->
+{% if alertes %}
+<div class="alert alert-danger">
+    <h5 class="alert-heading"><i class="fas fa-triangle-exclamation me-2"></i>Taux d'absence élevé (&gt; {{ seuil_pourcent }} %)</h5>
+    <ul class="mb-0">
+        {% for a in alertes %}
+        <li><strong>{{ a.classe.nom }}</strong> : {{ a.absents }} absent(s) sur {{ a.pointes }} pointé(s) —
+            <span class="badge bg-danger">{{ a.taux_absence }} %</span></li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<!-- Tableau des classes -->
+<div class="card shadow-sm">
+    <div class="card-header bg-primary text-white">
+        <i class="fas fa-school me-2"></i>Pointage par classe — {{ date_selection|date:"d/m/Y" }}
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Classe</th>
+                        <th class="text-center">Effectif</th>
+                        <th class="text-center">Pointés</th>
+                        <th class="text-center">Absents</th>
+                        <th class="text-center">Retards</th>
+                        <th class="text-center">Taux absence</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in lignes_classes %}
+                    <tr {% if l.alerte %}class="table-danger"{% endif %}>
+                        <td><strong>{{ l.classe.nom }}</strong><br><small class="text-muted">{{ l.classe.get_niveau_display }}</small></td>
+                        <td class="text-center">{{ l.effectif }}</td>
+                        <td class="text-center">
+                            {% if l.fait %}<span class="badge bg-success">{{ l.pointes }}</span>
+                            {% else %}<span class="badge bg-secondary">Non fait</span>{% endif %}
+                        </td>
+                        <td class="text-center">{{ l.absents }}</td>
+                        <td class="text-center">{{ l.retards }}</td>
+                        <td class="text-center">
+                            {% if l.alerte %}<span class="badge bg-danger">{{ l.taux_absence }} %</span>
+                            {% elif l.fait %}<span class="badge bg-light text-dark">{{ l.taux_absence }} %</span>
+                            {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                        <td class="text-end">
+                            <a href="{% url 'vie_scolaire:pointage_classe' l.classe.id %}?date={{ date_selection|date:'Y-m-d' }}"
+                               class="btn btn-sm {% if l.fait %}btn-outline-primary{% else %}btn-primary{% endif %}">
+                                <i class="fas fa-clipboard-check me-1"></i>{% if l.fait %}Modifier{% else %}Pointer{% endif %}
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">Aucune classe disponible pour l'année active.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

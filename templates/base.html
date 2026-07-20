@@ -417,6 +417,20 @@
                             </a>
                         </li>
                         {% endif %}
+                        {% if 'presence' in allowed %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'vie_scolaire:presence_dashboard' %}">
+                                <i class="fas fa-clipboard-check me-1"></i>Présence
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if 'devoirs' in allowed %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'vie_scolaire:liste_devoirs' %}">
+                                <i class="fas fa-book-open me-1"></i>Devoirs
+                            </a>
+                        </li>
+                        {% endif %}
                         {% if 'infirmerie' in allowed %}
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'eleves:infirmerie' %}">
@@ -547,6 +561,23 @@
                             <a class="nav-link" href="{% url 'notes:tableau_bord' %}">
                                 <i class="fas fa-book me-1"></i>Notes
                             </a>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-clipboard-check me-1"></i>Vie scolaire
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{% url 'vie_scolaire:presence_dashboard' %}">
+                                    <i class="fas fa-clipboard-check text-primary me-1"></i>Pointage & Présence
+                                </a></li>
+                                <li><a class="dropdown-item" href="{% url 'vie_scolaire:rapport_presence' %}">
+                                    <i class="fas fa-chart-line text-info me-1"></i>Rapport de présence
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{% url 'vie_scolaire:liste_devoirs' %}">
+                                    <i class="fas fa-book-open text-success me-1"></i>Suivi des devoirs
+                                </a></li>
+                            </ul>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'eleves:infirmerie' %}">

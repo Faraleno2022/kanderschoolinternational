@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}Présences — {{ eleve.nom_complet }}{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'vie_scolaire:presence_dashboard' %}">Pointage & Présence</a></li>
+<li class="breadcrumb-item active">{{ eleve.nom_complet }}</li>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100"><div class="card-body">
+            <h5 class="mb-1">{{ eleve.nom_complet }}</h5>
+            <div class="text-muted small">{{ eleve.matricule }} — {{ eleve.classe.nom }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-4">
+        <div class="card card-stats danger h-100"><div class="card-body">
+            <h3 class="mb-0">{{ absents }}</h3><small class="text-muted">Absences (total)</small>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-4">
+        <div class="card card-stats warning h-100"><div class="card-body">
+            <h3 class="mb-0">{{ taux_absence }} %</h3><small class="text-muted">Taux d'absence ({{ total }} jour(s))</small>
+        </div></div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-primary text-white"><i class="fas fa-clock-rotate-left me-2"></i>Historique des présences</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr><th>Date</th><th>Classe</th><th>Statut</th><th>Motif</th><th>Saisi par</th></tr>
+                </thead>
+                <tbody>
+                    {% for p in presences %}
+                    <tr>
+                        <td class="text-nowrap">{{ p.date|date:"d/m/Y" }}</td>
+                        <td>{{ p.classe.nom }}</td>
+                        <td>
+                            {% if p.statut == 'PRESENT' %}<span class="badge bg-success">{{ p.get_statut_display }}</span>
+                            {% elif p.statut == 'ABSENT' %}<span class="badge bg-danger">{{ p.get_statut_display }}</span>
+                            {% elif p.statut == 'RETARD' %}<span class="badge bg-warning text-dark">{{ p.get_statut_display }}</span>
+                            {% else %}<span class="badge bg-primary">{{ p.get_statut_display }}</span>{% endif %}
+                        </td>
+                        <td>{{ p.motif|default:"—" }}</td>
+                        <td><small class="text-muted">{{ p.saisi_par.username|default:"—" }}</small></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-muted py-4">Aucune présence enregistrée.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

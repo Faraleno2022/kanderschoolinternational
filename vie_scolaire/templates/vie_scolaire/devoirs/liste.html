@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block title %}Suivi des devoirs{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active">Suivi des devoirs</li>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'vie_scolaire:ajouter_devoir' %}" class="btn btn-primary">
+    <i class="fas fa-plus me-1"></i>Nouveau devoir
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label mb-1">Filtrer par classe</label>
+                <select name="classe" class="form-select" onchange="this.form.submit()">
+                    <option value="">Toutes les classes</option>
+                    {% for c in classes %}
+                    <option value="{{ c.id }}" {% if classe_selection and classe_selection.id == c.id %}selected{% endif %}>
+                        {{ c.nom }} ({{ c.get_niveau_display }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-outline-primary"><i class="fas fa-filter me-1"></i>Filtrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% include 'vie_scolaire/devoirs/_bloc_devoirs.html' with titre="Devoirs à venir / en cours" couleur="primary" devoirs=devoirs_a_venir vide="Aucun devoir à venir." %}
+<div class="mt-4"></div>
+{% include 'vie_scolaire/devoirs/_bloc_devoirs.html' with titre="Devoirs échus" couleur="secondary" devoirs=devoirs_echus vide="Aucun devoir échu." %}
+{% endblock %}
