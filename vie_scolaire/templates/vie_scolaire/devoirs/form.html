@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'vie_scolaire:liste_devoirs' %}">Suivi des devoirs</a></li>
+<li class="breadcrumb-item active">{{ titre_page }}</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white"><i class="fas fa-book me-2"></i>{{ titre_page }}</div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data" novalidate>
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.classe.id_for_label }}">Classe *</label>
+                        {{ form.classe }}
+                        {% if form.classe.errors %}<div class="text-danger small">{{ form.classe.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="{{ form.matiere.id_for_label }}">Matière</label>
+                            {{ form.matiere }}
+                            <datalist id="matieres_list">
+                                {% for m in matieres_suggestions %}<option value="{{ m }}">{% endfor %}
+                            </datalist>
+                            {% if form.matiere.errors %}<div class="text-danger small">{{ form.matiere.errors }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="{{ form.titre.id_for_label }}">Titre *</label>
+                            {{ form.titre }}
+                            {% if form.titre.errors %}<div class="text-danger small">{{ form.titre.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.description.id_for_label }}">Consignes / description</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}<div class="text-danger small">{{ form.description.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="{{ form.date_donne.id_for_label }}">Date du sujet</label>
+                            {{ form.date_donne }}
+                            {% if form.date_donne.errors %}<div class="text-danger small">{{ form.date_donne.errors }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="{{ form.date_remise.id_for_label }}">À rendre le *</label>
+                            {{ form.date_remise }}
+                            {% if form.date_remise.errors %}<div class="text-danger small">{{ form.date_remise.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.fichier.id_for_label }}">Énoncé (fichier joint, optionnel)</label>
+                        {{ form.fichier }}
+                        {% if devoir.fichier %}<div class="small mt-1">Fichier actuel :
+                            <a href="{{ devoir.fichier.url }}" target="_blank">{{ devoir.fichier.name }}</a></div>{% endif %}
+                        {% if form.fichier.errors %}<div class="text-danger small">{{ form.fichier.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'vie_scolaire:liste_devoirs' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Annuler</a>
+                        <button type="submit" class="btn btn-success"><i class="fas fa-save me-1"></i>Enregistrer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

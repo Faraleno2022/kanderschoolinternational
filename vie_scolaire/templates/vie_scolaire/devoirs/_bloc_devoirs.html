@@ -1,0 +1,52 @@
+<div class="card shadow-sm">
+    <div class="card-header bg-{{ couleur }} {% if couleur == 'secondary' %}text-white{% else %}text-white{% endif %}">
+        <i class="fas fa-book me-2"></i>{{ titre }} <span class="badge bg-light text-dark ms-1">{{ devoirs|length }}</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>À rendre le</th>
+                        <th>Classe</th>
+                        <th>Matière</th>
+                        <th>Titre</th>
+                        <th class="text-center">Remises</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in devoirs %}
+                    <tr>
+                        <td class="text-nowrap">
+                            {{ d.date_remise|date:"d/m/Y" }}
+                            {% if d.est_en_retard %}<span class="badge bg-danger ms-1">Échu</span>{% endif %}
+                        </td>
+                        <td>{{ d.classe.nom }}</td>
+                        <td>{{ d.matiere|default:"—" }}</td>
+                        <td>
+                            {{ d.titre }}
+                            {% if d.fichier %}<a href="{{ d.fichier.url }}" target="_blank" class="ms-1" title="Énoncé"><i class="fas fa-paperclip text-muted"></i></a>{% endif %}
+                        </td>
+                        <td class="text-center">
+                            <span class="badge {% if d.nb_remis == d.nb_total and d.nb_total > 0 %}bg-success{% else %}bg-secondary{% endif %}">
+                                {{ d.nb_remis }}/{{ d.nb_total }}
+                            </span>
+                        </td>
+                        <td class="text-end text-nowrap">
+                            <a href="{% url 'vie_scolaire:suivi_devoir' d.id %}" class="btn btn-sm btn-outline-primary" title="Suivi des remises">
+                                <i class="fas fa-list-check"></i></a>
+                            <a href="{% url 'vie_scolaire:modifier_devoir' d.id %}" class="btn btn-sm btn-outline-secondary" title="Modifier">
+                                <i class="fas fa-pen"></i></a>
+                            <a href="{% url 'vie_scolaire:supprimer_devoir' d.id %}" class="btn btn-sm btn-outline-danger" title="Supprimer">
+                                <i class="fas fa-trash"></i></a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">{{ vide }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

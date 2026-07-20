@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}Rapport de présence{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'vie_scolaire:presence_dashboard' %}">Pointage & Présence</a></li>
+<li class="breadcrumb-item active">Rapport</li>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label mb-1">Classe</label>
+                <select name="classe" class="form-select" required>
+                    <option value="">— Choisir une classe —</option>
+                    {% for c in classes %}
+                    <option value="{{ c.id }}" {% if classe_selection and classe_selection.id == c.id %}selected{% endif %}>
+                        {{ c.nom }} ({{ c.get_niveau_display }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label mb-1">Du</label>
+                <input type="date" name="date_debut" value="{{ date_debut|date:'Y-m-d' }}" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label mb-1">Au</label>
+                <input type="date" name="date_fin" value="{{ date_fin|date:'Y-m-d' }}" class="form-control">
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-search me-1"></i>Générer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if rapport %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h5 class="mb-0">{{ classe_selection.nom }}</h5>
+        <small class="text-muted">Du {{ date_debut|date:"d/m/Y" }} au {{ date_fin|date:"d/m/Y" }} —
+            {{ rapport.jours_pointes }} jour(s) pointé(s)</small>
+    </div>
+    <div class="btn-group">
+        <a href="{% url 'vie_scolaire:export_rapport_excel' classe_selection.id %}?date_debut={{ date_debut|date:'Y-m-d' }}&date_fin={{ date_fin|date:'Y-m-d' }}"
+           class="btn btn-outline-success"><i class="fas fa-file-excel me-1"></i>Excel</a>
+        <a href="{% url 'vie_scolaire:export_rapport_pdf' classe_selection.id %}?date_debut={{ date_debut|date:'Y-m-d' }}&date_fin={{ date_fin|date:'Y-m-d' }}"
+           class="btn btn-outline-danger"><i class="fas fa-file-pdf me-1"></i>PDF</a>
+    </div>
+</div>
+
+{% if rapport.nb_a_risque %}
+<div class="alert alert-warning">
+    <i class="fas fa-triangle-exclamation me-2"></i>
+    <strong>{{ rapport.nb_a_risque }}</strong> élève(s) présentent un taux d'absence supérieur à {{ seuil_pourcent }} % sur la période.
+</div>
+{% endif %}
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Matricule</th>
+                        <th>Élève</th>
+                        <th class="text-center">Présences</th>
+                        <th class="text-center">Absences</th>
+                        <th class="text-center">Retards</th>
+                        <th class="text-center">Excusées</th>
+                        <th class="text-center">Taux absence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in rapport.lignes %}
+                    <tr {% if l.a_risque %}class="table-warning"{% endif %}>
+                        <td><small>{{ l.eleve.matricule }}</small></td>
+                        <td>{{ l.eleve.nom }} {{ l.eleve.prenom }}
+                            {% if l.a_risque %}<span class="badge bg-danger ms-1">À risque</span>{% endif %}
+                            <a href="{% url 'vie_scolaire:historique_presence_eleve' l.eleve.id %}" class="ms-1 text-decoration-none" title="Historique">
+                                <i class="fas fa-clock-rotate-left text-muted"></i></a>
+                        </td>
+                        <td class="text-center text-success">{{ l.present }}</td>
+                        <td class="text-center text-danger fw-bold">{{ l.absent }}</td>
+                        <td class="text-center text-warning">{{ l.retard }}</td>
+                        <td class="text-center">{{ l.excuse }}</td>
+                        <td class="text-center">
+                            <span class="badge {% if l.a_risque %}bg-danger{% else %}bg-light text-dark{% endif %}">{{ l.taux_absence }} %</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">Aucun pointage enregistré pour cette classe sur la période choisie.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+    <i class="fas fa-chart-line fa-3x mb-3 d-block"></i>
+    Choisissez une classe et une période pour générer le rapport de présence.
+</div>
+{% endif %}
+{% endblock %}

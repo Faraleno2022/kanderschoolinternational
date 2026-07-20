@@ -150,6 +150,7 @@ INSTALLED_APPS = [
     'bus',
     'notes',
     'abonnements',
+    'vie_scolaire',
     'synchronisation.apps.SynchronisationConfig',
     'axes',
 ]

@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+
+{% block title %}Supprimer le devoir{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'vie_scolaire:liste_devoirs' %}">Suivi des devoirs</a></li>
+<li class="breadcrumb-item active">Supprimer</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card shadow-sm border-danger">
+            <div class="card-header bg-danger text-white"><i class="fas fa-triangle-exclamation me-2"></i>Confirmer la suppression</div>
+            <div class="card-body">
+                <p>Voulez-vous vraiment supprimer le devoir suivant ? Le suivi des remises associé sera également supprimé.</p>
+                <ul class="list-unstyled">
+                    <li><strong>Titre :</strong> {{ devoir.titre }}</li>
+                    <li><strong>Classe :</strong> {{ devoir.classe.nom }}</li>
+                    {% if devoir.matiere %}<li><strong>Matière :</strong> {{ devoir.matiere }}</li>{% endif %}
+                    <li><strong>À rendre le :</strong> {{ devoir.date_remise|date:"d/m/Y" }}</li>
+                </ul>
+                <form method="post" class="d-flex justify-content-between">
+                    {% csrf_token %}
+                    <a href="{% url 'vie_scolaire:liste_devoirs' %}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Annuler</a>
+                    <button type="submit" class="btn btn-danger"><i class="fas fa-trash me-1"></i>Supprimer définitivement</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

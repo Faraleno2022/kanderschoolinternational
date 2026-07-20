@@ -195,6 +195,7 @@ class MenuAccessMiddleware:
         ('/eleves/ajax/', 'eleves'),
         ('/depenses/bibliotheque/', 'bibliotheque'),
         ('/notes/culture/', 'activites'),
+        ('/vie-scolaire/', 'notes'),
         ('/eleves/', 'eleves'),
         ('/paiements/', 'paiements'),
         ('/depenses/', 'depenses'),
