@@ -136,8 +136,6 @@ MENUS = [
     ('salaires', 'Salaires'),
     ('bus', 'Transport & Cantine'),
     ('notes', 'Gestion de notes'),
-    ('presence', 'Pointage & Présence'),
-    ('devoirs', 'Suivi des devoirs'),
     ('infirmerie', 'Infirmerie (suivi santé)'),
     ('activites', 'Activités culturelles'),
     ('rapports', 'Rapports'),

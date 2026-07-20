@@ -279,6 +279,28 @@
                 </p>
             </a>
         </div>
+
+        <!-- Pointage & Présence -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'vie_scolaire:presence_dashboard' %}" class="notes-card info">
+                <i class="fas fa-clipboard-check notes-card-icon"></i>
+                <h3 class="notes-card-title">Pointage & Présence</h3>
+                <p class="notes-card-description">
+                    Faire l'appel journalier par classe et consulter le rapport de présence avec alertes d'absentéisme
+                </p>
+            </a>
+        </div>
+
+        <!-- Suivi des devoirs -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'vie_scolaire:liste_devoirs' %}" class="notes-card success">
+                <i class="fas fa-book-open notes-card-icon"></i>
+                <h3 class="notes-card-title">Suivi des devoirs</h3>
+                <p class="notes-card-description">
+                    Enregistrer les devoirs donnés par classe et suivre leur remise par élève
+                </p>
+            </a>
+        </div>
     </div>
 </div>
 {% endblock %}
