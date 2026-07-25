@@ -9,7 +9,7 @@ from .models_logistique import (
     CategorieArticle, Article, BienEtablissement, MouvementStock,
     Inventaire, LigneInventaire
 )
-from .models_bibliotheque import Livre, Emprunt, Reservation
+from .models_bibliotheque import Livre, Emprunt, Reservation, CategorieLivre
 
 class DepenseForm(forms.ModelForm):
     """Formulaire simplifié pour les dépenses"""
@@ -485,6 +485,27 @@ class LigneInventaireForm(forms.ModelForm):
 
 # ===== FORMULAIRES BIBLIOTHÈQUE =====
 
+class CategorieLivreForm(forms.ModelForm):
+    class Meta:
+        model = CategorieLivre
+        fields = ['nom', 'code', 'description', 'actif']
+        widgets = {
+            'nom': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: Contes, Documentaires...'}),
+            'code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: CONTE'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'actif': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def clean_code(self):
+        code = (self.cleaned_data.get('code') or '').strip().upper()
+        qs = CategorieLivre.objects.filter(code=code)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise ValidationError("Ce code de catégorie existe déjà.")
+        return code
+
+
 class LivreForm(forms.ModelForm):
     class Meta:
         model = Livre
@@ -514,6 +535,15 @@ class LivreForm(forms.ModelForm):
             'date_acquisition': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'couverture': forms.FileInput(attrs={'class': 'form-control'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Code généré automatiquement si laissé vide
+        self.fields['code_livre'].required = False
+        self.fields['code_livre'].widget.attrs['placeholder'] = 'Auto-généré si vide (ex: LIV-...)'
+        # N'afficher que les catégories actives
+        self.fields['categorie'].queryset = CategorieLivre.objects.filter(actif=True).order_by('nom')
+        self.fields['categorie'].empty_label = '— Choisir une catégorie —'
 
 
 class EmpruntForm(forms.ModelForm):

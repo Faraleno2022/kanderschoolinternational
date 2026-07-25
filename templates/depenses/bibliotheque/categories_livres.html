@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-lg-10 offset-lg-1">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-tags text-primary"></i> {{ titre_page }}</h2>
+                <a href="{% url 'depenses:catalogue_livres' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Retour au catalogue
+                </a>
+            </div>
+
+            <div class="row">
+                <!-- Formulaire de création / modification -->
+                <div class="col-md-4">
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header {% if categorie_edit %}bg-warning{% else %}bg-primary text-white{% endif %}">
+                            {% if categorie_edit %}
+                                <i class="fas fa-pen me-1"></i>Modifier la catégorie
+                            {% else %}
+                                <i class="fas fa-plus me-1"></i>Nouvelle catégorie
+                            {% endif %}
+                        </div>
+                        <div class="card-body">
+                            <form method="post">
+                                {% csrf_token %}
+                                <div class="mb-3">
+                                    <label class="form-label">Nom <span class="text-danger">*</span></label>
+                                    {{ form.nom }}
+                                    {% if form.nom.errors %}<div class="text-danger small">{{ form.nom.errors.0 }}</div>{% endif %}
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Code <span class="text-danger">*</span></label>
+                                    {{ form.code }}
+                                    {% if form.code.errors %}<div class="text-danger small">{{ form.code.errors.0 }}</div>{% endif %}
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Description</label>
+                                    {{ form.description }}
+                                </div>
+                                <div class="mb-3 form-check">
+                                    {{ form.actif }}
+                                    <label class="form-check-label" for="{{ form.actif.id_for_label }}">Active</label>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-save me-1"></i>{% if categorie_edit %}Mettre à jour{% else %}Créer{% endif %}
+                                </button>
+                                {% if categorie_edit %}
+                                <a href="{% url 'depenses:gestion_categories_livres' %}" class="btn btn-outline-secondary w-100 mt-2">Annuler</a>
+                                {% endif %}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Liste des catégories -->
+                <div class="col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-body p-0">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Nom</th>
+                                        <th class="text-center">Livres</th>
+                                        <th class="text-center">Statut</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for cat in categories %}
+                                    <tr>
+                                        <td><span class="badge bg-secondary">{{ cat.code }}</span></td>
+                                        <td>{{ cat.nom }}</td>
+                                        <td class="text-center">{{ cat.nb_livres }}</td>
+                                        <td class="text-center">
+                                            {% if cat.actif %}<span class="badge bg-success">Active</span>
+                                            {% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="{% url 'depenses:modifier_categorie_livre' cat.id %}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-pen"></i>
+                                            </a>
+                                            {% if cat.nb_livres == 0 %}
+                                            <form method="post" action="{% url 'depenses:supprimer_categorie_livre' cat.id %}" class="d-inline"
+                                                  onsubmit="return confirm('Supprimer cette catégorie ?');">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                                            </form>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr><td colspan="5" class="text-center text-muted py-4">Aucune catégorie. Créez-en une pour commencer.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

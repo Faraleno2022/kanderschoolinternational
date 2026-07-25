@@ -13,7 +13,13 @@
                     <h2><i class="fas fa-book text-primary"></i> {{ titre_page }}</h2>
                     <p class="text-muted">Catalogue complet de la bibliothèque</p>
                 </div>
-                <div>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'depenses:ajouter_livre' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Ajouter un livre
+                    </a>
+                    <a href="{% url 'depenses:gestion_categories_livres' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-tags"></i> Catégories
+                    </a>
                     <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="btn btn-secondary">
                         <i class="fas fa-arrow-left"></i> Dashboard
                     </a>
@@ -109,6 +115,18 @@
                             <i class="fas fa-hand-holding-heart"></i> Emprunter
                         </a>
                         {% endif %}
+                    </div>
+                    <div class="d-flex gap-1 mt-2 border-top pt-2">
+                        <a href="{% url 'depenses:modifier_livre' livre.id %}" class="btn btn-sm btn-outline-primary flex-fill">
+                            <i class="fas fa-pen"></i> Modifier
+                        </a>
+                        <form method="post" action="{% url 'depenses:supprimer_livre' livre.id %}" class="flex-fill"
+                              onsubmit="return confirm('Retirer « {{ livre.titre|escapejs }} » du catalogue ?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                                <i class="fas fa-trash"></i> Retirer
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>

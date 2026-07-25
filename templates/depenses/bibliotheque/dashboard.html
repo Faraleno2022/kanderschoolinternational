@@ -13,12 +13,18 @@
                     <h2><i class="fas fa-book-reader text-primary"></i> {{ titre_page }}</h2>
                     <p class="text-muted">Gestion de la bibliothèque scolaire</p>
                 </div>
-                <div>
-                    <a href="{% url 'depenses:catalogue_livres' %}" class="btn btn-primary">
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="{% url 'depenses:ajouter_livre' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Ajouter un livre
+                    </a>
+                    <a href="{% url 'depenses:gestion_categories_livres' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-tags"></i> Catégories
+                    </a>
+                    <a href="{% url 'depenses:catalogue_livres' %}" class="btn btn-secondary">
                         <i class="fas fa-book"></i> Catalogue
                     </a>
                     <a href="{% url 'depenses:creer_emprunt' %}" class="btn btn-success">
-                        <i class="fas fa-plus"></i> Nouvel Emprunt
+                        <i class="fas fa-hand-holding-heart"></i> Nouvel Emprunt
                     </a>
                 </div>
             </div>

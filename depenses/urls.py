@@ -46,6 +46,12 @@ urlpatterns = [
     # ===== BIBLIOTHÈQUE =====
     path('bibliotheque/', views_bibliotheque.dashboard_bibliotheque, name='dashboard_bibliotheque'),
     path('bibliotheque/catalogue/', views_bibliotheque.catalogue_livres, name='catalogue_livres'),
+    path('bibliotheque/livres/nouveau/', views_bibliotheque.ajouter_livre, name='ajouter_livre'),
+    path('bibliotheque/livres/<int:livre_id>/modifier/', views_bibliotheque.modifier_livre, name='modifier_livre'),
+    path('bibliotheque/livres/<int:livre_id>/supprimer/', views_bibliotheque.supprimer_livre, name='supprimer_livre'),
+    path('bibliotheque/categories/', views_bibliotheque.gestion_categories_livres, name='gestion_categories_livres'),
+    path('bibliotheque/categories/<int:categorie_id>/modifier/', views_bibliotheque.modifier_categorie_livre, name='modifier_categorie_livre'),
+    path('bibliotheque/categories/<int:categorie_id>/supprimer/', views_bibliotheque.supprimer_categorie_livre, name='supprimer_categorie_livre'),
     path('bibliotheque/emprunts/', views_bibliotheque.liste_emprunts, name='liste_emprunts'),
     path('bibliotheque/emprunts/nouveau/', views_bibliotheque.creer_emprunt, name='creer_emprunt'),
     path('bibliotheque/emprunts/<int:emprunt_id>/retour/', views_bibliotheque.retourner_livre, name='retourner_livre'),
