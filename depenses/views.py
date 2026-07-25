@@ -36,6 +36,12 @@ def tableau_bord(request):
     depenses_validees = base_qs.filter(statut='VALIDEE').count()
     depenses_payees = base_qs.filter(statut='PAYEE').count()
     depenses_en_attente = base_qs.filter(statut='EN_ATTENTE').count()
+    # Dépenses invalidées (rejetées ou annulées)
+    depenses_rejetees = base_qs.filter(statut='REJETEE').count()
+    depenses_annulees = base_qs.filter(statut='ANNULEE').count()
+    depenses_brouillon = base_qs.filter(statut='BROUILLON').count()
+    # Impayés : engagées (validées ou en attente) mais pas encore payées
+    depenses_impayees = base_qs.filter(statut__in=['VALIDEE', 'EN_ATTENTE']).count()
     
     # Montants
     montant_total = base_qs.aggregate(
@@ -47,6 +53,16 @@ def tableau_bord(request):
     )['total'] or Decimal('0')
     
     montant_en_attente = base_qs.filter(statut='EN_ATTENTE').aggregate(
+        total=Sum('montant_ttc')
+    )['total'] or Decimal('0')
+
+    # Montant réellement impayé : validées + en attente (hors rejetées/annulées)
+    montant_impaye = base_qs.filter(statut__in=['VALIDEE', 'EN_ATTENTE']).aggregate(
+        total=Sum('montant_ttc')
+    )['total'] or Decimal('0')
+
+    # Montant invalidé (rejeté ou annulé) - exclu des engagements
+    montant_rejete = base_qs.filter(statut__in=['REJETEE', 'ANNULEE']).aggregate(
         total=Sum('montant_ttc')
     )['total'] or Decimal('0')
     
@@ -77,9 +93,15 @@ def tableau_bord(request):
         'depenses_validees': depenses_validees,
         'depenses_payees': depenses_payees,
         'depenses_en_attente': depenses_en_attente,
+        'depenses_rejetees': depenses_rejetees,
+        'depenses_annulees': depenses_annulees,
+        'depenses_brouillon': depenses_brouillon,
+        'depenses_impayees': depenses_impayees,
         'montant_total': montant_total,
         'montant_paye': montant_paye,
         'montant_en_attente': montant_en_attente,
+        'montant_impaye': montant_impaye,
+        'montant_rejete': montant_rejete,
         'depenses_recentes': depenses_recentes,
         'depenses_en_retard': depenses_en_retard,
         'stats_categories': stats_categories,

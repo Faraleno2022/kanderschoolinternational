@@ -27,8 +27,10 @@ def dashboard_bibliotheque(request):
     reservations_qs = Reservation.objects.all()
     if ecole:
         livres_qs = livres_qs.filter(cree_par__profil__ecole=ecole)
-        emprunts_qs = emprunts_qs.filter(cree_par__profil__ecole=ecole)
-        reservations_qs = reservations_qs.filter(cree_par__profil__ecole=ecole)
+        # Emprunts/réservations : filtrer par l'école de l'élève (appartenance
+        # métier fiable, cree_par pouvant être vide sur les imports)
+        emprunts_qs = emprunts_qs.filter(eleve__classe__ecole=ecole)
+        reservations_qs = reservations_qs.filter(eleve__classe__ecole=ecole)
 
     # Statistiques générales
     total_livres = livres_qs.count()
@@ -341,11 +343,11 @@ def liste_emprunts(request):
     emprunts = Emprunt.objects.select_related(
         'livre', 'eleve', 'eleve__classe', 'cree_par'
     ).all()
-    # Sécurité : filtrer par école
+    # Sécurité : filtrer par l'école de l'élève
     ecole = user_school(request.user)
     if ecole:
-        emprunts = emprunts.filter(cree_par__profil__ecole=ecole)
-    
+        emprunts = emprunts.filter(eleve__classe__ecole=ecole)
+
     if statut:
         emprunts = emprunts.filter(statut=statut)
     
@@ -569,9 +571,9 @@ def liste_reservations(request):
     reservations = Reservation.objects.select_related(
         'livre', 'eleve', 'eleve__classe', 'cree_par'
     ).order_by('-date_reservation')
-    # Sécurité : filtrer par école
+    # Sécurité : filtrer par l'école de l'élève
     if ecole:
-        reservations = reservations.filter(cree_par__profil__ecole=ecole)
+        reservations = reservations.filter(eleve__classe__ecole=ecole)
 
     context = {
         'titre_page': 'Réservations',
@@ -579,6 +581,53 @@ def liste_reservations(request):
     }
 
     return render(request, 'depenses/bibliotheque/liste_reservations.html', context)
+
+
+def calculer_stats_emprunts(emprunts, aujourdhui=None):
+    """
+    Calcule les statistiques d'un queryset d'emprunts, pénalités comprises.
+
+    Les pénalités stockées en base ne sont recalculées qu'au save() de l'emprunt :
+    un emprunt en retard jamais re-sauvegardé garde 0. On évalue donc ici le
+    complément dû à la date du jour pour les emprunts non encore retournés.
+    """
+    if aujourdhui is None:
+        aujourdhui = date.today()
+
+    # Pénalités déjà enregistrées en base
+    penalites_enregistrees = emprunts.aggregate(
+        total=Sum('montant_penalite')
+    )['total'] or Decimal('0')
+
+    params = ParametreBibliotheque.objects.first()
+    tarif_journalier = Decimal(str(params.penalite_retard_journalier)) if params else Decimal('1000')
+
+    en_retard_qs = emprunts.filter(
+        statut__in=['EN_COURS', 'EN_RETARD'],
+        date_retour_effectif__isnull=True,
+        date_retour_prevue__lt=aujourdhui,
+    )
+
+    penalites_en_cours = Decimal('0')
+    for date_prevue, montant_stocke in en_retard_qs.values_list(
+        'date_retour_prevue', 'montant_penalite'
+    ):
+        jours_retard = (aujourdhui - date_prevue).days
+        montant_reel = Decimal(jours_retard) * tarif_journalier
+        # Ne compter que le complément non encore enregistré
+        ecart = montant_reel - (montant_stocke or Decimal('0'))
+        if ecart > 0:
+            penalites_en_cours += ecart
+
+    return {
+        'total_emprunts': emprunts.count(),
+        'emprunts_retournes': emprunts.filter(statut='RETOURNE').count(),
+        'emprunts_en_cours': emprunts.filter(statut='EN_COURS').count(),
+        'emprunts_en_retard': en_retard_qs.count(),
+        'penalites_enregistrees': penalites_enregistrees,
+        'penalites_en_cours': penalites_en_cours,
+        'total_penalites': penalites_enregistrees + penalites_en_cours,
+    }
 
 
 @login_required
@@ -602,18 +651,12 @@ def statistiques_bibliotheque(request):
         date_emprunt__gte=date_debut,
         date_emprunt__lte=date_fin
     )
-    # Sécurité : filtrer par école
+    # Sécurité : filtrer par l'école de l'élève (appartenance métier réelle,
+    # cohérent avec retourner_livre ; cree_par peut être vide sur les imports)
     if ecole:
-        emprunts = emprunts.filter(cree_par__profil__ecole=ecole)
+        emprunts = emprunts.filter(eleve__classe__ecole=ecole)
 
-    # Statistiques
-    stats = {
-        'total_emprunts': emprunts.count(),
-        'emprunts_retournes': emprunts.filter(statut='RETOURNE').count(),
-        'emprunts_en_cours': emprunts.filter(statut='EN_COURS').count(),
-        'emprunts_en_retard': emprunts.filter(statut='EN_RETARD').count(),
-        'total_penalites': emprunts.aggregate(total=Sum('montant_penalite'))['total'] or 0,
-    }
+    stats = calculer_stats_emprunts(emprunts)
 
     # Livres les plus empruntés
     livres_populaires = Livre.objects.filter(

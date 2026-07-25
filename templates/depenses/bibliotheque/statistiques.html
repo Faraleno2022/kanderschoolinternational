@@ -96,8 +96,13 @@
                     <div class="d-flex justify-content-between">
                         <div>
                             <p class="text-muted mb-1">Pénalités</p>
-                            <h3 class="mb-0">{{ stats.total_penalites|intcomma }}</h3>
+                            <h3 class="mb-0">{{ stats.total_penalites|floatformat:0|intcomma }}</h3>
                             <small class="text-muted">GNF</small>
+                            {% if stats.penalites_en_cours > 0 %}
+                            <div class="small text-muted mt-1">
+                                dont <span class="text-danger fw-bold">{{ stats.penalites_en_cours|floatformat:0|intcomma }}</span> en cours
+                            </div>
+                            {% endif %}
                         </div>
                         <div class="text-warning">
                             <i class="fas fa-coins fa-2x"></i>
