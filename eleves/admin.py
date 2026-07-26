@@ -27,6 +27,12 @@ class EcoleAdmin(admin.ModelAdmin):
     )
     actions = ("valider_ecoles", "rejeter_ecoles")
 
+    def delete_queryset(self, request, queryset):
+        """Suppression en masse : passer par delete() de chaque instance pour
+        neutraliser le suivi de synchronisation (cf. Ecole.delete)."""
+        for ecole in queryset:
+            ecole.delete()
+
     def valider_ecoles(self, request, queryset):
         updated = queryset.update(etat="VALIDE")
         self.message_user(request, f"{updated} école(s) validée(s).")

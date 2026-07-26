@@ -70,7 +70,20 @@ class Ecole(SyncTrackedModel):
         except Exception:
             pass
         super().save(*args, **kwargs)
-    
+
+    def delete(self, *args, **kwargs):
+        """
+        Supprime l'école en désactivant le suivi de synchronisation.
+
+        Sans cela, les signaux pre_delete des objets supprimés en cascade
+        (élèves, classes, paiements...) créent de nouveaux SyncChange pointant
+        vers cette école. Créés après la collecte, ils ne sont pas inclus dans
+        la suppression et bloquent la contrainte de clé étrangère (erreur 1451).
+        """
+        from synchronisation.context import mute_sync
+        with mute_sync():
+            return super().delete(*args, **kwargs)
+
     @property
     def tous_telephones(self):
         """Retourne tous les numéros de téléphone séparés par ' / '"""
