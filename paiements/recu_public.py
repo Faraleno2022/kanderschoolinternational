@@ -249,6 +249,26 @@ def recu_public_pdf(request, paiement_id):
             c.setFont('Helvetica', 11)
             top -= line_h
 
+        # Afficher la ventilation réelle de ce paiement sur l'échéancier.
+        from .views import _get_payment_allocation_breakdown
+        allocation = _get_payment_allocation_breakdown(paiement)
+        if allocation:
+            top -= 5
+            c.setFont('Helvetica-Bold', 11)
+            c.drawString(left, top, "AFFECTATION DU PAIEMENT")
+            top -= line_h
+            c.setFont('Helvetica', 10)
+            allocation_lines = (
+                (allocation.get('label_inscription', 'Inscription'), allocation.get('inscription', 0)),
+                ("1ère tranche", allocation.get('tranche_1', 0)),
+                ("2ème tranche", allocation.get('tranche_2', 0)),
+                ("3ème tranche", allocation.get('tranche_3', 0)),
+            )
+            for label, amount in allocation_lines:
+                if amount:
+                    c.drawString(left, top, f"{label}: {amount:,.0f} GNF".replace(",", " "))
+                    top -= line_h
+
         top -= 10
 
         # Situation financière globale
