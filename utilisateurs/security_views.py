@@ -466,11 +466,17 @@ def security_clear_login_lock(request):
                 f'failed_login_{ip}_{username}',
                 f'blocked_login_{ip}',
                 f'blocked_login_{ip}_{username}',
+                # Blocage 24h posé par SecurityMiddleware (SQLi/XSS/UA suspect)
+                f'blocked_ip_{ip}',
+                f'rate_limit_{ip}',
             ]
         elif ip:
             keys = [
                 f'failed_login_{ip}',
                 f'blocked_login_{ip}',
+                # Blocage 24h posé par SecurityMiddleware (SQLi/XSS/UA suspect)
+                f'blocked_ip_{ip}',
+                f'rate_limit_{ip}',
             ]
         else:
             # username seul: tenter de purger les clés exposées par le backend
@@ -624,11 +630,17 @@ def admin_unlock(request):
                     f'failed_login_{ip}_{username}',
                     f'blocked_login_{ip}',
                     f'blocked_login_{ip}_{username}',
+                    # Blocage 24h posé par SecurityMiddleware (SQLi/XSS/UA suspect)
+                    f'blocked_ip_{ip}',
+                    f'rate_limit_{ip}',
                 ]
             elif ip:
                 keys = [
                     f'failed_login_{ip}',
                     f'blocked_login_{ip}',
+                    # Blocage 24h posé par SecurityMiddleware (SQLi/XSS/UA suspect)
+                    f'blocked_ip_{ip}',
+                    f'rate_limit_{ip}',
                 ]
             elif username:
                 try:

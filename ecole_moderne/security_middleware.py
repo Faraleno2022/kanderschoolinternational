@@ -3,7 +3,7 @@ Middleware de sécurité pour protéger l'application contre les attaques
 """
 import logging
 import time
-from django.http import HttpResponseForbidden, HttpResponse
+from django.http import HttpResponseForbidden, HttpResponse, JsonResponse
 from django.template import loader
 from django.core.cache import cache
 from django.conf import settings
@@ -70,11 +70,52 @@ class SecurityMiddleware(MiddlewareMixin):
         'havij',
         'pangolin',
     ]
-    
+
+    # Champs jamais analysés : un mot de passe peut légitimement contenir des
+    # caractères ressemblant à du SQL/XSS (apostrophes, --, <, etc.).
+    # Les scanner bloquait l'IP d'utilisateurs légitimes.
+    SENSITIVE_FIELDS = {
+        'password', 'password1', 'password2', 'old_password',
+        'new_password', 'new_password1', 'new_password2',
+        'confirm_password', 'mot_de_passe', 'motdepasse',
+        'csrfmiddlewaretoken', 'code_verification', 'security_code',
+    }
+
     def __init__(self, get_response):
         self.get_response = get_response
         super().__init__(get_response)
-    
+
+    @staticmethod
+    def _wants_json(request):
+        """Détecte si l'appelant attend du JSON (fetch/XHR)."""
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return True
+        accept = request.headers.get('Accept', '')
+        if 'application/json' in accept:
+            return True
+        content_type = request.META.get('CONTENT_TYPE', '') or ''
+        return content_type.startswith('application/json')
+
+    def _forbidden(self, request, message):
+        """
+        Réponse de blocage adaptée à l'appelant.
+
+        En AJAX on renvoie du JSON : sinon le JavaScript qui fait .json() sur la
+        réponse plante avec une erreur de parsing au lieu d'afficher le message.
+        """
+        if self._wants_json(request):
+            return JsonResponse({'success': False, 'error': message}, status=403)
+        return HttpResponseForbidden(message)
+
+    def _valeurs_post_analysables(self, request):
+        """Retourne les valeurs POST à analyser, hors champs sensibles."""
+        for key, value in request.POST.items():
+            if key.lower() in self.SENSITIVE_FIELDS:
+                continue
+            if isinstance(value, str):
+                yield value
+
+
     def process_request(self, request):
         """
         Traite chaque requête pour détecter les tentatives d'attaque
@@ -102,7 +143,8 @@ class SecurityMiddleware(MiddlewareMixin):
                             }, request)
                             return HttpResponse(html, status=403)
                         except Exception:
-                            return HttpResponseForbidden(
+                            return self._forbidden(
+                                request,
                                 "Accès administrateur interdit. Veuillez consulter l'administrateur du système au 622613559."
                             )
         except Exception:
@@ -114,17 +156,17 @@ class SecurityMiddleware(MiddlewareMixin):
                 # Autoriser uniquement la page de login pour permettre une reprise manuelle
                 if not path.startswith('/utilisateurs/login/'):
                     logger.critical("Système verrouillé: accès refusé à %s (IP %s)", path, client_ip)
-                    return HttpResponseForbidden("Système temporairement verrouillé. Réessayez plus tard.")
+                    return self._forbidden(request, "Système temporairement verrouillé. Réessayez plus tard.")
         except Exception:
             pass
-        
+
         # 0. Bypass sécurisé pour l'admin avec utilisateur staff authentifié
         try:
             if request.path.startswith(admin_prefix) and hasattr(request, 'user') and request.user.is_authenticated and request.user.is_staff:
                 # On applique seulement rate limiting et blocage IP existant, pas de détection agressive
                 if self.is_ip_blocked(client_ip):
                     logger.info(f"Accès admin refusé pour IP bloquée: {client_ip}")
-                    return HttpResponseForbidden("Votre adresse IP a été bloquée.")
+                    return self._forbidden(request, "Votre adresse IP a été bloquée.")
                 self.increment_request_count(client_ip)
                 return None
         except Exception:
@@ -134,36 +176,36 @@ class SecurityMiddleware(MiddlewareMixin):
         # 1. Vérifier le rate limiting
         if self.is_rate_limited(client_ip):
             logger.warning(f"Rate limit dépassé pour IP: {client_ip}")
-            return HttpResponseForbidden("Trop de requêtes. Veuillez patienter.")
-        
+            return self._forbidden(request, "Trop de requêtes. Veuillez patienter.")
+
         # 2. Vérifier les User Agents suspects
         if self.is_suspicious_user_agent(user_agent):
             logger.warning(f"User Agent suspect détecté: {user_agent} depuis IP: {client_ip}")
             self.block_ip(client_ip, "User Agent suspect")
-            return HttpResponseForbidden("Accès refusé.")
-        
+            return self._forbidden(request, "Accès refusé.")
+
         # 3. Vérifier les tentatives d'injection SQL
         if self.detect_sql_injection(request):
             logger.critical(f"Tentative d'injection SQL détectée depuis IP: {client_ip}")
             self.block_ip(client_ip, "Injection SQL")
-            return HttpResponseForbidden("Tentative d'attaque détectée.")
-        
+            return self._forbidden(request, "Tentative d'attaque détectée.")
+
         # 4. Vérifier les tentatives XSS
         if self.detect_xss(request):
             logger.warning(f"Tentative XSS détectée depuis IP: {client_ip}")
             self.block_ip(client_ip, "Tentative XSS")
-            return HttpResponseForbidden("Tentative d'attaque détectée.")
-        
+            return self._forbidden(request, "Tentative d'attaque détectée.")
+
         # 5. Vérifier les tentatives de Path Traversal
         if self.detect_path_traversal(request):
             logger.warning(f"Tentative de Path Traversal détectée depuis IP: {client_ip}")
             self.block_ip(client_ip, "Path Traversal")
-            return HttpResponseForbidden("Tentative d'attaque détectée.")
-        
+            return self._forbidden(request, "Tentative d'attaque détectée.")
+
         # 6. Vérifier si l'IP est bloquée
         if self.is_ip_blocked(client_ip):
             logger.info(f"Accès refusé pour IP bloquée: {client_ip}")
-            return HttpResponseForbidden("Votre adresse IP a été bloquée.")
+            return self._forbidden(request, "Votre adresse IP a été bloquée.")
         
         # 7. Incrémenter le compteur de requêtes
         self.increment_request_count(client_ip)
@@ -203,19 +245,18 @@ class SecurityMiddleware(MiddlewareMixin):
             if re.search(pattern, query, re.IGNORECASE):
                 return True
         
-        # Vérifier dans les paramètres POST (valeurs texte)
+        # Vérifier dans les paramètres POST (hors champs sensibles)
         if request.method == 'POST':
             try:
-                for key, value in request.POST.items():
-                    if isinstance(value, str):
-                        val = value.lower()
-                        for pattern in self.SQL_INJECTION_PATTERNS:
-                            if re.search(pattern, val, re.IGNORECASE):
-                                return True
+                for value in self._valeurs_post_analysables(request):
+                    val = value.lower()
+                    for pattern in self.SQL_INJECTION_PATTERNS:
+                        if re.search(pattern, val, re.IGNORECASE):
+                            return True
             except TooManyFieldsSent:
                 logger.warning("[SECURITY] POST ignoré pour scan SQLi: trop de champs (TooManyFieldsSent)")
                 return False
-        
+
         return False
     
     def detect_xss(self, request):
@@ -226,19 +267,18 @@ class SecurityMiddleware(MiddlewareMixin):
             if re.search(pattern, full_path, re.IGNORECASE):
                 return True
         
-        # Vérifier dans les paramètres POST
+        # Vérifier dans les paramètres POST (hors champs sensibles)
         if request.method == 'POST':
             try:
-                for key, value in request.POST.items():
-                    if isinstance(value, str):
-                        for pattern in self.XSS_PATTERNS:
-                            if re.search(pattern, value.lower(), re.IGNORECASE):
-                                return True
+                for value in self._valeurs_post_analysables(request):
+                    for pattern in self.XSS_PATTERNS:
+                        if re.search(pattern, value.lower(), re.IGNORECASE):
+                            return True
             except TooManyFieldsSent:
                 # Si le formulaire contient trop de champs, ignorer l'analyse POST
                 logger.warning("[SECURITY] POST ignoré pour scan XSS: trop de champs (TooManyFieldsSent)")
                 return False
-        
+
         return False
     
     def detect_path_traversal(self, request):
