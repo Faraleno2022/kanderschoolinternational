@@ -226,6 +226,27 @@ class SchoolFilteringTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 404)
 
+    def test_detail_paiement_liste_tous_les_paiements_du_meme_eleve(self):
+        autre_paiement = Paiement.objects.create(
+            eleve=self.eleve1,
+            type_paiement=self.type_insc,
+            mode_paiement=self.mode_espece,
+            montant=45000,
+            statut='EN_ATTENTE',
+            date_paiement=date(2024, 10, 10),
+        )
+        self.login1()
+
+        response = self.client.get(
+            reverse("paiements:detail_paiement", kwargs={"paiement_id": self.paiement1.id})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        ids = [item.id for item in response.context['paiements_eleve']]
+        self.assertEqual(ids, [autre_paiement.id, self.paiement1.id])
+        self.assertNotIn(self.paiement2.id, ids)
+        self.assertContains(response, autre_paiement.numero_recu)
+
     def test_generer_recu_pdf_other_school_is_404(self):
         self.login1()
         url = reverse("paiements:generer_recu_pdf", kwargs={"paiement_id": self.paiement2.id})
