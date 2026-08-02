@@ -142,7 +142,7 @@
         <div class="table-card">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h4 class="mb-0"><i class="fas fa-list me-2"></i>Liste des élèves de {{ classe_selectionnee.nom }}</h4>
-                <a href="{% url 'eleves:liste_eleves' %}?classe={{ classe_selectionnee.id }}" class="btn btn-outline-primary" target="_blank">
+                <a href="{% url 'eleves:liste_eleves' %}{% if classe_eleve_trouvee %}?classe_id={{ classe_eleve_trouvee.id }}{% endif %}" class="btn btn-outline-primary" target="_blank">
                     <i class="fas fa-external-link-alt me-2"></i>Voir dans le module Élèves
                 </a>
             </div>
@@ -207,6 +207,12 @@
                     <p class="mb-2">
                         <strong>Classe recherchée :</strong> "{{ classe_selectionnee.nom }}" ({{ classe_selectionnee.annee_scolaire }})
                     </p>
+                    {% if classe_eleve_trouvee %}
+                        <p class="mb-2">
+                            <strong>Classe liée dans le module Élèves :</strong>
+                            "{{ classe_eleve_trouvee.nom }}" ({{ classe_eleve_trouvee.annee_scolaire }}) — aucun élève avec le statut ACTIF.
+                        </p>
+                    {% endif %}
                     
                     {% if classes_disponibles %}
                         <p class="mb-2">
