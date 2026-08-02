@@ -3760,23 +3760,22 @@ def eleves_soldes_simple(request):
             reinsc_due=Value(0, output_field=DecimalField(max_digits=12, decimal_places=0))
         )
 
+    # Les champs *_payee de l'échéancier représentent déjà la
+    # couverture financière synchronisée (paiements + remises). Ajouter les
+    # remises ici les comptait une seconde fois et classait certains impayés
+    # comme soldés.
     paye_effectif = ExpressionWrapper(
         Coalesce(F('frais_inscription_paye'), Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)))
         + Coalesce(F('tranche_1_payee'), Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)))
         + Coalesce(F('tranche_2_payee'), Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)))
-        + Coalesce(F('tranche_3_payee'), Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)))
-        + remises_total,
+        + Coalesce(F('tranche_3_payee'), Value(0, output_field=DecimalField(max_digits=12, decimal_places=0))),
         output_field=DecimalField(max_digits=12, decimal_places=0),
     )
-    net_sco_du = Greatest(
-        Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
-        ExpressionWrapper(dues_sco - remises_total, output_field=DecimalField(max_digits=12, decimal_places=0))
-    )
-    
-    # Total dû incluant inscription/réinscription + scolarité nette
+
+    # Total dû de l'échéancier, sans seconde déduction des remises.
     net_du = ExpressionWrapper(
         Coalesce(F('frais_inscription_du'), Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)))
-        + net_sco_du,
+        + dues_sco,
         output_field=DecimalField(max_digits=12, decimal_places=0),
     )
     solde_calc = ExpressionWrapper(net_du - paye_effectif, output_field=DecimalField(max_digits=12, decimal_places=0))
@@ -4357,37 +4356,18 @@ def generer_notes_rappel_classe_pdf(request, classe_id):
             messages.error(request, "Vous n'avez pas accès à cette classe.")
             return redirect('eleves:classe_detail', classe_id=classe_id)
     
-    # Récupérer les élèves avec des impayés (optimisé: 1 requête au lieu de N+1)
-    from .models import ConfigurationPaiement
-    eleves_avec_impayes = []
-
-    try:
-        config = ConfigurationPaiement.objects.get(classe=classe)
-        montant_total = config.montant_inscription + config.montant_scolarite
-
-        # Annoter les paiements validés pour éviter N+1 requêtes
-        eleves_qs = (
-            Eleve.objects.filter(classe=classe, statut='ACTIF')
-            .select_related('classe', 'classe__ecole')
-            .annotate(
-                _total_paye=Coalesce(
-                    Sum('paiements__montant', filter=Q(paiements__statut='VALIDE')),
-                    Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
-                    output_field=DecimalField(max_digits=12, decimal_places=0),
-                ),
-            )
-        )
-        for eleve in eleves_qs:
-            reste = montant_total - eleve._total_paye
-            if reste > 0:
-                eleves_avec_impayes.append(eleve)
-
-    except ConfigurationPaiement.DoesNotExist:
-        messages.warning(request, "Configuration de paiement non définie pour cette classe.")
-        eleves_avec_impayes = list(
-            Eleve.objects.filter(classe=classe, statut='ACTIF')
-            .select_related('classe', 'classe__ecole')
-        )
+    # Récupérer les élèves avec des impayés, à partir de l'échéancier réel de
+    # chaque élève (même source que liste_eleves_impayes / eleves-soldes).
+    echeanciers_classe = (
+        EcheancierPaiement.objects
+        .select_related('eleve', 'eleve__classe', 'eleve__classe__ecole')
+        .filter(eleve__classe=classe, eleve__statut='ACTIF')
+    )
+    eleves_avec_impayes = [
+        echeancier.eleve
+        for echeancier in echeanciers_classe
+        if echeancier.total_du > 0 and echeancier.solde_restant > 0
+    ]
     
     if not eleves_avec_impayes:
         messages.info(request, "Aucun élève avec des impayés dans cette classe.")
@@ -4428,55 +4408,36 @@ def generer_notes_rappel_classe_pdf(request, classe_id):
 
 @login_required
 def generer_toutes_notes_rappel_pdf(request):
-    """Génère les notes de rappel PDF pour TOUS les élèves avec impayés (toutes classes)."""
+    """Génère les notes de rappel PDF pour TOUS les élèves avec impayés (toutes classes).
+
+    Source de vérité: EcheancierPaiement (voir liste_eleves_impayes ci-dessus pour le
+    détail de la correction — l'ancienne version dépendait de ConfigurationPaiement,
+    une table jamais alimentée par le parcours d'inscription réel).
+    """
     from .note_rappel_generator import generer_note_rappel_eleve
-    from .models import ConfigurationPaiement
 
     # Permissions
     if not user_is_admin(request.user) and not can_view_reports(request.user):
         return HttpResponse(status=403)
 
-    # Élèves selon école de l'utilisateur
-    if user_is_superadmin(request.user):
-        eleves_qs = Eleve.objects.filter(statut='ACTIF')
-    else:
+    echeanciers = (
+        EcheancierPaiement.objects
+        .select_related('eleve', 'eleve__classe', 'eleve__classe__ecole', 'eleve__responsable_principal')
+        .filter(eleve__statut='ACTIF')
+    )
+    if not user_is_superadmin(request.user):
         ecole_user = user_school(request.user)
         if ecole_user is None:
             messages.warning(request, "Aucune école associée à votre compte.")
             return redirect('paiements:liste_eleves_impayes')
-        eleves_qs = Eleve.objects.filter(classe__ecole=ecole_user, statut='ACTIF')
+        echeanciers = echeanciers.filter(eleve__classe__ecole=ecole_user)
+    echeanciers = echeanciers.order_by('eleve__classe__nom', 'eleve__nom', 'eleve__prenom')
 
-    # Construire un dictionnaire classe_id -> montant total (évite Subquery incompatible MySQL $)
-    config_map = {}
-    for conf in ConfigurationPaiement.objects.all():
-        config_map[conf.classe_id] = (conf.montant_inscription or 0) + (conf.montant_scolarite or 0)
-
-    eleves_qs = (
-        eleves_qs
-        .select_related('classe', 'classe__ecole', 'responsable_principal')
-        .annotate(
-            _total_paye=Coalesce(
-                Sum('paiements__montant', filter=Q(paiements__statut='VALIDE')),
-                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
-                output_field=DecimalField(max_digits=12, decimal_places=0),
-            ),
-        )
-        .order_by('classe__nom', 'nom', 'prenom')
-    )
-
-    eleves_avec_impayes = []
-    for eleve in eleves_qs[:500]:
-        config_total = config_map.get(eleve.classe_id, 0)
-        if config_total <= 0:
-            continue
-        total_paye = int(eleve._total_paye)
-        reste = config_total - total_paye
-        if reste <= 0:
-            continue
-        eleve._config_total = config_total
-        eleve._total_paye_val = total_paye
-        eleve._reste_a_payer = reste
-        eleves_avec_impayes.append(eleve)
+    eleves_avec_impayes = [
+        echeancier.eleve
+        for echeancier in echeanciers[:500]
+        if echeancier.total_du > 0 and echeancier.solde_restant > 0
+    ]
 
     if not eleves_avec_impayes:
         messages.info(request, "Aucun élève avec des impayés.")
@@ -4517,53 +4478,35 @@ def generer_toutes_notes_rappel_pdf(request):
 def liste_eleves_impayes(request):
     """Affiche la liste des élèves avec des impayés.
 
-    Optimisé: utilise des annotations DB au lieu de boucler avec N+1 requêtes.
+    Source de vérité: EcheancierPaiement (le même système que /paiements/eleves-soldes/
+    et le rapport comptable). L'ancienne version lisait ConfigurationPaiement, une table
+    per-classe distincte et jamais alimentée par le parcours d'inscription réel
+    (GrilleTarifaire -> EcheancierPaiement), ce qui faisait toujours remonter une liste
+    vide pour les écoles utilisant le système standard.
     """
-    from .models import ConfigurationPaiement
-
-    # IMPORTANT: Seul le superuser peut voir toutes les écoles
-    if user_is_superadmin(request.user):
-        eleves = Eleve.objects.filter(statut='ACTIF')
-    else:
-        ecole_user = user_school(request.user)
-        if ecole_user is None:
-            eleves = Eleve.objects.none()
-        else:
-            eleves = Eleve.objects.filter(classe__ecole=ecole_user, statut='ACTIF')
-
-    # Construire un dictionnaire classe_id -> montant total (évite Subquery incompatible MySQL $)
-    config_map = {}
-    for conf in ConfigurationPaiement.objects.all():
-        config_map[conf.classe_id] = (conf.montant_inscription or 0) + (conf.montant_scolarite or 0)
-
-    eleves = (
-        eleves
-        .select_related('classe', 'classe__ecole')
-        .annotate(
-            _total_paye=Coalesce(
-                Sum('paiements__montant', filter=Q(paiements__statut='VALIDE')),
-                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
-                output_field=DecimalField(max_digits=12, decimal_places=0),
-            ),
-        )
-        .order_by('classe__nom', 'nom', 'prenom')
+    echeanciers = (
+        EcheancierPaiement.objects
+        .select_related('eleve', 'eleve__classe', 'eleve__classe__ecole')
+        .filter(eleve__statut='ACTIF')
     )
+    echeanciers = filter_by_user_school(echeanciers, request.user, 'eleve__classe__ecole')
+    echeanciers = echeanciers.order_by('eleve__classe__nom', 'eleve__nom', 'eleve__prenom')
 
     eleves_avec_soldes = []
-    for eleve in eleves:
-        montant_total = config_map.get(eleve.classe_id, 0)
+    for echeancier in echeanciers:
+        montant_total = echeancier.total_du
         if montant_total <= 0:
             continue
-        montant_paye = int(eleve._total_paye)
-        reste = montant_total - montant_paye
+        montant_paye = echeancier.total_paye
+        reste = echeancier.solde_restant
         if reste <= 0:
             continue
         eleves_avec_soldes.append({
-            'eleve': eleve,
-            'montant_total': montant_total,
-            'montant_paye': montant_paye,
-            'reste_a_payer': reste,
-            'pourcentage_paye': int((montant_paye / montant_total * 100)) if montant_total > 0 else 0,
+            'eleve': echeancier.eleve,
+            'montant_total': int(montant_total),
+            'montant_paye': int(montant_paye),
+            'reste_a_payer': int(reste),
+            'pourcentage_paye': int(echeancier.pourcentage_paye),
         })
 
     # Trier par reste à payer décroissant

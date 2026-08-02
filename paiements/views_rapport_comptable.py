@@ -8,6 +8,7 @@ from django.shortcuts import render
 from django.utils import timezone
 
 from eleves.models import Classe
+from eleves.utils_annee import get_annee_active
 from utilisateurs.permissions import can_view_reports
 from utilisateurs.utils import filter_by_user_school, user_school
 
@@ -36,9 +37,27 @@ def _retard_echeancier(echeancier, date_reference):
     return retard
 
 
+def _debut_annee_scolaire_defaut(request, aujourd_hui):
+    """Renvoie le 1er septembre de l'année scolaire active, pour éviter un
+    rapport vide en début de mois calendaire (ex: le rapport ne montrait plus
+    rien les 1er/2 du mois, alors que les paiements de l'année scolaire en
+    cours restaient tous antérieurs à cette date)."""
+    ecole = user_school(request.user)
+    annee = get_annee_active(request, ecole) if ecole else None
+    if annee:
+        try:
+            annee_debut = int(str(annee).split('-')[0])
+            return date(annee_debut, 9, 1)
+        except (ValueError, IndexError):
+            pass
+    # Repli si aucune classe/année active n'est trouvée (ex: nouvelle école):
+    # couvrir une année glissante plutôt que le seul mois en cours.
+    return aujourd_hui.replace(year=aujourd_hui.year - 1)
+
+
 def _rapport_data(request):
     aujourd_hui = timezone.localdate()
-    debut_defaut = aujourd_hui.replace(day=1)
+    debut_defaut = _debut_annee_scolaire_defaut(request, aujourd_hui)
     date_debut = _parse_date(request.GET.get("date_debut"), debut_defaut)
     date_fin = _parse_date(request.GET.get("date_fin"), aujourd_hui)
     if date_debut > date_fin:
