@@ -5,6 +5,7 @@ from django.db.models import Q, Sum, Count, F, DecimalField, ExpressionWrapper
 from django.db import models
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
+from django.core.paginator import Paginator
 from datetime import datetime, date
 from decimal import Decimal
 import openpyxl
@@ -12,76 +13,65 @@ from openpyxl.styles import Font, Alignment, PatternFill
 
 from .models_logistique import (
     CategorieArticle, Article, BienEtablissement, 
-    MouvementStock, Inventaire, LigneInventaire
+    MouvementStock, Inventaire, LigneInventaire, SuiviPapierRam
 )
 from .forms import (
     CategorieArticleForm, ArticleForm, BienEtablissementForm, MouvementStockForm,
-    InventaireForm, LigneInventaireForm
+    InventaireForm, LigneInventaireForm, SuiviPapierRamForm
 )
+
+
+def _ecole_queryset(queryset, request, field='ecole'):
+    from utilisateurs.utils import user_school, user_is_superadmin
+    if user_is_superadmin(request.user):
+        return queryset
+    ecole = user_school(request.user)
+    return queryset.filter(**{field: ecole}) if ecole else queryset.none()
+
+
+def _biens_ecole_queryset(queryset, request):
+    """Inclut les anciens biens sans ecole quand leur createur appartient a l'etablissement."""
+    from utilisateurs.utils import user_school, user_is_superadmin
+    if user_is_superadmin(request.user):
+        return queryset
+    ecole = user_school(request.user)
+    if not ecole:
+        return queryset.none()
+    return queryset.filter(
+        Q(ecole=ecole) | Q(ecole__isnull=True, cree_par__profil__ecole=ecole)
+    ).distinct()
 
 
 @login_required
 def dashboard_logistique(request):
-    """Dashboard principal de la logistique"""
+    """Tableau de bord simplifié : biens de l'établissement et papier RAM."""
     from utilisateurs.utils import user_school
 
     ecole = user_school(request.user)
 
-    # Filtres de base par école
-    articles_qs = Article.objects.filter(actif=True)
-    biens_qs = BienEtablissement.objects.filter(actif=True)
-    mouvements_qs = MouvementStock.objects.all()
-    if ecole:
-        articles_qs = articles_qs.filter(cree_par__profil__ecole=ecole)
-        biens_qs = biens_qs.filter(cree_par__profil__ecole=ecole)
-        mouvements_qs = mouvements_qs.filter(cree_par__profil__ecole=ecole)
+    biens_qs = _biens_ecole_queryset(BienEtablissement.objects.filter(actif=True), request)
+    ram_qs = _ecole_queryset(SuiviPapierRam.objects.select_related('eleve', 'eleve__classe'), request)
 
-    # Statistiques générales
-    total_articles = articles_qs.count()
-    total_biens = biens_qs.count()
-
-    # Valeur totale du stock
-    valeur_article = ExpressionWrapper(
-        F('stock_actuel') * F('prix_unitaire'),
+    valeur_bien = ExpressionWrapper(
+        F('quantite_achetee') * F('prix_achat_unitaire'),
         output_field=DecimalField(max_digits=20, decimal_places=0),
     )
-    valeur_stock = articles_qs.aggregate(total=Sum(valeur_article))
-
-    # Articles en alerte (stock minimum)
-    articles_alerte = articles_qs.filter(
-        stock_actuel__lte=models.F('stock_minimum')
-    ).count()
-
-    # Derniers mouvements
-    derniers_mouvements = mouvements_qs.select_related(
-        'article', 'cree_par'
-    ).order_by('-date_mouvement')[:10]
-
-    # Répartition par catégorie
-    repartition_categories = CategorieArticle.objects.annotate(
-        nb_articles=Count('articles'),
-        valeur_totale=Sum(
-            ExpressionWrapper(
-                F('articles__stock_actuel') * F('articles__prix_unitaire'),
-                output_field=DecimalField(max_digits=20, decimal_places=0),
-            )
-        ),
-    ).filter(actif=True)
-
-    # Biens nécessitant une maintenance
-    biens_maintenance = biens_qs.filter(
-        date_prochaine_maintenance__lte=date.today()
-    ).count()
+    biens_stats = biens_qs.aggregate(
+        total=Count('id'), achetes=Sum('quantite_achetee'), utilises=Sum('quantite_utilisee'),
+        gates=Sum('quantite_gate'), valeur=Sum(valeur_bien),
+    )
+    ram_stats = ram_qs.aggregate(
+        contributions=Count('id'), eleves=Count('eleve', distinct=True),
+        paquets=Sum('nombre_paquets'), montant=Sum('montant_paye'),
+    )
     
     context = {
-        'titre_page': 'Dashboard Logistique',
-        'total_articles': total_articles,
-        'total_biens': total_biens,
-        'valeur_stock': valeur_stock.get('total', 0) or 0,
-        'articles_alerte': articles_alerte,
-        'derniers_mouvements': derniers_mouvements,
-        'repartition_categories': repartition_categories,
-        'biens_maintenance': biens_maintenance,
+        'titre_page': 'Logistique simplifiée',
+        'ecole': ecole,
+        'biens_stats': {key: value or 0 for key, value in biens_stats.items()},
+        'ram_stats': {key: value or 0 for key, value in ram_stats.items()},
+        'derniers_biens': biens_qs.order_by('-date_creation')[:8],
+        'dernieres_contributions': ram_qs.order_by('-date_remise', '-date_creation')[:8],
     }
     
     return render(request, 'depenses/logistique/dashboard.html', context)
@@ -139,23 +129,18 @@ def liste_articles(request):
 @login_required
 def liste_biens(request):
     """Liste des biens de l'établissement"""
-    from utilisateurs.utils import user_school
-
     # Filtres
     q = request.GET.get('q', '')
     type_bien = request.GET.get('type_bien', '')
     etat = request.GET.get('etat', '')
 
-    biens = BienEtablissement.objects.filter(actif=True)
-    # Sécurité : filtrer par école
-    ecole = user_school(request.user)
-    if ecole:
-        biens = biens.filter(cree_par__profil__ecole=ecole)
+    biens = _biens_ecole_queryset(BienEtablissement.objects.filter(actif=True), request)
     
     if q:
         biens = biens.filter(
             Q(code_bien__icontains=q) |
             Q(nom__icontains=q) |
+            Q(marque__icontains=q) |
             Q(localisation__icontains=q)
         )
     
@@ -165,12 +150,17 @@ def liste_biens(request):
     if etat:
         biens = biens.filter(etat=etat)
     
+    stats = biens.aggregate(
+        achetes=Sum('quantite_achetee'), utilises=Sum('quantite_utilisee'),
+        gates=Sum('quantite_gate'),
+    )
     context = {
         'titre_page': 'Biens de l\'Établissement',
         'biens': biens,
         'q': q,
         'type_bien': type_bien,
         'etat': etat,
+        'stats': {key: value or 0 for key, value in stats.items()},
     }
     
     return render(request, 'depenses/logistique/liste_biens.html', context)
@@ -185,6 +175,11 @@ def creer_bien(request):
         if form.is_valid():
             bien = form.save(commit=False)
             bien.cree_par = request.user
+            from utilisateurs.utils import user_school
+            bien.ecole = user_school(request.user)
+            if not bien.ecole:
+                messages.error(request, "Aucun établissement associé à votre compte.")
+                return redirect('depenses:dashboard_logistique')
             
             # Générer le code du bien si non fourni
             if not bien.code_bien:
@@ -218,7 +213,7 @@ def creer_bien(request):
 def modifier_bien(request, bien_id):
     """Modifier un bien de l'établissement"""
     
-    bien = get_object_or_404(BienEtablissement, pk=bien_id)
+    bien = get_object_or_404(_biens_ecole_queryset(BienEtablissement.objects.all(), request), pk=bien_id)
     
     if request.method == 'POST':
         form = BienEtablissementForm(request.POST, request.FILES, instance=bien)
@@ -236,6 +231,62 @@ def modifier_bien(request, bien_id):
     }
     
     return render(request, 'depenses/logistique/form_bien.html', context)
+
+
+@login_required
+def liste_papier_ram(request):
+    q = (request.GET.get('q') or '').strip()
+    classe_id = (request.GET.get('classe') or '').strip()
+    mode = (request.GET.get('mode') or '').strip().upper()
+    suivis = _ecole_queryset(
+        SuiviPapierRam.objects.select_related('eleve', 'eleve__classe', 'ecole', 'cree_par'), request
+    )
+    if q:
+        suivis = suivis.filter(
+            Q(eleve__nom__icontains=q) | Q(eleve__prenom__icontains=q)
+            | Q(eleve__matricule__icontains=q)
+        )
+    if classe_id:
+        suivis = suivis.filter(eleve__classe_id=classe_id)
+    if mode in {'PAPIER', 'ARGENT'}:
+        suivis = suivis.filter(mode=mode)
+
+    from eleves.models import Classe
+    classes = _ecole_queryset(Classe.objects.order_by('nom'), request, 'ecole')
+    stats = suivis.aggregate(
+        eleves=Count('eleve', distinct=True), contributions=Count('id'),
+        paquets=Sum('nombre_paquets'), montant=Sum('montant_paye'),
+    )
+    page_obj = Paginator(suivis.order_by('-date_remise', '-date_creation'), 30).get_page(request.GET.get('page'))
+    return render(request, 'depenses/logistique/papier_ram_liste.html', {
+        'titre_page': 'Gestion du papier RAM', 'page_obj': page_obj,
+        'classes': classes, 'q': q, 'classe_id': classe_id, 'mode': mode,
+        'stats': {key: value or 0 for key, value in stats.items()},
+    })
+
+
+@login_required
+def creer_papier_ram(request):
+    from utilisateurs.utils import user_school
+    ecole = user_school(request.user)
+    if not ecole:
+        messages.error(request, "Aucun établissement associé à votre compte.")
+        return redirect('depenses:dashboard_logistique')
+    if request.method == 'POST':
+        form = SuiviPapierRamForm(request.POST, ecole=ecole)
+        if form.is_valid():
+            suivi = form.save(commit=False)
+            suivi.ecole = ecole
+            suivi.cree_par = request.user
+            suivi.full_clean()
+            suivi.save()
+            messages.success(request, "Contribution papier RAM enregistrée.")
+            return redirect('depenses:liste_papier_ram')
+    else:
+        form = SuiviPapierRamForm(ecole=ecole, initial={'date_remise': date.today()})
+    return render(request, 'depenses/logistique/papier_ram_form.html', {
+        'titre_page': 'Nouvelle contribution papier RAM', 'form': form,
+    })
 
 
 @login_required

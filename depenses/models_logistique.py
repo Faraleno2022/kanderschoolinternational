@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from decimal import Decimal
 from synchronisation.mixins import SyncTrackedModel
+from django.core.exceptions import ValidationError
 
 
 class CategorieArticle(SyncTrackedModel):
@@ -140,6 +141,7 @@ class BienEtablissement(SyncTrackedModel):
         ('GLOBE_TERRESTRE', 'Globe terrestre'),
         ('CARTE', 'Carte géographique'),
         ('COMPAS', 'Compas'),
+        ('MARQUEUR', 'Marqueur(s)'),
         ('EQUERRE', 'Équerre'),
         # Électricité
         ('AMPOULE', 'Ampoule(s)'),
@@ -158,8 +160,22 @@ class BienEtablissement(SyncTrackedModel):
     
     # Identification
     code_bien = models.CharField(max_length=50, unique=True, verbose_name="Code du bien")
+    ecole = models.ForeignKey(
+        'eleves.Ecole', on_delete=models.CASCADE, related_name='biens_logistiques',
+        null=True, blank=True, verbose_name="Établissement",
+    )
     nom = models.CharField(max_length=200, verbose_name="Nom/Désignation")
     type_bien = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Type de bien")
+    marque = models.CharField(max_length=100, blank=True, verbose_name="Marque")
+
+    # Suivi simplifié des quantités
+    quantite_achetee = models.PositiveIntegerField(default=1, verbose_name="Quantité achetée")
+    quantite_utilisee = models.PositiveIntegerField(default=0, verbose_name="Quantité utilisée")
+    quantite_gate = models.PositiveIntegerField(default=0, verbose_name="Quantité gâtée/perdue")
+    prix_achat_unitaire = models.DecimalField(
+        max_digits=15, decimal_places=0, default=Decimal('0'),
+        verbose_name="Prix d'achat unitaire (GNF)",
+    )
     
     # Description
     description = models.TextField(blank=True, verbose_name="Description")
@@ -200,6 +216,78 @@ class BienEtablissement(SyncTrackedModel):
         if self.date_prochaine_maintenance:
             return timezone.now().date() >= self.date_prochaine_maintenance
         return False
+
+    @property
+    def quantite_disponible(self):
+        return max(0, self.quantite_achetee - self.quantite_utilisee - self.quantite_gate)
+
+    @property
+    def valeur_achat_totale(self):
+        return self.quantite_achetee * self.prix_achat_unitaire
+
+    def clean(self):
+        super().clean()
+        consommee = (self.quantite_utilisee or 0) + (self.quantite_gate or 0)
+        if consommee > (self.quantite_achetee or 0):
+            raise ValidationError(
+                "La quantité utilisée et la quantité gâtée ne peuvent pas dépasser la quantité achetée."
+            )
+
+
+class SuiviPapierRam(SyncTrackedModel):
+    """Papier RAM remis par un élève ou argent payé en remplacement."""
+
+    MODE_CHOICES = [
+        ('PAPIER', 'Papier RAM remis'),
+        ('ARGENT', 'Argent payé à la place'),
+    ]
+
+    ecole = models.ForeignKey(
+        'eleves.Ecole', on_delete=models.CASCADE, related_name='suivis_papier_ram',
+        verbose_name="Établissement",
+    )
+    eleve = models.ForeignKey(
+        'eleves.Eleve', on_delete=models.CASCADE, related_name='suivis_papier_ram',
+        verbose_name="Élève",
+    )
+    mode = models.CharField(max_length=10, choices=MODE_CHOICES, verbose_name="Type de contribution")
+    nombre_paquets = models.PositiveIntegerField(default=0, verbose_name="Nombre de paquets")
+    montant_paye = models.DecimalField(
+        max_digits=12, decimal_places=0, default=Decimal('0'),
+        verbose_name="Montant payé (GNF)",
+    )
+    date_remise = models.DateField(default=timezone.localdate, verbose_name="Date")
+    observations = models.TextField(blank=True, verbose_name="Observations")
+    cree_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Contribution papier RAM"
+        verbose_name_plural = "Contributions papier RAM"
+        ordering = ['-date_remise', '-date_creation']
+        indexes = [
+            models.Index(fields=['ecole', 'date_remise']),
+            models.Index(fields=['eleve', 'mode']),
+        ]
+
+    def __str__(self):
+        return f"{self.eleve.nom_complet} - {self.get_mode_display()}"
+
+    def clean(self):
+        super().clean()
+        if self.eleve_id and self.ecole_id:
+            ecole_eleve_id = getattr(getattr(self.eleve, 'classe', None), 'ecole_id', None)
+            if ecole_eleve_id != self.ecole_id:
+                raise ValidationError("Élève et établissement incompatibles.")
+        if self.mode == 'PAPIER':
+            if not self.nombre_paquets:
+                raise ValidationError({'nombre_paquets': "Indiquez au moins un paquet."})
+            self.montant_paye = Decimal('0')
+        elif self.mode == 'ARGENT':
+            if not self.montant_paye or self.montant_paye <= 0:
+                raise ValidationError({'montant_paye': "Indiquez le montant payé."})
+            self.nombre_paquets = 0
 
 
 class MouvementStock(SyncTrackedModel):

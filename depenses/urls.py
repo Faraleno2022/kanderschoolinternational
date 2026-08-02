@@ -25,23 +25,11 @@ urlpatterns = [
     
     # ===== LOGISTIQUE =====
     path('logistique/', views_logistique.dashboard_logistique, name='dashboard_logistique'),
-    path('logistique/articles/', views_logistique.liste_articles, name='liste_articles'),
-    path('logistique/articles/nouveau/', views_logistique.creer_article, name='creer_article'),
-    path('logistique/articles/<int:article_id>/', views_logistique.detail_article, name='detail_article'),
-    path('logistique/articles/<int:article_id>/modifier/', views_logistique.modifier_article, name='modifier_article'),
-    path('logistique/articles/<int:article_id>/supprimer/', views_logistique.supprimer_article, name='supprimer_article'),
-    path('logistique/categories/', views_logistique.gestion_categories_articles, name='gestion_categories_articles'),
-    path('logistique/categories/<int:categorie_id>/modifier/', views_logistique.modifier_categorie_article, name='modifier_categorie_article'),
     path('logistique/biens/', views_logistique.liste_biens, name='liste_biens'),
     path('logistique/biens/nouveau/', views_logistique.creer_bien, name='creer_bien'),
     path('logistique/biens/<int:bien_id>/modifier/', views_logistique.modifier_bien, name='modifier_bien'),
-    path('logistique/mouvements/', views_logistique.liste_mouvements, name='liste_mouvements'),
-    path('logistique/mouvements/nouveau/', views_logistique.creer_mouvement, name='creer_mouvement'),
-    path('logistique/inventaires/', views_logistique.liste_inventaires, name='liste_inventaires'),
-    path('logistique/inventaires/nouveau/', views_logistique.creer_inventaire, name='creer_inventaire'),
-    path('logistique/inventaires/<int:inventaire_id>/', views_logistique.detail_inventaire, name='detail_inventaire'),
-    path('logistique/inventaires/<int:inventaire_id>/valider/', views_logistique.valider_inventaire, name='valider_inventaire'),
-    path('logistique/export/excel/', views_logistique.export_stock_excel, name='export_stock_excel'),
+    path('logistique/papier-ram/', views_logistique.liste_papier_ram, name='liste_papier_ram'),
+    path('logistique/papier-ram/nouveau/', views_logistique.creer_papier_ram, name='creer_papier_ram'),
     
     # ===== BIBLIOTHÈQUE =====
     path('bibliotheque/', views_bibliotheque.dashboard_bibliotheque, name='dashboard_bibliotheque'),

@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Papier RAM{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div><h2>Gestion du papier RAM</h2><p class="text-muted mb-0">Papier remis par les élèves ou argent versé à la place</p></div>
+    <a href="{% url 'depenses:creer_papier_ram' %}" class="btn btn-success"><i class="fas fa-plus me-1"></i>Nouvelle contribution</a>
+  </div>
+  <div class="row g-3 mb-3">
+    <div class="col-md-3"><div class="card"><div class="card-body"><small>Élèves</small><h3>{{ stats.eleves|intcomma }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body"><small>Contributions</small><h3>{{ stats.contributions|intcomma }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body"><small>Paquets reçus</small><h3>{{ stats.paquets|intcomma }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body"><small>Montant reçu</small><h3>{{ stats.montant|intcomma }} GNF</h3></div></div></div>
+  </div>
+  <form method="get" class="card card-body mb-3"><div class="row g-2">
+    <div class="col-md-5"><input name="q" value="{{ q }}" class="form-control" placeholder="Nom, prénom ou matricule"></div>
+    <div class="col-md-3"><select name="classe" class="form-select"><option value="">Toutes les classes</option>{% for classe in classes %}<option value="{{ classe.id }}" {% if classe_id == classe.id|stringformat:'s' %}selected{% endif %}>{{ classe.nom }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><select name="mode" class="form-select"><option value="">Tous les modes</option><option value="PAPIER" {% if mode == 'PAPIER' %}selected{% endif %}>Papier remis</option><option value="ARGENT" {% if mode == 'ARGENT' %}selected{% endif %}>Argent payé</option></select></div>
+    <div class="col-md-2"><button class="btn btn-outline-primary w-100">Rechercher</button></div>
+  </div></form>
+  <div class="card shadow-sm"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
+    <thead><tr><th>Date</th><th>Matricule</th><th>Élève</th><th>Classe</th><th>Mode</th><th>Paquets</th><th>Montant</th><th>Observation</th></tr></thead>
+    <tbody>{% for suivi in page_obj %}<tr><td>{{ suivi.date_remise|date:'d/m/Y' }}</td><td>{{ suivi.eleve.matricule }}</td><td>{{ suivi.eleve.nom_complet }}</td><td>{{ suivi.eleve.classe }}</td><td>{{ suivi.get_mode_display }}</td><td>{{ suivi.nombre_paquets }}</td><td>{{ suivi.montant_paye|intcomma }} GNF</td><td>{{ suivi.observations|default:'—'|truncatechars:40 }}</td></tr>{% empty %}<tr><td colspan="8" class="text-center text-muted py-5">Aucune contribution trouvée</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% if page_obj.has_other_pages %}<div class="card-footer text-center">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</div>{% endif %}
+  </div>
+</div>
+{% endblock %}
