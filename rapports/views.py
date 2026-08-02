@@ -18,6 +18,7 @@ from reportlab.lib.units import inch
 from .models import Rapport, TypeRapport, ExportProgramme
 from .utils import collecter_donnees_periode, generer_pdf_periode, _draw_header_and_watermark
 from eleves.models import Eleve, Ecole
+from eleves.utils_annee import get_annee_active
 from paiements.models import Paiement, PaiementRemise, EcheancierPaiement, TypePaiement
 from bus.models import AbonnementBus
 from depenses.models import Depense
@@ -984,14 +985,28 @@ def rapport_remises_detaille(request):
     date_debut = request.GET.get('date_debut')
     date_fin = request.GET.get('date_fin')
     
-    # Dates par défaut (mois en cours)
+    # Par défaut, couvrir l'année scolaire active. Une limitation au mois
+    # calendaire rendait le rapport vide au changement de mois alors que les
+    # remises de l'année restaient pertinentes pour le comptable.
+    aujourd_hui = date.today()
+    ecole_courante = user_school(request.user)
+    annee_active = get_annee_active(request, ecole_courante) if ecole_courante else None
+    try:
+        annee_debut = int(str(annee_active).split('-')[0])
+        debut_defaut = date(annee_debut, 9, 1)
+    except (TypeError, ValueError, IndexError):
+        try:
+            debut_defaut = aujourd_hui.replace(year=aujourd_hui.year - 1)
+        except ValueError:
+            debut_defaut = aujourd_hui.replace(year=aujourd_hui.year - 1, day=28)
+
     if not date_debut:
-        date_debut = date.today().replace(day=1)
+        date_debut = debut_defaut
     else:
         date_debut = datetime.strptime(date_debut, '%Y-%m-%d').date()
     
     if not date_fin:
-        date_fin = date.today()
+        date_fin = aujourd_hui
     else:
         date_fin = datetime.strptime(date_fin, '%Y-%m-%d').date()
     
@@ -1019,8 +1034,10 @@ def rapport_remises_detaille(request):
         total=Sum('montant_remise')
     )['total'] or Decimal('0')
     
-    total_montants_finals = remises_appliquees.aggregate(
-        total=Sum('paiement__montant')
+    # Ne compter chaque paiement qu'une fois lorsqu'il porte plusieurs remises.
+    paiement_ids = remises_appliquees.values_list('paiement_id', flat=True).distinct()
+    total_montants_finals = Paiement.objects.filter(pk__in=paiement_ids).aggregate(
+        total=Sum('montant')
     )['total'] or Decimal('0')
     
     difference_totale = total_montants_finals - total_remises
