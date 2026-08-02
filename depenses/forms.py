@@ -7,8 +7,9 @@ from .models import (
 )
 from .models_logistique import (
     CategorieArticle, Article, BienEtablissement, MouvementStock,
-    Inventaire, LigneInventaire
+    Inventaire, LigneInventaire, SuiviPapierRam
 )
+from eleves.models import Eleve
 from .models_bibliotheque import Livre, Emprunt, Reservation, CategorieLivre
 
 class DepenseForm(forms.ModelForm):
@@ -418,26 +419,58 @@ class BienEtablissementForm(forms.ModelForm):
     class Meta:
         model = BienEtablissement
         fields = [
-            'code_bien', 'nom', 'type_bien', 'description', 'localisation',
-            'superficie', 'capacite', 'etat', 'valeur_acquisition', 'date_acquisition',
-            'date_derniere_maintenance', 'date_prochaine_maintenance', 'photo', 'observations'
+            'code_bien', 'nom', 'type_bien', 'marque', 'quantite_achetee',
+            'prix_achat_unitaire', 'quantite_utilisee', 'quantite_gate',
+            'date_acquisition', 'localisation', 'description', 'photo', 'observations'
         ]
         widgets = {
             'code_bien': forms.TextInput(attrs={'class': 'form-control'}),
             'nom': forms.TextInput(attrs={'class': 'form-control'}),
             'type_bien': forms.Select(attrs={'class': 'form-control'}),
+            'marque': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: BIC, HP, Samsung...'}),
+            'quantite_achetee': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'prix_achat_unitaire': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'quantite_utilisee': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'quantite_gate': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'localisation': forms.TextInput(attrs={'class': 'form-control'}),
-            'superficie': forms.NumberInput(attrs={'class': 'form-control'}),
-            'capacite': forms.NumberInput(attrs={'class': 'form-control'}),
-            'etat': forms.Select(attrs={'class': 'form-control'}),
-            'valeur_acquisition': forms.NumberInput(attrs={'class': 'form-control'}),
             'date_acquisition': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'date_derniere_maintenance': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'date_prochaine_maintenance': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'photo': forms.FileInput(attrs={'class': 'form-control'}),
             'observations': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['code_bien'].required = False
+        self.fields['code_bien'].widget.attrs['placeholder'] = 'Généré automatiquement si vide'
+
+
+class SuiviPapierRamForm(forms.ModelForm):
+    class Meta:
+        model = SuiviPapierRam
+        fields = ['eleve', 'mode', 'nombre_paquets', 'montant_paye', 'date_remise', 'observations']
+        widgets = {
+            'eleve': forms.Select(attrs={'class': 'form-select', 'id': 'id_eleve'}),
+            'mode': forms.Select(attrs={'class': 'form-select', 'id': 'id_mode'}),
+            'nombre_paquets': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'montant_paye': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'date_remise': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'observations': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, ecole=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        eleves = Eleve.objects.select_related('classe').filter(statut='ACTIF').order_by('classe__nom', 'nom', 'prenom')
+        self.fields['eleve'].queryset = eleves.filter(classe__ecole=ecole) if ecole else eleves.none()
+
+    def clean(self):
+        cleaned = super().clean()
+        mode = cleaned.get('mode')
+        if mode == 'PAPIER':
+            cleaned['montant_paye'] = Decimal('0')
+        elif mode == 'ARGENT':
+            cleaned['nombre_paquets'] = 0
+        return cleaned
 
 
 class MouvementStockForm(forms.ModelForm):

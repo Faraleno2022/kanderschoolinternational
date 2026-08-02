@@ -26,6 +26,7 @@ SYNC_MODEL_LABELS = [
     'depenses.MouvementStock',
     'depenses.Inventaire',
     'depenses.LigneInventaire',
+    'depenses.SuiviPapierRam',
     'depenses.CategorieLivre',
     'depenses.Livre',
     'depenses.Emprunt',

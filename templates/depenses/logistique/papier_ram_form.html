@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Nouvelle contribution papier RAM{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between mb-3"><div><h2>Nouvelle contribution papier RAM</h2><p class="text-muted">Sélectionnez l'élève puis indiquez le papier remis ou l'argent payé.</p></div><a href="{% url 'depenses:liste_papier_ram' %}" class="btn btn-outline-secondary align-self-start">Retour</a></div>
+  <form method="post" class="card shadow-sm"><div class="card-body">{% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="mb-3"><label class="form-label">Rechercher l'élève</label><input type="search" id="student-search" class="form-control" placeholder="Nom, prénom, matricule ou classe"></div>
+    <div class="row g-3">{% for field in form %}<div id="field-{{ field.name }}" class="{% if field.name == 'observations' %}col-12{% else %}col-md-6{% endif %}"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</div>{% endfor %}</div>
+  </div><div class="card-footer text-end"><button class="btn btn-success px-4"><i class="fas fa-save me-1"></i>Enregistrer</button></div></form>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const search = document.getElementById('student-search');
+  const select = document.getElementById('id_eleve');
+  const mode = document.getElementById('id_mode');
+  const packets = document.getElementById('field-nombre_paquets');
+  const money = document.getElementById('field-montant_paye');
+  const options = Array.from(select.options);
+  search.addEventListener('input', function () {
+    const q = this.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    options.forEach(function (option, index) {
+      if (index === 0) return;
+      const text = option.text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      option.hidden = q && !text.includes(q);
+    });
+  });
+  function toggleFields() {
+    const isPaper = mode.value === 'PAPIER';
+    packets.style.display = isPaper ? 'block' : 'none';
+    money.style.display = isPaper ? 'none' : 'block';
+  }
+  mode.addEventListener('change', toggleFields);
+  toggleFields();
+});
+</script>
+{% endblock %}
