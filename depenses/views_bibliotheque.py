@@ -1,17 +1,147 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q, Count, Sum
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 from datetime import datetime, date, timedelta
 from decimal import Decimal
+import uuid
 
 from .models_bibliotheque import (
     CategorieLivre, Livre, Emprunt, Reservation,
     HistoriqueLivre, ParametreBibliotheque
 )
 from eleves.models import Eleve
+from utilisateurs.utils import user_school
+
+
+RESERVATION_ACTIVE_STATUSES = ('EN_ATTENTE', 'DISPONIBLE')
+LIVRE_OPERATIONAL_STATUSES = ('DISPONIBLE', 'EMPRUNTE', 'RESERVE')
+
+
+def _livres_bibliotheque(user):
+    livres = Livre.objects.select_related('categorie', 'cree_par', 'cree_par__profil')
+    ecole = user_school(user)
+    if ecole:
+        livres = livres.filter(cree_par__profil__ecole=ecole)
+    return livres
+
+
+def _eleves_bibliotheque(user):
+    eleves = Eleve.objects.select_related('classe', 'classe__ecole')
+    ecole = user_school(user)
+    if ecole:
+        eleves = eleves.filter(classe__ecole=ecole)
+    return eleves
+
+
+def _reservations_bibliotheque(user):
+    reservations = Reservation.objects.select_related(
+        'livre', 'eleve', 'eleve__classe', 'eleve__classe__ecole',
+        'cree_par', 'traitee_par', 'emprunt',
+    )
+    ecole = user_school(user)
+    if ecole:
+        reservations = reservations.filter(eleve__classe__ecole=ecole)
+    return reservations
+
+
+def _parametres_bibliotheque():
+    return ParametreBibliotheque.objects.first()
+
+
+def _duree_reservation():
+    params = _parametres_bibliotheque()
+    return max(1, params.duree_reservation_defaut if params else 7)
+
+
+def _generer_numero_reservation():
+    return f"RES-{timezone.localdate():%Y%m%d}-{uuid.uuid4().hex[:8].upper()}"
+
+
+def _generer_numero_emprunt():
+    return f"EMP-{timezone.localdate():%Y%m%d}-{uuid.uuid4().hex[:8].upper()}"
+
+
+def _synchroniser_statut_livre(livre):
+    """Synchronise le statut synthétique sans toucher aux livres hors service."""
+    if livre.statut not in LIVRE_OPERATIONAL_STATUSES:
+        return
+    if livre.exemplaires_disponibles > 0:
+        livre.statut = 'DISPONIBLE'
+    elif Reservation.objects.filter(
+        livre=livre,
+        statut='DISPONIBLE',
+        exemplaire_bloque=True,
+    ).exists():
+        livre.statut = 'RESERVE'
+    else:
+        livre.statut = 'EMPRUNTE'
+
+
+def _promouvoir_reservations_en_attente(livre, utilisateur=None):
+    """Met de côté chaque exemplaire libre pour la file d'attente, dans l'ordre."""
+    maintenant = timezone.now()
+    duree = _duree_reservation()
+    promotions = 0
+    while livre.exemplaires_disponibles > 0:
+        reservation = Reservation.objects.select_for_update().filter(
+            livre=livre,
+            statut='EN_ATTENTE',
+            date_expiration__gt=maintenant,
+        ).order_by('date_reservation', 'pk').first()
+        if reservation is None:
+            break
+        livre.exemplaires_disponibles -= 1
+        reservation.statut = 'DISPONIBLE'
+        reservation.exemplaire_bloque = True
+        reservation.date_mise_disponible = maintenant
+        reservation.date_expiration = maintenant + timedelta(days=duree)
+        reservation.save()
+        HistoriqueLivre.objects.create(
+            livre=livre,
+            action='RESERVATION',
+            description=(
+                f'Exemplaire disponible pour {reservation.eleve} - '
+                f'{reservation.numero_reservation}'
+            ),
+            utilisateur=utilisateur,
+        )
+        promotions += 1
+    _synchroniser_statut_livre(livre)
+    livre.save()
+    return promotions
+
+
+def _expirer_reservations(queryset, utilisateur=None):
+    """Expire les réservations échues et réattribue les exemplaires libérés."""
+    ids = list(queryset.filter(
+        statut__in=RESERVATION_ACTIVE_STATUSES,
+        date_expiration__lte=timezone.now(),
+    ).values_list('pk', flat=True))
+    if not ids:
+        return 0
+
+    with transaction.atomic():
+        reservations = Reservation.objects.select_for_update().filter(pk__in=ids)
+        for reservation in reservations:
+            livre = Livre.objects.select_for_update().get(pk=reservation.livre_id)
+            if reservation.exemplaire_bloque:
+                livre.exemplaires_disponibles = min(
+                    livre.nombre_exemplaires,
+                    livre.exemplaires_disponibles + 1,
+                )
+            reservation.statut = 'EXPIREE'
+            reservation.exemplaire_bloque = False
+            reservation.date_traitement = timezone.now()
+            reservation.traitee_par = utilisateur
+            reservation.save()
+            _promouvoir_reservations_en_attente(livre, utilisateur)
+    return len(ids)
 
 
 @login_required
@@ -530,10 +660,16 @@ def retourner_livre(request, emprunt_id):
 
             # Mettre à jour le livre (verrouillé aussi)
             livre = Livre.objects.select_for_update().get(pk=emprunt_locked.livre_id)
-            livre.exemplaires_disponibles += 1
-            livre.statut = 'DISPONIBLE'
+            livre.exemplaires_disponibles = min(
+                livre.nombre_exemplaires,
+                livre.exemplaires_disponibles + 1,
+            )
             livre.etat = etat_retour
             livre.save()
+
+            # L'exemplaire retourné est proposé automatiquement à la première
+            # réservation en attente, dans l'ordre chronologique.
+            _promouvoir_reservations_en_attente(livre, request.user)
 
             # Historique
             HistoriqueLivre.objects.create(
@@ -563,24 +699,276 @@ def retourner_livre(request, emprunt_id):
 
 @login_required
 def liste_reservations(request):
-    """Liste des réservations"""
-    from utilisateurs.utils import user_school
+    """Tableau de bord et liste filtrable des réservations."""
+    scope = _reservations_bibliotheque(request.user)
+    expirees = _expirer_reservations(scope, request.user)
+    if expirees:
+        messages.info(request, f'{expirees} réservation(s) expirée(s) automatiquement.')
 
-    ecole = user_school(request.user)
+    statut = (request.GET.get('statut') or '').strip()
+    q = (request.GET.get('q') or '').strip()
+    reservations = _reservations_bibliotheque(request.user)
+    if statut:
+        reservations = reservations.filter(statut=statut)
+    if q:
+        reservations = reservations.filter(
+            Q(numero_reservation__icontains=q)
+            | Q(livre__titre__icontains=q)
+            | Q(livre__code_livre__icontains=q)
+            | Q(eleve__nom__icontains=q)
+            | Q(eleve__prenom__icontains=q)
+            | Q(eleve__matricule__icontains=q)
+        )
 
-    reservations = Reservation.objects.select_related(
-        'livre', 'eleve', 'eleve__classe', 'cree_par'
-    ).order_by('-date_reservation')
-    # Sécurité : filtrer par l'école de l'élève
-    if ecole:
-        reservations = reservations.filter(eleve__classe__ecole=ecole)
+    stats_scope = _reservations_bibliotheque(request.user)
+    stats = {
+        'total': stats_scope.count(),
+        'en_attente': stats_scope.filter(statut='EN_ATTENTE').count(),
+        'disponibles': stats_scope.filter(statut='DISPONIBLE').count(),
+        'empruntees': stats_scope.filter(statut='EMPRUNTEE').count(),
+        'terminees': stats_scope.filter(statut__in=['ANNULEE', 'EXPIREE']).count(),
+    }
+    page_obj = Paginator(
+        reservations.order_by('-date_reservation', '-pk'), 30
+    ).get_page(request.GET.get('page'))
 
     context = {
         'titre_page': 'Réservations',
-        'reservations': reservations,
+        'reservations': page_obj,
+        'page_obj': page_obj,
+        'stats': stats,
+        'statut': statut,
+        'q': q,
     }
 
     return render(request, 'depenses/bibliotheque/liste_reservations.html', context)
+
+
+@login_required
+def creer_reservation(request):
+    """Crée une réservation et bloque immédiatement un exemplaire libre."""
+    params = _parametres_bibliotheque()
+    duree_defaut = _duree_reservation()
+
+    if request.method == 'POST':
+        livre = get_object_or_404(
+            _livres_bibliotheque(request.user).filter(actif=True),
+            pk=request.POST.get('livre'),
+        )
+        eleve = get_object_or_404(
+            _eleves_bibliotheque(request.user).filter(statut='ACTIF'),
+            pk=request.POST.get('eleve'),
+        )
+        observations = (request.POST.get('observations') or '').strip()
+        try:
+            duree = int(request.POST.get('duree_jours') or duree_defaut)
+        except (TypeError, ValueError):
+            duree = duree_defaut
+        duree = max(1, min(duree, 60))
+
+        if livre.statut not in LIVRE_OPERATIONAL_STATUSES:
+            messages.error(request, "Ce livre ne peut pas être réservé dans son état actuel.")
+            return redirect('depenses:creer_reservation')
+
+        scope = _reservations_bibliotheque(request.user)
+        _expirer_reservations(scope.filter(eleve=eleve), request.user)
+
+        with transaction.atomic():
+            livre = Livre.objects.select_for_update().get(pk=livre.pk)
+            if Reservation.objects.select_for_update().filter(
+                livre=livre,
+                eleve=eleve,
+                statut__in=RESERVATION_ACTIVE_STATUSES,
+            ).exists():
+                messages.error(request, "Cet élève a déjà une réservation active pour ce livre.")
+                return redirect('depenses:creer_reservation')
+
+            maximum = params.nombre_reservations_max if params else 2
+            actives = Reservation.objects.select_for_update().filter(
+                eleve=eleve,
+                statut__in=RESERVATION_ACTIVE_STATUSES,
+            ).count()
+            if actives >= maximum:
+                messages.error(
+                    request,
+                    f"Cet élève a atteint la limite de {maximum} réservation(s) active(s).",
+                )
+                return redirect('depenses:creer_reservation')
+
+            maintenant = timezone.now()
+            disponible = livre.exemplaires_disponibles > 0
+            reservation = Reservation.objects.create(
+                numero_reservation=_generer_numero_reservation(),
+                livre=livre,
+                eleve=eleve,
+                date_expiration=maintenant + timedelta(days=duree),
+                date_mise_disponible=maintenant if disponible else None,
+                statut='DISPONIBLE' if disponible else 'EN_ATTENTE',
+                exemplaire_bloque=disponible,
+                observations=observations,
+                cree_par=request.user,
+            )
+            if disponible:
+                livre.exemplaires_disponibles -= 1
+            _synchroniser_statut_livre(livre)
+            livre.save()
+            HistoriqueLivre.objects.create(
+                livre=livre,
+                action='RESERVATION',
+                description=f'Réservé par {eleve} - {reservation.numero_reservation}',
+                utilisateur=request.user,
+            )
+
+        if disponible:
+            messages.success(request, "Réservation créée : un exemplaire a été mis de côté.")
+        else:
+            messages.success(request, "Réservation ajoutée à la file d’attente.")
+        return redirect('depenses:liste_reservations')
+
+    context = {
+        'titre_page': 'Nouvelle réservation',
+        'livres': _livres_bibliotheque(request.user).filter(
+            actif=True,
+            statut__in=LIVRE_OPERATIONAL_STATUSES,
+        ).order_by('titre'),
+        'eleves': _eleves_bibliotheque(request.user).filter(
+            statut='ACTIF'
+        ).order_by('nom', 'prenom'),
+        'params': params,
+        'duree_defaut': duree_defaut,
+        'livre_selectionne': request.GET.get('livre', ''),
+        'eleve_selectionne': request.GET.get('eleve', ''),
+    }
+    return render(request, 'depenses/bibliotheque/form_reservation.html', context)
+
+
+@login_required
+@require_POST
+def notifier_reservation(request, reservation_id):
+    reservation = get_object_or_404(
+        _reservations_bibliotheque(request.user), pk=reservation_id
+    )
+    if reservation.statut != 'DISPONIBLE':
+        messages.error(request, "Seule une réservation disponible peut être notifiée.")
+    else:
+        reservation.date_notification = timezone.now()
+        reservation.traitee_par = request.user
+        reservation.save()
+        messages.success(request, "La notification de l’élève a été enregistrée.")
+    return redirect('depenses:liste_reservations')
+
+
+@login_required
+@require_POST
+def annuler_reservation(request, reservation_id):
+    visible = get_object_or_404(
+        _reservations_bibliotheque(request.user), pk=reservation_id
+    )
+    with transaction.atomic():
+        reservation = Reservation.objects.select_for_update().select_related(
+            'livre', 'eleve'
+        ).get(
+            pk=visible.pk,
+        )
+        if reservation.statut not in RESERVATION_ACTIVE_STATUSES:
+            messages.warning(request, "Cette réservation est déjà terminée.")
+            return redirect('depenses:liste_reservations')
+
+        livre = Livre.objects.select_for_update().get(pk=reservation.livre_id)
+        if reservation.exemplaire_bloque:
+            livre.exemplaires_disponibles = min(
+                livre.nombre_exemplaires,
+                livre.exemplaires_disponibles + 1,
+            )
+        reservation.statut = 'ANNULEE'
+        reservation.exemplaire_bloque = False
+        reservation.date_traitement = timezone.now()
+        reservation.traitee_par = request.user
+        reservation.save()
+        _promouvoir_reservations_en_attente(livre, request.user)
+        HistoriqueLivre.objects.create(
+            livre=livre,
+            action='RESERVATION',
+            description=f'Réservation annulée - {reservation.numero_reservation}',
+            utilisateur=request.user,
+        )
+    messages.success(request, "La réservation a été annulée et le stock réattribué.")
+    return redirect('depenses:liste_reservations')
+
+
+@login_required
+@require_POST
+def emprunter_reservation(request, reservation_id):
+    """Transforme atomiquement une réservation disponible en emprunt."""
+    scope = _reservations_bibliotheque(request.user)
+    _expirer_reservations(scope.filter(pk=reservation_id), request.user)
+
+    visible = get_object_or_404(
+        _reservations_bibliotheque(request.user), pk=reservation_id
+    )
+    with transaction.atomic():
+        reservation = Reservation.objects.select_for_update().select_related(
+            'livre', 'eleve'
+        ).get(
+            pk=visible.pk,
+        )
+        if reservation.statut != 'DISPONIBLE':
+            messages.error(request, "Cette réservation n’est pas disponible pour l’emprunt.")
+            return redirect('depenses:liste_reservations')
+
+        params = _parametres_bibliotheque()
+        maximum = params.nombre_emprunts_max if params else 3
+        emprunts_actifs = Emprunt.objects.select_for_update().filter(
+            eleve=reservation.eleve,
+            statut__in=['EN_COURS', 'EN_RETARD'],
+        )
+        if emprunts_actifs.count() >= maximum:
+            messages.error(request, f"L’élève a atteint la limite de {maximum} emprunt(s).")
+            return redirect('depenses:liste_reservations')
+        if emprunts_actifs.filter(livre=reservation.livre).exists():
+            messages.error(request, "L’élève possède déjà un emprunt actif de ce livre.")
+            return redirect('depenses:liste_reservations')
+
+        livre = Livre.objects.select_for_update().get(pk=reservation.livre_id)
+        # Compatibilité avec d'anciennes réservations DISPONIBLE qui ne
+        # mémorisaient pas encore la mise de côté d'un exemplaire.
+        if not reservation.exemplaire_bloque:
+            if livre.exemplaires_disponibles <= 0:
+                messages.error(request, "Aucun exemplaire n’est actuellement disponible.")
+                return redirect('depenses:liste_reservations')
+            livre.exemplaires_disponibles -= 1
+
+        aujourd_hui = timezone.localdate()
+        duree = params.duree_emprunt_defaut if params else 14
+        emprunt = Emprunt.objects.create(
+            numero_emprunt=_generer_numero_emprunt(),
+            livre=livre,
+            eleve=reservation.eleve,
+            date_emprunt=aujourd_hui,
+            date_retour_prevue=aujourd_hui + timedelta(days=max(1, duree)),
+            etat_livre_emprunt=livre.etat,
+            cree_par=request.user,
+        )
+        reservation.statut = 'EMPRUNTEE'
+        reservation.exemplaire_bloque = False
+        reservation.emprunt = emprunt
+        reservation.date_traitement = timezone.now()
+        reservation.traitee_par = request.user
+        reservation.save()
+        _synchroniser_statut_livre(livre)
+        livre.save()
+        HistoriqueLivre.objects.create(
+            livre=livre,
+            action='EMPRUNT',
+            description=(
+                f'Réservation convertie en emprunt pour {reservation.eleve} - '
+                f'{emprunt.numero_emprunt}'
+            ),
+            utilisateur=request.user,
+        )
+
+    messages.success(request, f"Réservation convertie en emprunt : {emprunt.numero_emprunt}.")
+    return redirect('depenses:liste_emprunts')
 
 
 def calculer_stats_emprunts(emprunts, aujourdhui=None):

@@ -52,5 +52,9 @@ urlpatterns = [
     path('bibliotheque/emprunts/nouveau/', views_bibliotheque.creer_emprunt, name='creer_emprunt'),
     path('bibliotheque/emprunts/<int:emprunt_id>/retour/', views_bibliotheque.retourner_livre, name='retourner_livre'),
     path('bibliotheque/reservations/', views_bibliotheque.liste_reservations, name='liste_reservations'),
+    path('bibliotheque/reservations/nouvelle/', views_bibliotheque.creer_reservation, name='creer_reservation'),
+    path('bibliotheque/reservations/<int:reservation_id>/notifier/', views_bibliotheque.notifier_reservation, name='notifier_reservation'),
+    path('bibliotheque/reservations/<int:reservation_id>/annuler/', views_bibliotheque.annuler_reservation, name='annuler_reservation'),
+    path('bibliotheque/reservations/<int:reservation_id>/emprunter/', views_bibliotheque.emprunter_reservation, name='emprunter_reservation'),
     path('bibliotheque/statistiques/', views_bibliotheque.statistiques_bibliotheque, name='statistiques_bibliotheque'),
 ]

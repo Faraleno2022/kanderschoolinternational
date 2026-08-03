@@ -144,10 +144,18 @@ class EmpruntAdmin(admin.ModelAdmin):
 
 @admin.register(Reservation)
 class ReservationAdmin(admin.ModelAdmin):
-    list_display = ['numero_reservation', 'livre', 'eleve', 'date_reservation', 'statut']
+    list_display = [
+        'numero_reservation', 'livre', 'eleve', 'date_reservation',
+        'date_expiration', 'statut', 'exemplaire_bloque',
+    ]
     list_filter = ['statut', 'date_reservation']
     search_fields = ['numero_reservation', 'livre__titre', 'eleve__nom']
     date_hierarchy = 'date_reservation'
+    readonly_fields = [
+        'numero_reservation', 'date_reservation', 'date_mise_disponible',
+        'date_notification', 'date_traitement', 'exemplaire_bloque',
+        'emprunt', 'cree_par', 'traitee_par',
+    ]
 
 
 @admin.register(ParametreBibliotheque)
