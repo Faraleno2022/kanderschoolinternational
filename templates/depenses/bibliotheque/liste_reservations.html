@@ -4,81 +4,98 @@
 {% block title %}{{ titre_page }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <!-- En-tête -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h2><i class="fas fa-bookmark text-warning"></i> {{ titre_page }}</h2>
-                    <p class="text-muted">Gestion des réservations de livres</p>
-                </div>
-                <div>
-                    <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left"></i> Dashboard
-                    </a>
-                </div>
-            </div>
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-bookmark text-warning me-2"></i>Réservations</h2>
+            <p class="text-muted mb-0">File d’attente, exemplaires mis de côté et conversion en emprunt.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Bibliothèque
+            </a>
+            <a href="{% url 'depenses:creer_reservation' %}" class="btn btn-warning">
+                <i class="fas fa-plus me-1"></i>Nouvelle réservation
+            </a>
         </div>
     </div>
 
-    <!-- Liste des réservations -->
-    <div class="card">
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md"><div class="card border-0 shadow-sm h-100"><div class="card-body"><small class="text-muted">Total</small><div class="h3 mb-0">{{ stats.total|intcomma }}</div></div></div></div>
+        <div class="col-6 col-md"><div class="card border-0 shadow-sm h-100"><div class="card-body"><small class="text-muted">En attente</small><div class="h3 mb-0 text-warning">{{ stats.en_attente|intcomma }}</div></div></div></div>
+        <div class="col-6 col-md"><div class="card border-0 shadow-sm h-100"><div class="card-body"><small class="text-muted">À retirer</small><div class="h3 mb-0 text-success">{{ stats.disponibles|intcomma }}</div></div></div></div>
+        <div class="col-6 col-md"><div class="card border-0 shadow-sm h-100"><div class="card-body"><small class="text-muted">Empruntées</small><div class="h3 mb-0 text-primary">{{ stats.empruntees|intcomma }}</div></div></div></div>
+        <div class="col-6 col-md"><div class="card border-0 shadow-sm h-100"><div class="card-body"><small class="text-muted">Annulées/expirées</small><div class="h3 mb-0 text-secondary">{{ stats.terminees|intcomma }}</div></div></div></div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
         <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>N° Réservation</th>
-                            <th>Livre</th>
-                            <th>Élève</th>
-                            <th>Classe</th>
-                            <th>Date Réservation</th>
-                            <th>Date Expiration</th>
-                            <th>Statut</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for res in reservations %}
-                        <tr>
-                            <td><strong>{{ res.numero_reservation }}</strong></td>
-                            <td>{{ res.livre.titre|truncatewords:5 }}</td>
-                            <td>{{ res.eleve.nom }} {{ res.eleve.prenom }}</td>
-                            <td>{{ res.eleve.classe.nom|default:"-" }}</td>
-                            <td>{{ res.date_reservation|date:"d/m/Y H:i" }}</td>
-                            <td>{{ res.date_expiration|date:"d/m/Y H:i" }}</td>
-                            <td>
-                                <span class="badge 
-                                    {% if res.statut == 'EN_ATTENTE' %}bg-warning
-                                    {% elif res.statut == 'DISPONIBLE' %}bg-success
-                                    {% elif res.statut == 'EMPRUNTEE' %}bg-primary
-                                    {% elif res.statut == 'ANNULEE' %}bg-danger
-                                    {% else %}bg-secondary{% endif %}">
-                                    {{ res.get_statut_display }}
-                                </span>
-                            </td>
-                            <td>
-                                {% if res.statut == 'DISPONIBLE' %}
-                                <a href="{% url 'depenses:creer_emprunt' %}?livre={{ res.livre.id }}&eleve={{ res.eleve.id }}" 
-                                   class="btn btn-sm btn-success">
-                                    <i class="fas fa-hand-holding-heart"></i> Emprunter
-                                </a>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="8" class="text-center py-4">
-                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                                <p class="text-muted">Aucune réservation trouvée</p>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-7">
+                    <label class="form-label">Recherche</label>
+                    <input type="search" name="q" value="{{ q }}" class="form-control" placeholder="N°, livre, élève ou matricule">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Statut</label>
+                    <select name="statut" class="form-select">
+                        <option value="">Tous</option>
+                        <option value="EN_ATTENTE" {% if statut == 'EN_ATTENTE' %}selected{% endif %}>En attente</option>
+                        <option value="DISPONIBLE" {% if statut == 'DISPONIBLE' %}selected{% endif %}>Disponible / à retirer</option>
+                        <option value="EMPRUNTEE" {% if statut == 'EMPRUNTEE' %}selected{% endif %}>Empruntée</option>
+                        <option value="ANNULEE" {% if statut == 'ANNULEE' %}selected{% endif %}>Annulée</option>
+                        <option value="EXPIREE" {% if statut == 'EXPIREE' %}selected{% endif %}>Expirée</option>
+                    </select>
+                </div>
+                <div class="col-md-2"><button class="btn btn-primary w-100"><i class="fas fa-search me-1"></i>Filtrer</button></div>
+            </form>
         </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark"><tr><th>N°</th><th>Livre</th><th>Élève</th><th>Réservée le</th><th>Échéance</th><th>File/notification</th><th>Statut</th><th class="text-end">Actions</th></tr></thead>
+                <tbody>
+                    {% for res in reservations %}
+                    <tr class="{% if res.statut == 'DISPONIBLE' %}table-success{% elif res.statut == 'EN_ATTENTE' %}table-warning{% endif %}">
+                        <td><strong>{{ res.numero_reservation }}</strong></td>
+                        <td><strong>{{ res.livre.titre|truncatewords:6 }}</strong><small class="d-block text-muted">{{ res.livre.code_livre }}</small></td>
+                        <td>{{ res.eleve.nom }} {{ res.eleve.prenom }}<small class="d-block text-muted">{{ res.eleve.matricule }} · {{ res.eleve.classe.nom|default:'Sans classe' }}</small></td>
+                        <td>{{ res.date_reservation|date:'d/m/Y H:i' }}</td>
+                        <td>
+                            {{ res.date_expiration|date:'d/m/Y H:i' }}
+                            {% if res.statut == 'EN_ATTENTE' or res.statut == 'DISPONIBLE' %}<small class="d-block text-muted">{{ res.jours_restants }} jour{{ res.jours_restants|pluralize }}</small>{% endif %}
+                        </td>
+                        <td>
+                            {% if res.statut == 'EN_ATTENTE' %}<span class="badge bg-dark">Rang {{ res.rang_attente }}</span>
+                            {% elif res.statut == 'DISPONIBLE' %}
+                                {% if res.date_notification %}<span class="text-success"><i class="fas fa-check-circle"></i> Notifiée le {{ res.date_notification|date:'d/m H:i' }}</span>{% else %}<span class="text-danger"><i class="fas fa-bell"></i> À notifier</span>{% endif %}
+                            {% elif res.emprunt %}<a href="{% url 'depenses:liste_emprunts' %}?q={{ res.emprunt.numero_emprunt|urlencode }}">{{ res.emprunt.numero_emprunt }}</a>
+                            {% else %}—{% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {% if res.statut == 'EN_ATTENTE' %}bg-warning text-dark{% elif res.statut == 'DISPONIBLE' %}bg-success{% elif res.statut == 'EMPRUNTEE' %}bg-primary{% elif res.statut == 'ANNULEE' %}bg-danger{% else %}bg-secondary{% endif %}">{{ res.get_statut_display }}</span>
+                            {% if res.exemplaire_bloque %}<small class="d-block text-success"><i class="fas fa-lock"></i> Exemplaire réservé</small>{% endif %}
+                        </td>
+                        <td class="text-end text-nowrap">
+                            {% if res.statut == 'DISPONIBLE' %}
+                                {% if not res.date_notification %}<form method="post" action="{% url 'depenses:notifier_reservation' res.id %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-outline-primary" title="Marquer l'élève comme notifié"><i class="fas fa-bell"></i></button></form>{% endif %}
+                                <form method="post" action="{% url 'depenses:emprunter_reservation' res.id %}" class="d-inline" onsubmit="return confirm('Transformer cette réservation en emprunt ?');">{% csrf_token %}<button class="btn btn-sm btn-success"><i class="fas fa-hand-holding-heart me-1"></i>Emprunter</button></form>
+                            {% endif %}
+                            {% if res.statut == 'EN_ATTENTE' or res.statut == 'DISPONIBLE' %}
+                                <form method="post" action="{% url 'depenses:annuler_reservation' res.id %}" class="d-inline" onsubmit="return confirm('Annuler cette réservation ?');">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" title="Annuler"><i class="fas fa-times"></i></button></form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}<tr><td colspan="8" class="text-center py-5 text-muted"><i class="fas fa-inbox fa-3x d-block mb-3"></i>Aucune réservation trouvée.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if page_obj.has_other_pages %}<div class="card-footer bg-white"><nav><ul class="pagination justify-content-center mb-0">
+            {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ q|urlencode }}&statut={{ statut }}">Précédent</a></li>{% endif %}
+            <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
+            {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ q|urlencode }}&statut={{ statut }}">Suivant</a></li>{% endif %}
+        </ul></nav></div>{% endif %}
     </div>
 </div>
 {% endblock %}

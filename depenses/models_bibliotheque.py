@@ -206,21 +206,55 @@ class Reservation(SyncTrackedModel):
     date_reservation = models.DateTimeField(default=timezone.now, verbose_name="Date de réservation")
     date_expiration = models.DateTimeField(verbose_name="Date d'expiration")
     date_notification = models.DateTimeField(null=True, blank=True, verbose_name="Date de notification")
+    date_mise_disponible = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Date de mise à disposition",
+    )
+    date_traitement = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Date de traitement",
+    )
     
     # Statut
     statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='EN_ATTENTE', verbose_name="Statut")
     
     # Observations
     observations = models.TextField(blank=True, verbose_name="Observations")
+    exemplaire_bloque = models.BooleanField(
+        default=False,
+        verbose_name="Exemplaire mis de côté",
+        help_text="Indique qu'un exemplaire disponible est réservé physiquement pour l'élève.",
+    )
     
     # Métadonnées
     date_creation = models.DateTimeField(auto_now_add=True)
     cree_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    traitee_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reservations_bibliotheque_traitees',
+    )
+    emprunt = models.OneToOneField(
+        Emprunt,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reservation_source',
+        verbose_name="Emprunt créé",
+    )
     
     class Meta:
         verbose_name = "Réservation"
         verbose_name_plural = "Réservations"
         ordering = ['-date_reservation']
+        indexes = [
+            models.Index(fields=['statut', 'date_expiration']),
+            models.Index(fields=['livre', 'statut', 'date_reservation']),
+        ]
     
     def __str__(self):
         return f"{self.numero_reservation} - {self.livre.titre} ({self.eleve})"
@@ -228,16 +262,36 @@ class Reservation(SyncTrackedModel):
     @property
     def est_expiree(self):
         """Vérifie si la réservation est expirée"""
-        return timezone.now() > self.date_expiration and self.statut == 'EN_ATTENTE'
+        return (
+            self.statut in {'EN_ATTENTE', 'DISPONIBLE'}
+            and timezone.now() >= self.date_expiration
+        )
+
+    @property
+    def jours_restants(self):
+        """Nombre de jours avant l'expiration de la réservation active."""
+        if self.statut not in {'EN_ATTENTE', 'DISPONIBLE'}:
+            return 0
+        secondes = (self.date_expiration - timezone.now()).total_seconds()
+        if secondes <= 0:
+            return 0
+        return max(1, int((secondes + 86399) // 86400))
+
+    @property
+    def rang_attente(self):
+        """Position dans la file d'attente du livre."""
+        if self.statut != 'EN_ATTENTE':
+            return None
+        return Reservation.objects.filter(
+            livre=self.livre,
+            statut='EN_ATTENTE',
+            date_reservation__lt=self.date_reservation,
+        ).count() + 1
     
     def save(self, *args, **kwargs):
         # Définir la date d'expiration (7 jours par défaut)
         if not self.date_expiration:
             self.date_expiration = timezone.now() + timedelta(days=7)
-        
-        # Mettre à jour le statut si expirée
-        if self.est_expiree:
-            self.statut = 'EXPIREE'
         
         super().save(*args, **kwargs)
 
