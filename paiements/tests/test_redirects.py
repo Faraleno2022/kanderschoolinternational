@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth import get_user_model
@@ -12,7 +12,10 @@ from paiements.models import (
     PaiementRemise,
 )
 
+from .support import TEST_MIDDLEWARE
 
+
+@override_settings(MIDDLEWARE=TEST_MIDDLEWARE)
 class ValiderEcheancierRedirectTests(TestCase):
     def setUp(self):
         # Auth user (superuser bypasses granular permission checks)
@@ -20,7 +23,7 @@ class ValiderEcheancierRedirectTests(TestCase):
         self.user = User.objects.create_superuser(
             username="admin", email="admin@example.com", password="pass1234"
         )
-        self.client.login(username="admin", password="pass1234")
+        self.client.force_login(self.user)
 
         # Minimal school data
         self.ecole = Ecole.objects.create(

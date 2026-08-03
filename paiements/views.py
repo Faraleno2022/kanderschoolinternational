@@ -1192,23 +1192,26 @@ def liste_paiements(request):
         Value(0),
         output_field=DecimalField(max_digits=12, decimal_places=0),
     )
-    # Annoter montant de réinscription dû par échéancier (en comparant à la grille tarifaire)
-    try:
-        reinsc_subq = GrilleTarifaire.objects.filter(
-            ecole=OuterRef('eleve__classe__ecole'),
-            niveau=OuterRef('eleve__classe__niveau'),
-            annee_scolaire=OuterRef('annee_scolaire'),
-        ).values('frais_reinscription')[:1]
-        eche_qs = eche_qs.annotate(
-            reinsc_due=Case(
-                When(frais_inscription_du=Subquery(reinsc_subq), then=F('frais_inscription_du')),
-                default=Value(0),
-                output_field=DecimalField(max_digits=12, decimal_places=0),
-            )
-        )
-    except Exception:
-        # En cas d'erreur d'annotation, fallback sans champ dédié
-        pass
+    # Le modèle stocke inscription et réinscription dans un même poste. Les
+    # deux annotations ci-dessous le ventilent en colonnes strictement
+    # disjointes à partir du tarif de réinscription applicable.
+    reinsc_subq = GrilleTarifaire.objects.filter(
+        ecole=OuterRef('eleve__classe__ecole'),
+        niveau=OuterRef('eleve__classe__niveau'),
+        annee_scolaire=OuterRef('annee_scolaire'),
+    ).values('frais_reinscription')[:1]
+    eche_qs = eche_qs.annotate(
+        reinsc_due=Case(
+            When(frais_inscription_du=Subquery(reinsc_subq), then=F('frais_inscription_du')),
+            default=Value(0),
+            output_field=DecimalField(max_digits=12, decimal_places=0),
+        ),
+        insc_due=Case(
+            When(frais_inscription_du=Subquery(reinsc_subq), then=Value(0)),
+            default=F('frais_inscription_du'),
+            output_field=DecimalField(max_digits=12, decimal_places=0),
+        ),
+    )
 
     aggr_du = eche_qs.aggregate(
         dues_sco=Coalesce(
@@ -1221,36 +1224,26 @@ def liste_paiements(request):
     dues_sco_total = int(aggr_du.get('dues_sco') or 0)
     remises_total = int(aggr_du.get('remises') or 0)
     du_sco_net = max(dues_sco_total - remises_total, 0)
-    frais_inscription_total = int(
-        eche_qs.aggregate(
-            total=Coalesce(
-                Sum(F('frais_inscription_du'), output_field=DecimalField(max_digits=12, decimal_places=0)),
-                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
-                output_field=DecimalField(max_digits=12, decimal_places=0),
-            )
-        ).get('total')
-        or 0
+    admission_totals = eche_qs.aggregate(
+        inscription=Coalesce(
+            Sum(F('insc_due'), output_field=DecimalField(max_digits=12, decimal_places=0)),
+            Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
+            output_field=DecimalField(max_digits=12, decimal_places=0),
+        ),
+        reinscription=Coalesce(
+            Sum(F('reinsc_due'), output_field=DecimalField(max_digits=12, decimal_places=0)),
+            Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
+            output_field=DecimalField(max_digits=12, decimal_places=0),
+        ),
     )
-    du_global_net = du_sco_net + frais_inscription_total
-
-    # Total global de réinscription (échéanciers dont le poste inscription correspond à la réinscription de la grille)
-    try:
-        reinsc_total = int(
-            eche_qs.aggregate(
-                total=Coalesce(
-                    Sum(F('reinsc_due'), output_field=DecimalField(max_digits=12, decimal_places=0)),
-                    Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
-                    output_field=DecimalField(max_digits=12, decimal_places=0),
-                )
-            ).get('total') or 0
-        )
-    except Exception:
-        reinsc_total = 0
-    # Ratio global (éviter division par 0)
-    try:
-        reinsc_ratio = float(reinsc_total) / float(frais_inscription_total) * 100.0 if int(frais_inscription_total) > 0 else 0.0
-    except Exception:
-        reinsc_ratio = 0.0
+    frais_inscription_total = int(admission_totals.get('inscription') or 0)
+    reinsc_total = int(admission_totals.get('reinscription') or 0)
+    frais_admission_total = frais_inscription_total + reinsc_total
+    du_global_net = du_sco_net + frais_admission_total
+    reinsc_ratio = (
+        float(reinsc_total) / float(frais_admission_total) * 100.0
+        if frais_admission_total > 0 else 0.0
+    )
 
     # Détail par école/classe (filtre libre appliqué aux élèves)
     detail_qs = (
@@ -1268,7 +1261,7 @@ def liste_paiements(request):
             ),
             remises_sum=remises_expr,
             frais_insc_sum=Coalesce(
-                Sum(F('frais_inscription_du'), output_field=DecimalField(max_digits=12, decimal_places=0)),
+                Sum(F('insc_due'), output_field=DecimalField(max_digits=12, decimal_places=0)),
                 Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
                 output_field=DecimalField(max_digits=12, decimal_places=0),
             ),
@@ -1288,12 +1281,12 @@ def liste_paiements(request):
         cnt = int(row.get('eleves_count') or 0)
         insc = int(row.get('frais_insc_sum') or 0)
         reinsc = int(row.get('reinsc_sum') or 0)
-        tot = net_sco + insc
-        # Ratio par classe (réinscription / inscription)
-        try:
-            reinsc_pct = float(reinsc) / float(insc) * 100.0 if insc > 0 else 0.0
-        except Exception:
-            reinsc_pct = 0.0
+        frais_admission = insc + reinsc
+        tot = net_sco + frais_admission
+        reinsc_pct = (
+            float(reinsc) / float(frais_admission) * 100.0
+            if frais_admission > 0 else 0.0
+        )
         totaux_du_detail_classes.append({
             'ecole_id': row.get('eleve__classe__ecole__id'),
             'ecole_nom': row.get('eleve__classe__ecole__nom'),
@@ -1418,12 +1411,13 @@ def export_recap_par_classe_excel(request):
             + (echeancier.tranche_3_due or 0)
         )
         frais_inscription = echeancier.frais_inscription_du or Decimal('0')
-        row['frais_insc_sum'] += frais_inscription
         frais_reinscription = grille_map.get(
             (classe.ecole_id, classe.niveau, echeancier.annee_scolaire), Decimal('0')
         )
         if frais_reinscription and frais_inscription == frais_reinscription:
             row['reinsc_sum'] += frais_inscription
+        else:
+            row['frais_insc_sum'] += frais_inscription
 
     detail_rows = sorted(details.items(), key=lambda item: (item[1]['ecole'], item[1]['classe']))
 
@@ -1433,7 +1427,7 @@ def export_recap_par_classe_excel(request):
 
     headers = [
         'École', 'Classe', '# Élèves',
-        'Dû scolarité net', 'Inscription', 'Réinscription', 'Réinscription %', 'Total dû net'
+        'Dû scolarité net', 'Inscription', 'Réinscription', 'Part réinscription', 'Total dû net'
     ]
     ws.append(headers)
 
@@ -1443,8 +1437,9 @@ def export_recap_par_classe_excel(request):
         net_sco = max(dues - rem, 0)
         insc = int(row.get('frais_insc_sum') or 0)
         reinsc = int(row.get('reinsc_sum') or 0)
-        tot = net_sco + insc
-        pct = (reinsc / insc * 100.0) if insc > 0 else 0.0
+        frais_admission = insc + reinsc
+        tot = net_sco + frais_admission
+        pct = (reinsc / frais_admission * 100.0) if frais_admission > 0 else 0.0
         ws.append([
             row.get('ecole'),
             row.get('classe'),
@@ -4224,7 +4219,21 @@ def rapport_encaissements(request):
     except Exception:
         pass
     total = int(qs.aggregate(total=Sum('montant'))['total'] or 0)
-    par_statut = list(qs.values('statut').annotate(count=Count('id'), somme=Coalesce(Sum('montant'), Value(0))).order_by('statut'))
+    amount_field = DecimalField(max_digits=10, decimal_places=0)
+    par_statut = list(
+        qs.values('statut')
+        .annotate(
+            count=Count('id'),
+            somme=Coalesce(
+                Sum('montant'),
+                Value(Decimal('0'), output_field=amount_field),
+                output_field=amount_field,
+            ),
+        )
+        .order_by('statut')
+    )
+    for item in par_statut:
+        item['somme'] = int(item['somme'] or 0)
     context = {'titre_page': 'Rapport des encaissements', 'total': total, 'par_statut': par_statut}
     if _template_exists('rapports/tableau_bord.html'):
         return render(request, 'rapports/tableau_bord.html', context)

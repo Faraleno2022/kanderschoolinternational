@@ -1,7 +1,6 @@
 from datetime import date
 from unittest.mock import patch
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -10,11 +9,7 @@ from eleves.models import Ecole, Classe, Eleve, Responsable
 from paiements.models import Paiement, TypePaiement, ModePaiement
 from utilisateurs.models import Profil
 
-
-TEST_MIDDLEWARE = [
-    middleware for middleware in settings.MIDDLEWARE
-    if middleware != 'ecole_moderne.licence_middleware.LicenceMiddleware'
-]
+from .support import TEST_MIDDLEWARE
 
 
 @override_settings(MIDDLEWARE=TEST_MIDDLEWARE)

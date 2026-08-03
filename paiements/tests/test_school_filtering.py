@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -8,11 +7,7 @@ from eleves.models import Ecole, Classe, Eleve, Responsable
 from paiements.models import Paiement, TypePaiement, ModePaiement, EcheancierPaiement, Relance
 from utilisateurs.models import Profil
 
-
-TEST_MIDDLEWARE = [
-    middleware for middleware in settings.MIDDLEWARE
-    if middleware != 'ecole_moderne.licence_middleware.LicenceMiddleware'
-]
+from .support import TEST_MIDDLEWARE
 
 
 @override_settings(MIDDLEWARE=TEST_MIDDLEWARE)
@@ -262,6 +257,5 @@ class SchoolFilteringTests(TestCase):
     def test_relancer_eleve_other_school_is_404(self):
         self.login1()
         url = reverse("paiements:relancer_eleve", kwargs={"eleve_id": self.eleve2.id})
-        # GET simple, on ne vérifie que la protection d'accès (pas les side-effects)
-        resp = self.client.get(url)
+        resp = self.client.post(url)
         self.assertEqual(resp.status_code, 404)
