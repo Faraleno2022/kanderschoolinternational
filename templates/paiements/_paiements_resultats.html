@@ -80,7 +80,7 @@
                 <div class="stat-label">Réinscription (échéancier)</div>
                 <small class="text-muted">Part spécifique des réinscriptions</small>
                 {% if totaux_du.frais_reinscription_pct is not None %}
-                    <div><small class="text-muted">{{ totaux_du.frais_reinscription_pct|floatformat:2 }} % des inscriptions</small></div>
+                    <div><small class="text-muted">{{ totaux_du.frais_reinscription_pct|floatformat:2 }} % des frais d'admission</small></div>
                 {% endif %}
             </div>
         </div>
@@ -110,7 +110,7 @@
                     <th class="text-end">Dû scolarité net</th>
                     <th class="text-end">Inscription</th>
                     <th class="text-end">Réinscription</th>
-                    <th class="text-end">Réinscription %</th>
+                    <th class="text-end">Part réinscription</th>
                     <th class="text-end">Total dû net</th>
                 </tr>
             </thead>
