@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 800px;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div><h2 class="mb-1">{{ titre_page }}</h2><p class="text-muted mb-0">La vente diminue automatiquement le stock disponible.</p></div>
+        <a href="{% url 'depenses:dashboard_fournitures' %}" class="btn btn-outline-secondary">Retour</a>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-4"><div class="card border-0 shadow-sm"><div class="card-body"><small class="text-muted">Disponible</small><div class="h3 mb-0 text-success">{{ produit.quantite_restante|intcomma }}</div></div></div></div>
+        <div class="col-4"><div class="card border-0 shadow-sm"><div class="card-body"><small class="text-muted">Prix d'achat</small><div class="h6 mb-0">{{ produit.prix_achat_unitaire|floatformat:0|intcomma }} GNF</div></div></div></div>
+        <div class="col-4"><div class="card border-0 shadow-sm"><div class="card-body"><small class="text-muted">Prix de vente</small><div class="h6 mb-0">{{ produit.prix_vente_unitaire|floatformat:0|intcomma }} GNF</div></div></div></div>
+    </div>
+
+    <div class="card shadow-sm border-0"><div class="card-body p-4">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+            <div class="row g-3">
+                <div class="col-md-6"><label class="form-label">{{ form.quantite.label }}</label>{{ form.quantite }}<div class="text-danger small">{{ form.quantite.errors }}</div></div>
+                <div class="col-md-6"><label class="form-label">{{ form.date_vente.label }}</label>{{ form.date_vente }}<div class="text-danger small">{{ form.date_vente.errors }}</div></div>
+                <div class="col-12"><label class="form-label">{{ form.acheteur.label }}</label>{{ form.acheteur }}<div class="text-danger small">{{ form.acheteur.errors }}</div></div>
+                <div class="col-12"><label class="form-label">{{ form.observations.label }}</label>{{ form.observations }}<div class="text-danger small">{{ form.observations.errors }}</div></div>
+            </div>
+            <div class="alert alert-light border mt-4 mb-0">
+                <div class="row text-center">
+                    <div class="col-6"><small class="text-muted">Montant de la vente</small><div class="h5 mb-0" id="vente-total">0 GNF</div></div>
+                    <div class="col-6"><small class="text-muted">Solde / marge brute</small><div class="h5 mb-0 text-success" id="vente-solde">0 GNF</div></div>
+                </div>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <a href="{% url 'depenses:dashboard_fournitures' %}" class="btn btn-outline-secondary">Annuler</a>
+                <button class="btn btn-success"><i class="fas fa-cash-register me-1"></i>Confirmer la vente</button>
+            </div>
+        </form>
+    </div></div>
+</div>
+
+<script>
+(function () {
+    const quantity = document.getElementById('id_quantite');
+    const salePrice = Number('{{ produit.prix_vente_unitaire|floatformat:0 }}'.replace(/[^0-9-]/g, '')) || 0;
+    const purchasePrice = Number('{{ produit.prix_achat_unitaire|floatformat:0 }}'.replace(/[^0-9-]/g, '')) || 0;
+    const formatter = new Intl.NumberFormat('fr-FR');
+    function refreshPreview() {
+        const qty = Math.max(0, Number(quantity.value) || 0);
+        document.getElementById('vente-total').textContent = formatter.format(qty * salePrice) + ' GNF';
+        const margin = qty * (salePrice - purchasePrice);
+        const marginNode = document.getElementById('vente-solde');
+        marginNode.textContent = formatter.format(margin) + ' GNF';
+        marginNode.className = 'h5 mb-0 ' + (margin < 0 ? 'text-danger' : 'text-success');
+    }
+    quantity.addEventListener('input', refreshPreview);
+    refreshPreview();
+})();
+</script>
+{% endblock %}

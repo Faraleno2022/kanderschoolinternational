@@ -11,6 +11,7 @@ from .models_bibliotheque import (
     CategorieLivre, Livre, Emprunt, Reservation,
     HistoriqueLivre, ParametreBibliotheque
 )
+from .models_fournitures import ProduitFourniture, VenteFourniture
 
 
 # ===== DÉPENSES =====
@@ -81,6 +82,39 @@ class LigneInventaireAdmin(admin.ModelAdmin):
     list_display = ['inventaire', 'article', 'stock_theorique', 'stock_physique', 'ecart']
     list_filter = ['inventaire']
     search_fields = ['article__nom']
+
+
+# ===== FOURNITURES SCOLAIRES =====
+@admin.register(ProduitFourniture)
+class ProduitFournitureAdmin(admin.ModelAdmin):
+    list_display = [
+        'nom', 'ecole', 'quantite_stock', 'quantite_vendue',
+        'quantite_restante', 'prix_achat_unitaire', 'prix_vente_unitaire', 'actif',
+    ]
+    list_filter = ['ecole', 'unite', 'actif']
+    search_fields = ['nom', 'description', 'ecole__nom']
+    readonly_fields = ['date_creation', 'date_modification']
+
+
+@admin.register(VenteFourniture)
+class VenteFournitureAdmin(admin.ModelAdmin):
+    list_display = [
+        'produit', 'quantite', 'montant_vente', 'solde',
+        'acheteur', 'date_vente', 'statut',
+    ]
+    list_filter = ['statut', 'date_vente', 'produit__ecole']
+    search_fields = ['produit__nom', 'acheteur', 'produit__ecole__nom']
+    date_hierarchy = 'date_vente'
+    readonly_fields = [
+        'produit', 'quantite', 'prix_achat_unitaire', 'prix_vente_unitaire',
+        'montant_achat', 'montant_vente', 'solde', 'date_vente', 'statut',
+        'cree_par', 'annulee_par', 'date_creation', 'date_modification',
+        'date_annulation',
+    ]
+
+    def has_add_permission(self, request):
+        # Les ventes doivent passer par l'écran métier (contrôle transactionnel du stock).
+        return False
 
 
 # ===== BIBLIOTHÈQUE =====

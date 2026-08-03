@@ -260,3 +260,4 @@ from .models_bibliotheque import (
     CategorieLivre, Livre, Emprunt, Reservation,
     HistoriqueLivre, ParametreBibliotheque
 )
+from .models_fournitures import ProduitFourniture, VenteFourniture

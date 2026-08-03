@@ -1,0 +1,193 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Fournitures scolaires{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-store text-primary me-2"></i>Boutique de fournitures scolaires</h2>
+            <p class="text-muted mb-0">Gestion du stock, des ventes et du solde commercial.</p>
+        </div>
+        {% if user_permissions.can_add_expenses %}<a href="{% url 'depenses:ajouter_produit_fourniture' %}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>Ajouter un produit
+        </a>{% endif %}
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card shadow-sm h-100 border-0"><div class="card-body">
+                <small class="text-muted">Produits actifs</small>
+                <div class="h3 mb-0">{{ stats.produits|intcomma }}</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card shadow-sm h-100 border-0"><div class="card-body">
+                <small class="text-muted">Quantité en stock</small>
+                <div class="h3 mb-0 text-primary">{{ stats.quantite_stock|intcomma }}</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card shadow-sm h-100 border-0"><div class="card-body">
+                <small class="text-muted">Vendu</small>
+                <div class="h3 mb-0 text-info">{{ stats.quantite_vendue|intcomma }}</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card shadow-sm h-100 border-0"><div class="card-body">
+                <small class="text-muted">Reste disponible</small>
+                <div class="h3 mb-0 text-success">{{ stats.quantite_restante|intcomma }}</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card shadow-sm h-100 border-0"><div class="card-body">
+                <small class="text-muted">Chiffre d'affaires</small>
+                <div class="h5 mb-0 text-dark">{{ stats.chiffre_affaires|floatformat:0|intcomma }} GNF</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card shadow-sm h-100 border-0"><div class="card-body">
+                <small class="text-muted">Solde (marge brute)</small>
+                <div class="h5 mb-0 {% if stats.solde < 0 %}text-danger{% else %}text-success{% endif %}">
+                    {{ stats.solde|floatformat:0|intcomma }} GNF
+                </div>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="alert alert-light border mb-0 h-100">
+                <strong>Coût des articles vendus</strong>
+                <div class="h5 mb-0">{{ stats.cout_vente|floatformat:0|intcomma }} GNF</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="alert alert-light border mb-0 h-100">
+                <strong>Valeur du stock restant</strong>
+                <div class="h5 mb-0">{{ stats.valeur_stock_restante|floatformat:0|intcomma }} GNF</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="alert {% if stats.alertes %}alert-warning{% else %}alert-success{% endif %} mb-0 h-100">
+                <strong>Alertes de stock</strong>
+                <div class="h5 mb-0">{{ stats.alertes|intcomma }} produit{{ stats.alertes|pluralize }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h5 class="mb-0">Produits et stock</h5>
+                <form method="get" class="d-flex flex-wrap gap-2">
+                    <input type="search" name="q" value="{{ q }}" class="form-control" placeholder="Rechercher un produit...">
+                    <select name="statut" class="form-select" style="width:auto">
+                        <option value="actifs" {% if statut == 'actifs' %}selected{% endif %}>Actifs</option>
+                        <option value="tous" {% if statut == 'tous' %}selected{% endif %}>Tous</option>
+                        <option value="inactifs" {% if statut == 'inactifs' %}selected{% endif %}>Inactifs</option>
+                    </select>
+                    <button class="btn btn-outline-primary"><i class="fas fa-search"></i></button>
+                </form>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Produit</th>
+                        {% if show_ecole %}<th>École</th>{% endif %}
+                        <th class="text-end">Quantité en stock</th>
+                        <th class="text-end">Vendu</th>
+                        <th class="text-end">Reste</th>
+                        <th class="text-end">Prix d'achat unitaire</th>
+                        <th class="text-end">Prix de vente unitaire</th>
+                        <th class="text-end">Ventes</th>
+                        <th class="text-end">Solde</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for produit in page_obj %}
+                    <tr class="{% if produit.en_alerte and produit.actif %}table-warning{% endif %}">
+                        <td>
+                            <strong>{{ produit.nom }}</strong>
+                            <small class="d-block text-muted">{{ produit.get_unite_display }}{% if not produit.actif %} · Inactif{% endif %}</small>
+                        </td>
+                        {% if show_ecole %}<td>{{ produit.ecole.nom }}</td>{% endif %}
+                        <td class="text-end">{{ produit.quantite_stock|intcomma }}</td>
+                        <td class="text-end text-info fw-semibold">{{ produit.quantite_vendue_calc|intcomma }}</td>
+                        <td class="text-end">
+                            <span class="badge {% if produit.en_alerte %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                                {{ produit.quantite_restante|intcomma }}
+                            </span>
+                        </td>
+                        <td class="text-end">{{ produit.prix_achat_unitaire|floatformat:0|intcomma }} GNF</td>
+                        <td class="text-end">{{ produit.prix_vente_unitaire|floatformat:0|intcomma }} GNF</td>
+                        <td class="text-end">{{ produit.chiffre_affaires_calc|floatformat:0|intcomma }} GNF</td>
+                        <td class="text-end fw-bold {% if produit.solde_calc < 0 %}text-danger{% else %}text-success{% endif %}">
+                            {{ produit.solde_calc|floatformat:0|intcomma }} GNF
+                        </td>
+                        <td class="text-end text-nowrap">
+                            {% if user_permissions.can_add_expenses and produit.actif and produit.quantite_restante > 0 %}
+                            <a href="{% url 'depenses:vendre_fourniture' produit.id %}" class="btn btn-sm btn-success" title="Enregistrer une vente">
+                                <i class="fas fa-cash-register"></i> Vendre
+                            </a>
+                            {% endif %}
+                            {% if user_permissions.can_modify_expenses %}
+                            <a href="{% url 'depenses:modifier_produit_fourniture' produit.id %}" class="btn btn-sm btn-outline-secondary" title="Modifier">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="{% if show_ecole %}10{% else %}9{% endif %}" class="text-center text-muted py-5">Aucun produit enregistré.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if page_obj.has_other_pages %}
+        <div class="card-footer bg-white">
+            <nav><ul class="pagination justify-content-center mb-0">
+                {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ q|urlencode }}&statut={{ statut }}">Précédent</a></li>{% endif %}
+                <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
+                {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ q|urlencode }}&statut={{ statut }}">Suivant</a></li>{% endif %}
+            </ul></nav>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3"><h5 class="mb-0">Historique récent des ventes</h5></div>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead class="table-light"><tr><th>Date</th><th>Produit</th><th>Acheteur</th><th class="text-end">Qté</th><th class="text-end">Montant</th><th class="text-end">Solde</th><th>Statut</th><th></th></tr></thead>
+                <tbody>
+                    {% for vente in ventes_recentes %}
+                    <tr class="{% if vente.statut == 'ANNULEE' %}text-muted{% endif %}">
+                        <td>{{ vente.date_vente|date:'d/m/Y' }}</td>
+                        <td>{{ vente.produit.nom }}</td>
+                        <td>{{ vente.acheteur|default:'—' }}</td>
+                        <td class="text-end">{{ vente.quantite|intcomma }}</td>
+                        <td class="text-end">{{ vente.montant_vente|floatformat:0|intcomma }} GNF</td>
+                        <td class="text-end">{{ vente.solde|floatformat:0|intcomma }} GNF</td>
+                        <td><span class="badge {% if vente.statut == 'CONFIRMEE' %}bg-success{% else %}bg-secondary{% endif %}">{{ vente.get_statut_display }}</span></td>
+                        <td class="text-end">
+                            {% if user_permissions.can_delete_expenses and vente.statut == 'CONFIRMEE' %}
+                            <form method="post" action="{% url 'depenses:annuler_vente_fourniture' vente.id %}" class="d-inline" onsubmit="return confirm('Annuler cette vente ? Le stock sera recalculé.');">
+                                {% csrf_token %}<button class="btn btn-sm btn-outline-danger" title="Annuler"><i class="fas fa-undo"></i></button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8" class="text-center text-muted py-4">Aucune vente enregistrée.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

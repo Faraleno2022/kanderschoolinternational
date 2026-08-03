@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from . import views_logistique
 from . import views_bibliotheque
+from . import views_fournitures
 
 app_name = 'depenses'
 
@@ -30,6 +31,13 @@ urlpatterns = [
     path('logistique/biens/<int:bien_id>/modifier/', views_logistique.modifier_bien, name='modifier_bien'),
     path('logistique/papier-ram/', views_logistique.liste_papier_ram, name='liste_papier_ram'),
     path('logistique/papier-ram/nouveau/', views_logistique.creer_papier_ram, name='creer_papier_ram'),
+
+    # ===== FOURNITURES SCOLAIRES =====
+    path('fournitures/', views_fournitures.dashboard_fournitures, name='dashboard_fournitures'),
+    path('fournitures/produits/nouveau/', views_fournitures.ajouter_produit_fourniture, name='ajouter_produit_fourniture'),
+    path('fournitures/produits/<int:produit_id>/modifier/', views_fournitures.modifier_produit_fourniture, name='modifier_produit_fourniture'),
+    path('fournitures/produits/<int:produit_id>/vendre/', views_fournitures.vendre_fourniture, name='vendre_fourniture'),
+    path('fournitures/ventes/<int:vente_id>/annuler/', views_fournitures.annuler_vente_fourniture, name='annuler_vente_fourniture'),
     
     # ===== BIBLIOTHÈQUE =====
     path('bibliotheque/', views_bibliotheque.dashboard_bibliotheque, name='dashboard_bibliotheque'),

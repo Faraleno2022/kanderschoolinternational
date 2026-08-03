@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 900px;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div><h2 class="mb-1">{{ titre_page }}</h2><p class="text-muted mb-0">Définissez le stock et les prix de la fourniture.</p></div>
+        <a href="{% url 'depenses:dashboard_fournitures' %}" class="btn btn-outline-secondary">Retour</a>
+    </div>
+
+    <div class="card shadow-sm border-0"><div class="card-body p-4">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+            {% if form.ecole.is_hidden %}
+            {{ form.ecole }}
+            {% else %}
+            <div class="mb-3"><label class="form-label">{{ form.ecole.label }}</label>{{ form.ecole }}{{ form.ecole.errors }}</div>
+            {% endif %}
+            <div class="row g-3">
+                <div class="col-md-8"><label class="form-label">{{ form.nom.label }}</label>{{ form.nom }}<div class="text-danger small">{{ form.nom.errors }}</div></div>
+                <div class="col-md-4"><label class="form-label">{{ form.unite.label }}</label>{{ form.unite }}<div class="text-danger small">{{ form.unite.errors }}</div></div>
+                <div class="col-12"><label class="form-label">{{ form.description.label }}</label>{{ form.description }}<div class="text-danger small">{{ form.description.errors }}</div></div>
+                <div class="col-md-4">
+                    <label class="form-label">{{ form.quantite_stock.label }}</label>{{ form.quantite_stock }}
+                    <small class="text-muted d-block">Total approvisionné, ventes comprises.</small><div class="text-danger small">{{ form.quantite_stock.errors }}</div>
+                </div>
+                <div class="col-md-4"><label class="form-label">{{ form.prix_achat_unitaire.label }}</label>{{ form.prix_achat_unitaire }}<div class="text-danger small">{{ form.prix_achat_unitaire.errors }}</div></div>
+                <div class="col-md-4"><label class="form-label">{{ form.prix_vente_unitaire.label }}</label>{{ form.prix_vente_unitaire }}<div class="text-danger small">{{ form.prix_vente_unitaire.errors }}</div></div>
+                <div class="col-md-4"><label class="form-label">{{ form.seuil_alerte.label }}</label>{{ form.seuil_alerte }}<div class="text-danger small">{{ form.seuil_alerte.errors }}</div></div>
+                <div class="col-md-8 d-flex align-items-end"><div class="form-check mb-2">{{ form.actif }} <label class="form-check-label" for="{{ form.actif.id_for_label }}">Produit actif et disponible à la vente</label></div></div>
+            </div>
+            {% if produit %}
+            <div class="alert alert-info mt-4 mb-0">Déjà vendu : <strong>{{ produit.quantite_vendue|intcomma }}</strong> · Reste actuel : <strong>{{ produit.quantite_restante|intcomma }}</strong></div>
+            {% endif %}
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <a href="{% url 'depenses:dashboard_fournitures' %}" class="btn btn-outline-secondary">Annuler</a>
+                <button class="btn btn-primary"><i class="fas fa-save me-1"></i>Enregistrer</button>
+            </div>
+        </form>
+    </div></div>
+</div>
+{% endblock %}
