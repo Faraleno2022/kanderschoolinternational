@@ -3,6 +3,8 @@ Middleware de sécurité pour protéger l'application contre les attaques
 """
 import logging
 import time
+from urllib.parse import parse_qsl, unquote
+
 from django.http import HttpResponseForbidden, HttpResponse, JsonResponse
 from django.template import loader
 from django.core.cache import cache
@@ -45,16 +47,6 @@ class SecurityMiddleware(MiddlewareMixin):
         r"<iframe[^>]*>.*?</iframe>",
         r"<object[^>]*>.*?</object>",
         r"<embed[^>]*>.*?</embed>",
-    ]
-    
-    # Patterns de Path Traversal
-    PATH_TRAVERSAL_PATTERNS = [
-        r"\.\./",
-        r"\.\.\\",
-        r"%2e%2e%2f",
-        r"%2e%2e\\",
-        r"..%2f",
-        r"..%5c",
     ]
     
     # User agents suspects
@@ -281,13 +273,54 @@ class SecurityMiddleware(MiddlewareMixin):
 
         return False
     
+    @staticmethod
+    def _decode_repeatedly(value, max_rounds=3):
+        """Décode les séquences URL, y compris les encodages imbriqués."""
+        decoded = str(value or '')
+        for _ in range(max_rounds):
+            next_value = unquote(decoded, errors='replace')
+            if next_value == decoded:
+                break
+            decoded = next_value
+        return decoded
+
+    @classmethod
+    def _contains_parent_path_segment(cls, value):
+        """Vrai uniquement si la valeur contient un vrai segment parent ``..``."""
+        normalized = cls._decode_repeatedly(value).replace('\\', '/')
+        return '..' in normalized.split('/')
+
     def detect_path_traversal(self, request):
-        """Détecte les tentatives de Path Traversal"""
-        full_path = request.get_full_path()
-        for pattern in self.PATH_TRAVERSAL_PATTERNS:
-            if re.search(pattern, full_path, re.IGNORECASE):
-                return True
-        return False
+        """
+        Détecte un segment de répertoire parent réel dans le chemin ou dans
+        un paramètre d'URL.
+
+        Les anciennes expressions ``..%2f`` et ``..%5c`` utilisaient des
+        points non échappés. Elles reconnaissaient donc n'importe quels deux
+        caractères avant une barre encodée et bloquaient des URL légitimes
+        comme ``?next=%2Fpaiements%2Fliste%2F``.
+        """
+        path = request.path_info or request.path or ''
+        if self._contains_parent_path_segment(path):
+            return True
+
+        raw_query = request.META.get('QUERY_STRING') or ''
+        try:
+            query_items = parse_qsl(
+                raw_query,
+                keep_blank_values=True,
+                errors='replace',
+                max_num_fields=getattr(settings, 'DATA_UPLOAD_MAX_NUMBER_FIELDS', 1000),
+            )
+        except ValueError:
+            # Django rejettera séparément une requête contenant trop de champs.
+            return False
+
+        return any(
+            self._contains_parent_path_segment(key)
+            or self._contains_parent_path_segment(value)
+            for key, value in query_items
+        )
     
     def is_ip_blocked(self, ip):
         """Vérifie si une IP est bloquée"""
