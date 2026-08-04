@@ -21,6 +21,7 @@ urlpatterns = [
     
     # Gestion des élèves
     path('ajouter/', views.ajouter_eleve, name='ajouter_eleve'),
+    path('ajouter/<int:eleve_id>/reussi/', views.ajout_eleve_reussi, name='ajout_eleve_reussi'),
     path('<int:eleve_id>/modifier/', views.modifier_eleve, name='modifier_eleve'),
     path('<int:eleve_id>/supprimer/', views.supprimer_eleve, name='supprimer_eleve'),
     path('supprimer-masse/', views.supprimer_eleves_masse, name='supprimer_eleves_masse'),
@@ -80,4 +81,3 @@ urlpatterns = [
     path('template-eleves/', telecharger_template_eleves, name='telecharger_template_eleves'),
     path('exporter/classe/<int:classe_id>/', exporter_eleves_classe, name='exporter_eleves_classe'),
 ]
-

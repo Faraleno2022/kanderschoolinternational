@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block title %}Élève ajouté avec succès - myschool{% endblock %}
+
+{% block extra_css %}
+<style>
+    .success-card {
+        max-width: 820px;
+        margin: 3rem auto;
+        border: 0;
+        border-radius: 18px;
+        box-shadow: 0 14px 40px rgba(20, 40, 80, 0.12);
+    }
+    .success-icon {
+        width: 82px;
+        height: 82px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: #dff6e8;
+        color: #198754;
+        font-size: 2.4rem;
+    }
+    .choice-card {
+        height: 100%;
+        border: 1px solid #e6eaf0;
+        border-radius: 14px;
+        padding: 1.4rem;
+        transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .choice-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 22px rgba(20, 40, 80, 0.10);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card success-card">
+        <div class="card-body p-4 p-md-5 text-center">
+            <div class="success-icon mb-3" aria-hidden="true">
+                <i class="fas fa-check"></i>
+            </div>
+
+            <h2 class="mb-2">Élève ajouté avec succès</h2>
+            <p class="lead mb-1">
+                L'élève <strong>{{ eleve.prenom }} {{ eleve.nom }}</strong> a été ajouté avec succès.
+            </p>
+            <p class="text-muted mb-4">
+                Matricule : <strong>{{ eleve.matricule }}</strong>
+                {% if eleve.classe %} · Classe : <strong>{{ eleve.classe.nom }}</strong>{% endif %}
+            </p>
+
+            <h5 class="mb-3">Que souhaitez-vous faire maintenant ?</h5>
+            <div class="row g-3 text-start">
+                <div class="col-md-6">
+                    <div class="choice-card d-flex flex-column">
+                        <h5 class="text-success">
+                            <i class="fas fa-money-bill-wave me-2"></i>Ajouter un paiement
+                        </h5>
+                        <p class="text-muted flex-grow-1 mb-3">
+                            Enregistrer immédiatement l'inscription, la réinscription ou une tranche pour cet élève.
+                        </p>
+                        <a href="{{ paiement_url }}" class="btn btn-success btn-lg w-100">
+                            <i class="fas fa-arrow-right me-2"></i>Ajouter un paiement
+                        </a>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="choice-card d-flex flex-column">
+                        <h5 class="text-primary">
+                            <i class="fas fa-user-plus me-2"></i>Continuer les inscriptions
+                        </h5>
+                        <p class="text-muted flex-grow-1 mb-3">
+                            Revenir au formulaire et ajouter un autre élève dans la même classe.
+                        </p>
+                        <a href="{{ continuer_url }}" class="btn btn-primary btn-lg w-100">
+                            <i class="fas fa-plus me-2"></i>Ajouter un autre élève
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <a href="{% url 'eleves:detail_eleve' eleve.id %}" class="btn btn-link text-secondary">
+                    <i class="fas fa-user me-1"></i>Voir la fiche de l'élève
+                </a>
+                <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-link text-secondary">
+                    <i class="fas fa-list me-1"></i>Retour à la liste
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
