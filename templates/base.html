@@ -328,29 +328,11 @@
                         </li>
                         {% endif %}
                         {% if 'depenses' in allowed %}
-                        <li class="nav-item dropdown">
-                            <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fas fa-receipt me-1"></i>Dépenses
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="{% url 'depenses:tableau_bord' %}">
-                                    <i class="fas fa-receipt me-1"></i>Dépenses
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><h6 class="dropdown-header">Logistique</h6></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:dashboard_logistique' %}">
-                                    <i class="fas fa-tachometer-alt me-1"></i>Dashboard
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:liste_biens' %}">
-                                    <i class="fas fa-building text-info me-1"></i>Biens Établissement
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:liste_papier_ram' %}">
-                                    <i class="fas fa-file-alt text-success me-1"></i>Papier RAM
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:dashboard_fournitures' %}">
-                                    <i class="fas fa-store text-warning me-1"></i>Fournitures scolaires
-                                </a></li>
-                            </ul>
+                        {# Tous les sous-modules sont présentés en cartes dans le tableau de bord Recouvrement #}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'depenses:hub' %}">
+                                <i class="fas fa-hand-holding-dollar me-1"></i>Recouvrement
+                            </a>
                         </li>
                         {% endif %}
                         {% if 'bibliotheque' in allowed %}
@@ -465,29 +447,11 @@
                                 <i class="fas fa-money-bill me-1"></i>Paiements
                             </a>
                         </li>
-                        <li class="nav-item dropdown">
-                            <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fas fa-receipt me-1"></i>Dépenses
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="{% url 'depenses:tableau_bord' %}">
-                                    <i class="fas fa-receipt me-1"></i>Dépenses
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><h6 class="dropdown-header">Logistique</h6></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:dashboard_logistique' %}">
-                                    <i class="fas fa-tachometer-alt me-1"></i>Dashboard
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:liste_biens' %}">
-                                    <i class="fas fa-building text-info me-1"></i>Biens Établissement
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:liste_papier_ram' %}">
-                                    <i class="fas fa-file-alt text-success me-1"></i>Papier RAM
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:dashboard_fournitures' %}">
-                                    <i class="fas fa-store text-warning me-1"></i>Fournitures scolaires
-                                </a></li>
-                            </ul>
+                        {# Tous les sous-modules sont présentés en cartes dans le tableau de bord Recouvrement #}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'depenses:hub' %}">
+                                <i class="fas fa-hand-holding-dollar me-1"></i>Recouvrement
+                            </a>
                         </li>
                         <li class="nav-item dropdown">
                             <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">

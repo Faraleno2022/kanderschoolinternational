@@ -261,3 +261,6 @@ from .models_bibliotheque import (
     HistoriqueLivre, ParametreBibliotheque
 )
 from .models_fournitures import ProduitFourniture, VenteFourniture
+from .models_recouvrement import (
+    AbonnementInformatique, DepenseCuisine, DepenseDocument, Versement
+)

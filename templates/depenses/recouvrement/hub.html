@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Recouvrement{% endblock %}
+
+{% block page_header %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .recouvrement-header {
+        background: linear-gradient(135deg, #1f3864 0%, #2c5aa0 100%);
+        color: #fff;
+        padding: 1.75rem 2rem;
+        border-radius: 15px;
+        margin-bottom: 1.75rem;
+        box-shadow: 0 5px 20px rgba(31, 56, 100, .25);
+    }
+    .recouvrement-header h1 { margin: 0; font-size: 1.9rem; font-weight: 700; }
+    .recouvrement-header p { margin: .4rem 0 0; opacity: .9; }
+
+    .kpi-card {
+        background: #fff;
+        border: 1px solid #e3e7ee;
+        border-radius: 12px;
+        padding: 1.1rem 1.25rem;
+        height: 100%;
+        box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+    .kpi-label {
+        font-size: .78rem; text-transform: uppercase; letter-spacing: .5px;
+        color: #6c757d; font-weight: 600; margin-bottom: .35rem;
+    }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; color: #1f3864; line-height: 1.2; }
+    .kpi-hint { font-size: .8rem; color: #6c757d; }
+
+    .module-card {
+        display: block;
+        background: #fff;
+        border: 1px solid #e3e7ee;
+        border-left: 5px solid #6c757d;
+        border-radius: 14px;
+        padding: 1.5rem;
+        height: 100%;
+        text-decoration: none;
+        color: inherit;
+        transition: all .25s ease;
+        box-shadow: 0 3px 12px rgba(0,0,0,.07);
+    }
+    .module-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 22px rgba(0,0,0,.13);
+        color: inherit;
+    }
+    .module-card-icon { font-size: 2.6rem; margin-bottom: .9rem; display: block; }
+    .module-card-title { font-size: 1.12rem; font-weight: 650; margin-bottom: .35rem; color: #2c3e50; }
+    .module-card-desc { color: #6c757d; font-size: .9rem; margin: 0 0 .75rem; }
+    .module-card-stats { font-size: .85rem; color: #495057; border-top: 1px dashed #e3e7ee; padding-top: .6rem; }
+
+    .module-card.c-primary { border-left-color: #0d6efd; } .module-card.c-primary .module-card-icon { color: #0d6efd; }
+    .module-card.c-success { border-left-color: #198754; } .module-card.c-success .module-card-icon { color: #198754; }
+    .module-card.c-info    { border-left-color: #0dcaf0; } .module-card.c-info .module-card-icon    { color: #0aa2c0; }
+    .module-card.c-warning { border-left-color: #ffc107; } .module-card.c-warning .module-card-icon { color: #d39e00; }
+    .module-card.c-danger  { border-left-color: #dc3545; } .module-card.c-danger .module-card-icon  { color: #dc3545; }
+    .module-card.c-dark    { border-left-color: #1a1a2e; } .module-card.c-dark .module-card-icon    { color: #1a1a2e; }
+    .module-card.c-purple  { border-left-color: #6f42c1; } .module-card.c-purple .module-card-icon  { color: #6f42c1; }
+
+    .section-titre {
+        font-weight: 650; color: #2c3e50; margin: 2rem 0 1rem;
+        border-bottom: 2px solid #e3e7ee; padding-bottom: .5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <div class="recouvrement-header">
+        <h1><i class="fas fa-hand-holding-dollar me-3"></i>Recouvrement</h1>
+        <p>Tableau de bord général de tous les modules, puis accès à chaque registre</p>
+    </div>
+
+    <!-- Tableau de bord général : tous modules confondus -->
+    <div class="row g-3">
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Total dépensé</div>
+                <div class="kpi-value">{{ total_general|intcomma }} <small class="fs-6">GNF</small></div>
+                <div class="kpi-hint">Dépenses, cuisine, documents et informatique</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Dépensé ce mois</div>
+                <div class="kpi-value">{{ total_mois|intcomma }} <small class="fs-6">GNF</small></div>
+                <div class="kpi-hint">Depuis le 1er du mois en cours</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Versements encaissés</div>
+                <div class="kpi-value">{{ versements_total|intcomma }} <small class="fs-6">GNF</small></div>
+                <div class="kpi-hint">Comptés à part : ce sont des entrées</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Abonnements informatique</div>
+                <div class="kpi-value">{{ abonnements_actifs|intcomma }} <small class="fs-6">actifs</small></div>
+                <div class="kpi-hint">
+                    {% if abonnements_alerte %}
+                        <span class="text-warning fw-semibold">{{ abonnements_alerte }} bientôt échu(s)</span> ·
+                    {% endif %}
+                    {{ abonnements_expires }} expiré(s)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if abonnements_alerte %}
+    <div class="alert alert-warning d-flex align-items-center mt-3 mb-0">
+        <i class="fas fa-triangle-exclamation me-2"></i>
+        <div>
+            {{ abonnements_alerte }} abonnement(s) informatique arrivent à échéance dans les 7 prochains jours.
+            <a href="{% url 'depenses:recouvrement_informatique_dashboard' %}" class="alert-link">Voir les alertes</a>
+        </div>
+    </div>
+    {% endif %}
+
+    <h2 class="h5 section-titre">Modules du recouvrement</h2>
+
+    <div class="row g-4">
+        <!-- Dépenses classiques -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'depenses:tableau_bord' %}" class="module-card c-danger">
+                <i class="fas fa-receipt module-card-icon"></i>
+                <h3 class="module-card-title">Dépenses</h3>
+                <p class="module-card-desc">Factures fournisseurs, validation et suivi des paiements</p>
+                <div class="module-card-stats">
+                    {{ depenses_nombre|intcomma }} dépense(s) · {{ depenses_total|intcomma }} GNF
+                    <span class="text-muted">(dont {{ depenses_mois|intcomma }} GNF ce mois)</span>
+                </div>
+            </a>
+        </div>
+
+        <!-- Sous-modules simples : cuisine, documents, versements -->
+        {% for carte in cartes_chiffrees %}
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'depenses:recouvrement_dashboard_module' module=carte.cle %}"
+               class="module-card c-{{ carte.config.couleur }}">
+                <i class="fas {{ carte.config.icone }} module-card-icon"></i>
+                <h3 class="module-card-title">{{ carte.config.titre }}</h3>
+                <p class="module-card-desc">{{ carte.config.description }}</p>
+                <div class="module-card-stats">
+                    {{ carte.nombre|intcomma }} opération(s) · {{ carte.total|intcomma }} GNF
+                    <span class="text-muted">(dont {{ carte.total_mois|intcomma }} GNF ce mois)</span>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+
+        <!-- Informatique -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'depenses:recouvrement_informatique_dashboard' %}" class="module-card c-purple">
+                <i class="fas fa-desktop module-card-icon"></i>
+                <h3 class="module-card-title">Informatique</h3>
+                <p class="module-card-desc">Abonnements des élèves, alertes de fin et cartes d'abonnement</p>
+                <div class="module-card-stats">
+                    {{ abonnements_total|intcomma }} abonnement(s) · {{ abonnements_montant|intcomma }} GNF
+                    <span class="text-muted">({{ abonnements_actifs }} actif(s))</span>
+                </div>
+            </a>
+        </div>
+
+        <!-- Logistique -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'depenses:dashboard_logistique' %}" class="module-card c-info">
+                <i class="fas fa-boxes-stacked module-card-icon"></i>
+                <h3 class="module-card-title">Logistique</h3>
+                <p class="module-card-desc">Biens de l'établissement, stocks et suivi du papier RAM</p>
+                <div class="module-card-stats">Tableau de bord, biens et papier RAM</div>
+            </a>
+        </div>
+
+        <!-- Biens de l'établissement -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'depenses:liste_biens' %}" class="module-card c-info">
+                <i class="fas fa-building module-card-icon"></i>
+                <h3 class="module-card-title">Biens de l'établissement</h3>
+                <p class="module-card-desc">Inventaire des biens achetés et de leur disponibilité</p>
+                <div class="module-card-stats">Liste et saisie des biens</div>
+            </a>
+        </div>
+
+        <!-- Papier RAM -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'depenses:liste_papier_ram' %}" class="module-card c-success">
+                <i class="fas fa-file-lines module-card-icon"></i>
+                <h3 class="module-card-title">Papier RAM</h3>
+                <p class="module-card-desc">Contributions des élèves en papier ou en espèces</p>
+                <div class="module-card-stats">Suivi des contributions</div>
+            </a>
+        </div>
+
+        <!-- Fournitures scolaires -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'depenses:dashboard_fournitures' %}" class="module-card c-warning">
+                <i class="fas fa-store module-card-icon"></i>
+                <h3 class="module-card-title">Fournitures scolaires</h3>
+                <p class="module-card-desc">Produits en vente, stocks et ventes aux élèves</p>
+                <div class="module-card-stats">Tableau de bord et ventes</div>
+            </a>
+        </div>
+
+        <!-- Bibliothèque : masquée si le menu n'est pas autorisé pour l'utilisateur -->
+        {% with menus_autorises=user_profil.allowed_menus %}
+        {% if not menus_autorises or 'bibliotheque' in menus_autorises %}
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="module-card c-dark">
+                <i class="fas fa-book-reader module-card-icon"></i>
+                <h3 class="module-card-title">Bibliothèque</h3>
+                <p class="module-card-desc">Catalogue, emprunts, réservations et statistiques</p>
+                <div class="module-card-stats">Tableau de bord et catalogue</div>
+            </a>
+        </div>
+        {% endif %}
+        {% endwith %}
+    </div>
+
+    <h2 class="h5 section-titre">Raccourcis</h2>
+    <div class="d-flex flex-wrap" style="gap:.5rem;">
+        <a href="{% url 'depenses:ajouter_depense' %}" class="btn btn-outline-danger btn-sm">
+            <i class="fas fa-plus me-1"></i>Nouvelle dépense
+        </a>
+        <a href="{% url 'depenses:recouvrement_ajouter' module='cuisine' %}" class="btn btn-outline-success btn-sm">
+            <i class="fas fa-utensils me-1"></i>Dépense cuisine
+        </a>
+        <a href="{% url 'depenses:recouvrement_ajouter' module='document' %}" class="btn btn-outline-info btn-sm">
+            <i class="fas fa-file-invoice me-1"></i>Dépense document
+        </a>
+        <a href="{% url 'depenses:recouvrement_ajouter' module='versement' %}" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-hand-holding-dollar me-1"></i>Nouveau versement
+        </a>
+        <a href="{% url 'depenses:recouvrement_informatique_ajouter' %}" class="btn btn-outline-dark btn-sm">
+            <i class="fas fa-desktop me-1"></i>Nouvel abonnement informatique
+        </a>
+    </div>
+
+</div>
+{% endblock %}

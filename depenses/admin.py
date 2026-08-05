@@ -12,6 +12,9 @@ from .models_bibliotheque import (
     HistoriqueLivre, ParametreBibliotheque
 )
 from .models_fournitures import ProduitFourniture, VenteFourniture
+from .models_recouvrement import (
+    AbonnementInformatique, DepenseCuisine, DepenseDocument, Versement
+)
 
 
 # ===== DÉPENSES =====
@@ -168,3 +171,37 @@ class ParametreBibliothequeAdmin(admin.ModelAdmin):
     
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+# ===== RECOUVREMENT =====
+
+@admin.register(DepenseCuisine)
+class DepenseCuisineAdmin(admin.ModelAdmin):
+    list_display = ['date', 'designation', 'montant', 'ecole', 'cree_par']
+    list_filter = ['date', 'ecole']
+    search_fields = ['designation', 'observation']
+    date_hierarchy = 'date'
+
+
+@admin.register(DepenseDocument)
+class DepenseDocumentAdmin(admin.ModelAdmin):
+    list_display = ['date', 'designation', 'montant', 'ecole', 'cree_par']
+    list_filter = ['date', 'ecole']
+    search_fields = ['designation', 'observation']
+    date_hierarchy = 'date'
+
+
+@admin.register(Versement)
+class VersementAdmin(admin.ModelAdmin):
+    list_display = ['date', 'lieu_versement', 'montant', 'ecole', 'cree_par']
+    list_filter = ['date', 'ecole']
+    search_fields = ['lieu_versement', 'observation']
+    date_hierarchy = 'date'
+
+
+@admin.register(AbonnementInformatique)
+class AbonnementInformatiqueAdmin(admin.ModelAdmin):
+    list_display = ['eleve', 'date_debut', 'date_fin', 'montant', 'statut_libelle', 'cree_par']
+    list_filter = ['date_fin', 'date_debut']
+    search_fields = ['eleve__matricule', 'eleve__nom', 'eleve__prenom', 'observation']
+    date_hierarchy = 'date_fin'

@@ -1,0 +1,215 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ config.titre }} - Recouvrement{% endblock %}
+
+{% block page_header %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .module-header {
+        background: linear-gradient(135deg, #1f3864 0%, #2c5aa0 100%);
+        color: #fff; padding: 1.4rem 1.75rem; border-radius: 14px;
+        margin-bottom: 1.5rem; box-shadow: 0 4px 16px rgba(31,56,100,.22);
+    }
+    .module-header h1 { margin: 0; font-size: 1.6rem; font-weight: 700; }
+    .module-header p { margin: .3rem 0 0; opacity: .9; font-size: .92rem; }
+
+    .kpi-card {
+        background: #fff; border: 1px solid #e3e7ee; border-radius: 12px;
+        padding: 1rem 1.15rem; height: 100%; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+    .kpi-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .5px; color: #6c757d; font-weight: 600; }
+    .kpi-value { font-size: 1.4rem; font-weight: 700; color: #1f3864; }
+
+    .bloc { background:#fff; border:1px solid #e3e7ee; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+
+    .mini-chart { display: flex; align-items: flex-end; gap: 6px; height: 130px; padding-top: .5rem; }
+    .mini-chart .barre-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+    .mini-chart .barre {
+        width: 100%; background: linear-gradient(180deg, #4a7ec4 0%, #1f3864 100%);
+        border-radius: 4px 4px 0 0; min-height: 2px;
+    }
+    .mini-chart .barre-libelle { font-size: .68rem; color: #6c757d; margin-top: .35rem; white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <div class="module-header d-flex justify-content-between align-items-center flex-wrap" style="gap:1rem;">
+        <div>
+            <h1><i class="fas {{ config.icone }} me-2"></i>{{ config.titre }}</h1>
+            <p>{{ config.description }}</p>
+        </div>
+        <div class="d-flex flex-wrap" style="gap:.5rem;">
+            <a href="{% url 'depenses:hub' %}" class="btn btn-light btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Recouvrement
+            </a>
+            <a href="{% url 'depenses:recouvrement_ajouter' module=module %}" class="btn btn-warning btn-sm">
+                <i class="fas fa-plus me-1"></i>Nouvelle saisie
+            </a>
+        </div>
+    </div>
+
+    <!-- Tableau de bord du module -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Total</div>
+                <div class="kpi-value">{{ stats.total|intcomma }} <small class="fs-6">GNF</small></div>
+                <div class="text-muted small">{{ stats.nombre|intcomma }} opération(s)</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Ce mois</div>
+                <div class="kpi-value">{{ stats.total_mois|intcomma }} <small class="fs-6">GNF</small></div>
+                <div class="text-muted small">Depuis le 1er du mois</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Cette année</div>
+                <div class="kpi-value">{{ stats.total_annee|intcomma }} <small class="fs-6">GNF</small></div>
+                <div class="text-muted small">Année civile en cours</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Montant moyen</div>
+                <div class="kpi-value">{{ stats.moyenne|intcomma }} <small class="fs-6">GNF</small></div>
+                <div class="text-muted small">Par opération</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Évolution mensuelle -->
+        <div class="col-lg-7">
+            <div class="bloc p-3 h-100">
+                <h2 class="h6 fw-bold mb-1">Évolution sur 12 mois</h2>
+                <p class="text-muted small mb-1">Montants cumulés par mois (filtres appliqués)</p>
+                <div class="mini-chart">
+                    {% for point in serie %}
+                    <div class="barre-col">
+                        <div class="barre" style="height: {{ point.hauteur }}%;"
+                             title="{{ point.libelle }} : {{ point.total|intcomma }} GNF"></div>
+                        <div class="barre-libelle">{{ point.libelle }}</div>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted small mb-0">Aucune donnée à afficher.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Filtres + exports -->
+        <div class="col-lg-5">
+            <div class="bloc p-3 h-100">
+                <h2 class="h6 fw-bold mb-3">Filtrer et exporter</h2>
+                <form method="get" class="row g-2 align-items-end">
+                    <div class="col-12">
+                        <label class="form-label small mb-1" for="q">Recherche</label>
+                        <input type="text" id="q" name="q" value="{{ filtres.q }}" class="form-control form-control-sm"
+                               placeholder="{{ config.entete_libelle|lower }} ou observation">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small mb-1" for="du">Du</label>
+                        <input type="date" id="du" name="du" value="{{ filtres.du }}" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small mb-1" for="au">Au</label>
+                        <input type="date" id="au" name="au" value="{{ filtres.au }}" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-12 d-flex flex-wrap mt-2" style="gap:.4rem;">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-filter me-1"></i>Filtrer
+                        </button>
+                        <a href="{% url 'depenses:recouvrement_dashboard_module' module=module %}" class="btn btn-outline-secondary btn-sm">
+                            Réinitialiser
+                        </a>
+                        <a class="btn btn-success btn-sm"
+                           href="{% url 'depenses:recouvrement_export_excel' module=module %}?q={{ filtres.q|urlencode }}&du={{ filtres.du }}&au={{ filtres.au }}">
+                            <i class="fas fa-file-excel me-1"></i>Excel
+                        </a>
+                        <a class="btn btn-danger btn-sm" target="_blank"
+                           href="{% url 'depenses:recouvrement_export_pdf' module=module %}?q={{ filtres.q|urlencode }}&du={{ filtres.du }}&au={{ filtres.au }}">
+                            <i class="fas fa-file-pdf me-1"></i>PDF
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Registre -->
+    <div class="bloc p-3 mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap" style="gap:.5rem;">
+            <h2 class="h6 fw-bold mb-0">Registre</h2>
+            <span class="text-muted small">{{ page_obj.paginator.count|intcomma }} ligne(s)</span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:110px;">Date</th>
+                        <th>{{ config.entete_libelle }}</th>
+                        <th class="text-end" style="width:150px;">Montant (GNF)</th>
+                        <th>Observation</th>
+                        <th class="text-end" style="width:130px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for operation in operations %}
+                    <tr>
+                        <td>{{ operation.date|date:"d/m/Y" }}</td>
+                        <td class="fw-semibold">{{ operation.libelle }}</td>
+                        <td class="text-end">{{ operation.montant|floatformat:0|intcomma }}</td>
+                        <td class="text-muted small">{{ operation.observation|default:"—"|linebreaksbr }}</td>
+                        <td class="text-end">
+                            <a href="{% url 'depenses:recouvrement_modifier' module=module pk=operation.pk %}"
+                               class="btn btn-sm btn-outline-primary" title="Modifier">
+                                <i class="fas fa-pen"></i>
+                            </a>
+                            <a href="{% url 'depenses:recouvrement_supprimer' module=module pk=operation.pk %}"
+                               class="btn btn-sm btn-outline-danger" title="Supprimer">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">
+                            Aucune opération enregistrée pour ces critères.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav class="mt-3">
+            <ul class="pagination pagination-sm justify-content-center mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ filtres.q|urlencode }}&du={{ filtres.du }}&au={{ filtres.au }}">Précédent</a>
+                </li>
+                {% endif %}
+                <li class="page-item disabled">
+                    <span class="page-link">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                </li>
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ filtres.q|urlencode }}&du={{ filtres.du }}&au={{ filtres.au }}">Suivant</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

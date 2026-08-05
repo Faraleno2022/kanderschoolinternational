@@ -209,7 +209,7 @@ class MenuAccessMiddleware:
     MENU_HOME_URLS = {
         'eleves': ('eleves:liste_eleves', 'Élèves'),
         'paiements': ('paiements:tableau_bord', 'Paiements'),
-        'depenses': ('depenses:tableau_bord', 'Dépenses'),
+        'depenses': ('depenses:hub', 'Recouvrement'),
         'bibliotheque': ('depenses:dashboard_bibliotheque', 'Bibliothèque'),
         'salaires': ('salaires:tableau_bord', 'Salaires'),
         'bus': ('bus:index', 'Transport'),
