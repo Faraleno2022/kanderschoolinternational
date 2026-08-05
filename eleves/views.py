@@ -571,6 +571,30 @@ def detail_eleve(request, eleve_id):
     
     return render(request, 'eleves/detail_eleve.html', context)
 
+
+@login_required
+@never_cache
+def ajout_eleve_reussi(request, eleve_id):
+    """Propose l'action suivante après la création d'un élève."""
+    eleves = Eleve.objects.select_related('classe', 'classe__ecole')
+    eleves = filter_by_user_school(eleves, request.user, 'classe__ecole')
+    eleve = get_object_or_404(eleves, pk=eleve_id)
+
+    continuer_url = reverse('eleves:ajouter_eleve')
+    if eleve.classe_id:
+        continuer_url += f'?classe_id={eleve.classe_id}'
+
+    return render(request, 'eleves/ajout_eleve_reussi.html', {
+        'eleve': eleve,
+        'paiement_url': reverse(
+            'paiements:ajouter_paiement_eleve',
+            kwargs={'eleve_id': eleve.pk},
+        ),
+        'continuer_url': continuer_url,
+        'titre_page': 'Élève ajouté avec succès',
+    })
+
+
 @login_required
 @never_cache
 def ajouter_eleve(request):
@@ -692,13 +716,9 @@ def ajouter_eleve(request):
                         f'classes_ecole_{user_school_obj.id if user_school_obj else "admin"}'
                     ])
                     
-                messages.success(request, f"L'eleve {eleve.prenom} {eleve.nom} a ete ajoute avec succes (Matricule: {eleve.matricule}). Vous pouvez ajouter un autre eleve.")
-                # Rediriger vers le formulaire d'ajout en preservant la classe selectionnee
-                url = reverse('eleves:ajouter_eleve')
-                classe_id = form.cleaned_data.get('classe')
-                if classe_id:
-                    url += f'?classe_id={classe_id.id if hasattr(classe_id, "id") else classe_id}'
-                return redirect(url)
+                # L'utilisateur choisit ensuite entre enregistrer un paiement
+                # et continuer l'ajout d'élèves dans la même classe.
+                return redirect('eleves:ajout_eleve_reussi', eleve_id=eleve.pk)
                 
             except Exception as e:
                 logger.exception("Erreur lors de l'enregistrement d'un élève")

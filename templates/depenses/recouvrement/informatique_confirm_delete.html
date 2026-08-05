@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block page_header %}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-danger text-white">
+                    <h1 class="h5 mb-0"><i class="fas fa-triangle-exclamation me-2"></i>{{ titre_page }}</h1>
+                </div>
+                <div class="card-body">
+                    <p>Cet abonnement sera définitivement supprimé :</p>
+                    <ul class="list-group mb-3">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Élève</span>
+                            <strong>{{ abonnement.eleve.prenom }} {{ abonnement.eleve.nom }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Matricule</span>
+                            <strong>{{ abonnement.eleve.matricule }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Période</span>
+                            <strong>{{ abonnement.date_debut|date:"d/m/Y" }} → {{ abonnement.date_fin|date:"d/m/Y" }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Montant</span>
+                            <strong>{{ abonnement.montant|floatformat:0|intcomma }} GNF</strong>
+                        </li>
+                    </ul>
+
+                    <form method="post" class="d-flex justify-content-end" style="gap:.5rem;">
+                        {% csrf_token %}
+                        <a href="{% url 'depenses:recouvrement_informatique_liste' %}" class="btn btn-outline-secondary">Annuler</a>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash me-1"></i>Supprimer définitivement
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

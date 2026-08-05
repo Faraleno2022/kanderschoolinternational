@@ -3917,6 +3917,78 @@ def ajax_calculer_remise(request):
         'details': [],
     })
 
+def _montants_tranches_dues(paiement) -> dict:
+    """Montant dû par tranche de scolarité pour l'élève du paiement.
+
+    Utilise l'échéancier ; à défaut, la grille tarifaire de la classe.
+    Les frais d'inscription/réinscription sont volontairement exclus : une
+    remise ne porte jamais dessus.
+    """
+    dues = {'1': Decimal('0'), '2': Decimal('0'), '3': Decimal('0')}
+    try:
+        ech = getattr(paiement.eleve, 'echeancier', None)
+        if ech:
+            dues = {
+                '1': Decimal(str(ech.tranche_1_due or 0)),
+                '2': Decimal(str(ech.tranche_2_due or 0)),
+                '3': Decimal(str(ech.tranche_3_due or 0)),
+            }
+        if not any(dues.values()):
+            from eleves.models import GrilleTarifaire as _Grille
+            classe = getattr(paiement.eleve, 'classe', None)
+            ecole = getattr(classe, 'ecole', None)
+            niveau = getattr(classe, 'niveau', None)
+            annee = getattr(classe, 'annee_scolaire', None)
+            grille = None
+            if ecole and niveau and annee:
+                grille = _Grille.objects.filter(ecole=ecole, niveau=niveau, annee_scolaire=annee).first()
+            if not grille and ecole and niveau:
+                grille = _Grille.objects.filter(ecole=ecole, niveau=niveau).order_by('-annee_scolaire').first()
+            if grille:
+                dues = {
+                    '1': Decimal(str(grille.tranche_1 or 0)),
+                    '2': Decimal(str(grille.tranche_2 or 0)),
+                    '3': Decimal(str(grille.tranche_3 or 0)),
+                }
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "Impossible de déterminer les tranches dues du paiement %s",
+            getattr(paiement, 'pk', None),
+        )
+    return dues
+
+
+def _detail_tranches_remise(paiement) -> list:
+    """Détaille chaque tranche : montant dû et part de ce reçu qui lui revient.
+
+    La part « sur ce paiement » réutilise l'affectation réelle du reçu
+    (inscription d'abord, puis T1, T2, T3), pour que la base « Paiement à
+    l'échéance » corresponde à ce qui est effectivement versé sur la tranche.
+    """
+    dues = _montants_tranches_dues(paiement)
+    breakdown = _get_payment_allocation_breakdown(paiement) or {}
+    libelles = {'1': "1ère tranche", '2': "2ème tranche", '3': "3ème tranche"}
+    detail = []
+    for num in ('1', '2', '3'):
+        detail.append({
+            'numero': num,
+            'libelle': libelles[num],
+            'montant_du': int(dues[num]),
+            'sur_paiement': int(Decimal(str(breakdown.get(f'tranche_{num}', 0) or 0))),
+        })
+    return detail
+
+
+def _base_remise(detail_tranches, tranches, base_calcul) -> Decimal:
+    """Base de calcul de la remise selon les tranches cochées et le mode retenu."""
+    cle = 'sur_paiement' if base_calcul == 'ECHEANCE' else 'montant_du'
+    total = Decimal('0')
+    for ligne in detail_tranches:
+        if ligne['numero'] in tranches:
+            total += Decimal(str(ligne[cle]))
+    return total
+
+
 @login_required
 @can_apply_discounts
 @require_school_object(Paiement, pk_kwarg='paiement_id', field_path='eleve__classe__ecole')
@@ -3932,62 +4004,69 @@ def appliquer_remise_paiement(request, paiement_id:int):
         messages.warning(request, "Seuls les paiements en attente peuvent recevoir des remises.")
         return redirect('paiements:detail_paiement', paiement_id=paiement.id)
 
-    # Base scolarité = T1+T2+T3 (hors inscription)
-    base_scolarite = 0
-    try:
-        ech = getattr(paiement.eleve, 'echeancier', None)
-        if ech:
-            base_scolarite = int((ech.tranche_1_due or 0) + (ech.tranche_2_due or 0) + (ech.tranche_3_due or 0))
-        if not base_scolarite:
-            # Fallback via grille tarifaire de la classe
-            try:
-                from eleves.models import GrilleTarifaire as _Grille
-                classe = getattr(paiement.eleve, 'classe', None)
-                ecole = getattr(classe, 'ecole', None)
-                niveau = getattr(classe, 'niveau', None)
-                annee = getattr(classe, 'annee_scolaire', None)
-                grille = None
-                if ecole and niveau and annee:
-                    grille = _Grille.objects.filter(ecole=ecole, niveau=niveau, annee_scolaire=annee).first()
-                if not grille and ecole and niveau:
-                    grille = _Grille.objects.filter(ecole=ecole, niveau=niveau).order_by('-annee_scolaire').first()
-                if grille:
-                    base_scolarite = int((grille.tranche_1 or 0) + (grille.tranche_2 or 0) + (grille.tranche_3 or 0))
-            except Exception:
-                pass
-    except Exception:
-        base_scolarite = 0
+    # Détail par tranche : montant dû et part de ce reçu affectée à la tranche.
+    detail_tranches = _detail_tranches_remise(paiement)
+    # Base scolarité = T1+T2+T3 (hors inscription), conservée pour l'affichage.
+    base_scolarite = sum(ligne['montant_du'] for ligne in detail_tranches)
 
     if request.method == 'POST':
         form = PaiementRemiseForm(request.POST, paiement=paiement)
         if form.is_valid():
             remises = form.cleaned_data.get('remises') or []
+            tranches = form.cleaned_data.get('tranches') or []
+            base_calcul = form.cleaned_data.get('base_calcul') or 'TRANCHES'
+            motif_remise = form.cleaned_data.get('motif_remise') or ''
             pct_str = form.cleaned_data.get('pourcentage_scolarite') or ''
             try:
                 pct_value = int(pct_str) if str(pct_str).isdigit() else 0
             except Exception:
                 pct_value = 0
-            # Si aucune remise n'est sélectionnée, ne rien modifier et afficher une erreur
-            if not remises and pct_value <= 0:
-                messages.error(request, "Aucune remise sélectionnée. Aucune modification n'a été effectuée.")
+
+            base_remise = _base_remise(detail_tranches, tranches, base_calcul)
+
+            def _rendu_avec_erreur(message):
+                messages.error(request, message)
                 try:
-                    remises_existantes = list(paiement.remises.select_related('remise').all())
+                    remises_existantes_err = list(paiement.remises.select_related('remise').all())
                 except Exception:
-                    remises_existantes = []
-                context = {
+                    remises_existantes_err = []
+                return render(request, 'paiements/appliquer_remise.html', {
                     'paiement': paiement,
                     'form': form,
-                    'remises_existantes': remises_existantes,
+                    'remises_existantes': remises_existantes_err,
                     'base_scolarite': int(base_scolarite or 0),
-                }
-                return render(request, 'paiements/appliquer_remise.html', context)
+                    'detail_tranches': detail_tranches,
+                    'base_remise': int(base_remise or 0),
+                    'tranches_cochees': tranches,
+                    'base_calcul_choisie': base_calcul,
+                })
+
+            # Si aucune remise n'est sélectionnée, ne rien modifier et afficher une erreur
+            if not remises and pct_value <= 0:
+                return _rendu_avec_erreur(
+                    "Aucune remise sélectionnée. Aucune modification n'a été effectuée."
+                )
+
+            # Sans base, la remise vaudrait 0 : on refuse plutôt que d'enregistrer
+            # une remise vide qui laisserait croire à une réduction accordée.
+            if base_remise <= 0:
+                libelle_base = (
+                    "versé sur ces tranches par ce reçu" if base_calcul == 'ECHEANCE'
+                    else "dû sur les tranches sélectionnées"
+                )
+                return _rendu_avec_erreur(
+                    f"Aucun montant {libelle_base} : la remise serait nulle. "
+                    "Modifiez les tranches cochées ou la base de calcul."
+                )
 
             # Avertissement serveur quand 100% est sélectionné (affiché même sans JS)
             if pct_value == 100:
                 messages.warning(
                     request,
-                    "Attention: vous appliquez 100% de remise scolarité. Cela annulera entièrement la scolarité (T1+T2+T3) pour l'année en cours. Cette règle est applicable à toutes les classes. Vérifiez l'autorisation avant de confirmer."
+                    "Attention: vous appliquez 100% de remise scolarité. Cela annulera entièrement la scolarité des tranches sélectionnées pour l'année en cours. Cette règle est applicable à toutes les classes. Vérifiez l'autorisation avant de confirmer."
                 )
+
+            portee = ','.join(tranches)
 
             # pourcentage_scolarite est un aperçu UI, on ne le persiste pas ici faute de modèle dédié
             with transaction.atomic():
@@ -3996,13 +4075,15 @@ def appliquer_remise_paiement(request, paiement_id:int):
                 created = 0
                 for remise in remises:
                     try:
-                        montant_remise = remise.calculer_remise(paiement.montant)
+                        montant_remise = remise.calculer_remise(base_remise)
                     except Exception:
                         montant_remise = 0
                     PaiementRemise.objects.create(
                         paiement=paiement,
                         remise=remise,
                         montant_remise=montant_remise,
+                        portee_tranches=portee,
+                        motif_application=motif_remise,
                     )
                     created += 1
 
@@ -4032,24 +4113,17 @@ def appliquer_remise_paiement(request, paiement_id:int):
                             date_fin=date(annee, 12, 31),
                             actif=True,
                         )
-                    # 3% s'applique sur base scolarité (T1+T2+T3), pas sur le montant du paiement
-                    try:
-                        montant_remise_pct = (base_scolarite * pct_value) / 100
-                    except Exception:
-                        montant_remise_pct = (paiement.montant * pct_value) / 100
-                    # Ne jamais dépasser le montant du paiement
-                    try:
-                        from decimal import Decimal as _D
-                        montant_remise_pct = min(_D(montant_remise_pct), _D(paiement.montant))
-                    except Exception:
-                        try:
-                            montant_remise_pct = min(float(montant_remise_pct), float(paiement.montant))
-                        except Exception:
-                            pass
+                    # Le pourcentage porte sur la base retenue (tranches cochées),
+                    # jamais sur les frais d'inscription. Il est plafonné à cette
+                    # base : une remise ne peut pas dépasser ce qu'elle couvre.
+                    montant_remise_pct = (base_remise * Decimal(pct_value)) / Decimal('100')
+                    montant_remise_pct = max(Decimal('0'), min(montant_remise_pct, base_remise))
                     PaiementRemise.objects.create(
                         paiement=paiement,
                         remise=remise_pct,
                         montant_remise=montant_remise_pct,
+                        portee_tranches=portee,
+                        motif_application=motif_remise,
                     )
                     created += 1
             messages.success(request, f"Remises appliquées: {created}.")
@@ -4065,11 +4139,22 @@ def appliquer_remise_paiement(request, paiement_id:int):
     except Exception:
         remises_existantes = []
 
+    # Tranches à pré-cocher : celles de la remise déjà enregistrée si elle
+    # existe, sinon la 1ère tranche par défaut.
+    tranches_cochees = ['1']
+    for existante in remises_existantes:
+        if existante.tranches_list:
+            tranches_cochees = existante.tranches_list
+            break
+
     context = {
         'paiement': paiement,
         'form': form,
         'remises_existantes': remises_existantes,
         'base_scolarite': int(base_scolarite or 0),
+        'detail_tranches': detail_tranches,
+        'tranches_cochees': tranches_cochees,
+        'base_calcul_choisie': 'TRANCHES',
     }
     return render(request, 'paiements/appliquer_remise.html', context)
 

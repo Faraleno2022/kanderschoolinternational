@@ -3,13 +3,17 @@ from . import views
 from . import views_logistique
 from . import views_bibliotheque
 from . import views_fournitures
+from . import views_recouvrement
 
 app_name = 'depenses'
 
 urlpatterns = [
-    # Tableau de bord principal
-    path('', views.tableau_bord, name='tableau_bord'),
-    
+    # Accueil du module Recouvrement : tableau de bord général + cartes
+    path('', views_recouvrement.hub_recouvrement, name='hub'),
+
+    # Tableau de bord des dépenses classiques
+    path('tableau-bord/', views.tableau_bord, name='tableau_bord'),
+
     # Gestion des dépenses
     path('liste/', views.liste_depenses, name='liste_depenses'),
     path('ajouter/', views.ajouter_depense, name='ajouter_depense'),
@@ -24,6 +28,48 @@ urlpatterns = [
     path('categories/<int:categorie_id>/modifier/', views.modifier_categorie, name='modifier_categorie'),
     path('categories/<int:categorie_id>/supprimer/', views.supprimer_categorie, name='supprimer_categorie'),
     
+    # ===== RECOUVREMENT : ABONNEMENTS INFORMATIQUE =====
+    # Déclaré avant les routes génériques <module> pour que « informatique »
+    # ne soit pas capturé comme un sous-module simple.
+    path('recouvrement/informatique/', views_recouvrement.dashboard_informatique,
+         name='recouvrement_informatique_dashboard'),
+    path('recouvrement/informatique/liste/', views_recouvrement.liste_informatique,
+         name='recouvrement_informatique_liste'),
+    path('recouvrement/informatique/nouveau/', views_recouvrement.ajouter_abonnement_informatique,
+         name='recouvrement_informatique_ajouter'),
+    path('recouvrement/informatique/<int:pk>/modifier/',
+         views_recouvrement.modifier_abonnement_informatique,
+         name='recouvrement_informatique_modifier'),
+    path('recouvrement/informatique/<int:pk>/supprimer/',
+         views_recouvrement.supprimer_abonnement_informatique,
+         name='recouvrement_informatique_supprimer'),
+    path('recouvrement/informatique/<int:pk>/carte/',
+         views_recouvrement.carte_abonnement_informatique,
+         name='recouvrement_informatique_carte'),
+    path('recouvrement/informatique/export/excel/',
+         views_recouvrement.export_informatique_excel,
+         name='recouvrement_informatique_export_excel'),
+    path('recouvrement/informatique/export/pdf/',
+         views_recouvrement.export_informatique_pdf,
+         name='recouvrement_informatique_export_pdf'),
+    path('recouvrement/informatique/recherche-eleve/',
+         views_recouvrement.rechercher_eleve_informatique,
+         name='recouvrement_informatique_recherche_eleve'),
+
+    # ===== RECOUVREMENT : CUISINE / DOCUMENTS / VERSEMENTS =====
+    path('recouvrement/<str:module>/', views_recouvrement.dashboard_module,
+         name='recouvrement_dashboard_module'),
+    path('recouvrement/<str:module>/nouveau/', views_recouvrement.ajouter_operation,
+         name='recouvrement_ajouter'),
+    path('recouvrement/<str:module>/<int:pk>/modifier/', views_recouvrement.modifier_operation,
+         name='recouvrement_modifier'),
+    path('recouvrement/<str:module>/<int:pk>/supprimer/', views_recouvrement.supprimer_operation,
+         name='recouvrement_supprimer'),
+    path('recouvrement/<str:module>/export/excel/', views_recouvrement.export_module_excel,
+         name='recouvrement_export_excel'),
+    path('recouvrement/<str:module>/export/pdf/', views_recouvrement.export_module_pdf,
+         name='recouvrement_export_pdf'),
+
     # ===== LOGISTIQUE =====
     path('logistique/', views_logistique.dashboard_logistique, name='dashboard_logistique'),
     path('logistique/biens/', views_logistique.liste_biens, name='liste_biens'),

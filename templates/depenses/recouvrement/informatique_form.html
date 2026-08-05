@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block page_header %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    #resultats-eleves .list-group-item { cursor: pointer; }
+    #resultats-eleves .list-group-item:hover { background: #f1f5fb; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h1 class="h5 mb-0"><i class="fas fa-desktop me-2 text-secondary"></i>{{ titre_page }}</h1>
+                    <a href="{% url 'depenses:recouvrement_informatique_liste' %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Retour
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <!-- Recherche d'élève par matricule ou nom -->
+                    <div class="mb-3">
+                        <label class="form-label" for="recherche-eleve">Rechercher un élève</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <input type="text" id="recherche-eleve" class="form-control"
+                                   placeholder="Matricule ou nom (au moins 2 caractères)" autocomplete="off">
+                        </div>
+                        <div class="form-text">La sélection remplit automatiquement la liste des élèves ci-dessous.</div>
+                        <div id="resultats-eleves" class="list-group mt-2 d-none"></div>
+                    </div>
+
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ form.eleve.id_for_label }}">
+                                Élève <span class="text-danger">*</span>
+                            </label>
+                            {{ form.eleve }}
+                            {% for erreur in form.eleve.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.date.id_for_label }}">
+                                    Date d'enregistrement <span class="text-danger">*</span>
+                                </label>
+                                {{ form.date }}
+                                <div class="form-text">Pré-remplie à la date du jour.</div>
+                                {% for erreur in form.date.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.montant.id_for_label }}">
+                                    Montant de l'abonnement (GNF) <span class="text-danger">*</span>
+                                </label>
+                                {{ form.montant }}
+                                {% for erreur in form.montant.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.date_debut.id_for_label }}">
+                                    Début de l'abonnement <span class="text-danger">*</span>
+                                </label>
+                                {{ form.date_debut }}
+                                {% for erreur in form.date_debut.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.date_fin.id_for_label }}">
+                                    Fin de l'abonnement <span class="text-danger">*</span>
+                                </label>
+                                {{ form.date_fin }}
+                                <div class="d-flex flex-wrap mt-2" style="gap:.35rem;">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm duree" data-mois="1">+1 mois</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm duree" data-mois="3">+3 mois</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm duree" data-mois="6">+6 mois</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm duree" data-mois="12">+12 mois</button>
+                                </div>
+                                {% for erreur in form.date_fin.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.alerte_avant_jours.id_for_label }}">
+                                    Alerte avant (jours)
+                                </label>
+                                {{ form.alerte_avant_jours }}
+                                <div class="form-text">Délai avant la fin à partir duquel l'abonnement apparaît en alerte.</div>
+                                {% for erreur in form.alerte_avant_jours.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.observation.id_for_label }}">Observation</label>
+                                {{ form.observation }}
+                                {% for erreur in form.observation.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end mt-4" style="gap:.5rem;">
+                            <a href="{% url 'depenses:recouvrement_informatique_liste' %}" class="btn btn-outline-secondary">Annuler</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>
+                                {% if mode == 'modification' %}Enregistrer les modifications{% else %}Enregistrer l'abonnement{% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const champRecherche = document.getElementById('recherche-eleve');
+    const zoneResultats = document.getElementById('resultats-eleves');
+    const selectEleve = document.getElementById('{{ form.eleve.id_for_label }}');
+    const urlRecherche = "{% url 'depenses:recouvrement_informatique_recherche_eleve' %}";
+    let minuteur = null;
+
+    function afficher(resultats) {
+        zoneResultats.innerHTML = '';
+        if (!resultats.length) {
+            zoneResultats.classList.add('d-none');
+            return;
+        }
+        resultats.forEach(function (eleve) {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'list-group-item list-group-item-action';
+            item.innerHTML = '<strong>' + eleve.nom_complet + '</strong>' +
+                '<span class="text-muted small d-block">' + eleve.matricule +
+                (eleve.classe ? ' · ' + eleve.classe : '') + '</span>';
+            item.addEventListener('click', function () {
+                // La liste déroulante reste la source de vérité envoyée au serveur.
+                selectEleve.value = eleve.id;
+                champRecherche.value = eleve.nom_complet + ' (' + eleve.matricule + ')';
+                zoneResultats.classList.add('d-none');
+            });
+            zoneResultats.appendChild(item);
+        });
+        zoneResultats.classList.remove('d-none');
+    }
+
+    if (champRecherche) {
+        champRecherche.addEventListener('input', function () {
+            const terme = champRecherche.value.trim();
+            clearTimeout(minuteur);
+            if (terme.length < 2) {
+                zoneResultats.classList.add('d-none');
+                return;
+            }
+            minuteur = setTimeout(function () {
+                fetch(urlRecherche + '?q=' + encodeURIComponent(terme))
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) { afficher(data.resultats || []); })
+                    .catch(function () { zoneResultats.classList.add('d-none'); });
+            }, 250);
+        });
+    }
+
+    // Boutons de durée : calculent la date de fin à partir de la date de début.
+    const champDebut = document.getElementById('{{ form.date_debut.id_for_label }}');
+    const champFin = document.getElementById('{{ form.date_fin.id_for_label }}');
+    document.querySelectorAll('.duree').forEach(function (bouton) {
+        bouton.addEventListener('click', function () {
+            if (!champDebut || !champDebut.value) { return; }
+            const mois = parseInt(bouton.dataset.mois, 10);
+            const debut = new Date(champDebut.value + 'T00:00:00');
+            const fin = new Date(debut.getTime());
+            fin.setMonth(fin.getMonth() + mois);
+            champFin.value = fin.toISOString().slice(0, 10);
+        });
+    });
+})();
+</script>
+{% endblock %}

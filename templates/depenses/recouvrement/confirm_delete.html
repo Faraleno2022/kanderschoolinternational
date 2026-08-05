@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block page_header %}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-danger text-white">
+                    <h1 class="h5 mb-0"><i class="fas fa-triangle-exclamation me-2"></i>{{ titre_page }}</h1>
+                </div>
+                <div class="card-body">
+                    <p>Cette opération sera définitivement supprimée du registre :</p>
+                    <ul class="list-group mb-3">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Date</span>
+                            <strong>{{ operation.date|date:"d/m/Y" }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">{{ config.entete_libelle }}</span>
+                            <strong>{{ operation.libelle }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Montant</span>
+                            <strong>{{ operation.montant|floatformat:0|intcomma }} GNF</strong>
+                        </li>
+                        {% if operation.observation %}
+                        <li class="list-group-item">
+                            <span class="text-muted d-block">Observation</span>
+                            {{ operation.observation|linebreaksbr }}
+                        </li>
+                        {% endif %}
+                    </ul>
+
+                    <form method="post" class="d-flex justify-content-end" style="gap:.5rem;">
+                        {% csrf_token %}
+                        <a href="{% url 'depenses:recouvrement_dashboard_module' module=module %}"
+                           class="btn btn-outline-secondary">Annuler</a>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash me-1"></i>Supprimer définitivement
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

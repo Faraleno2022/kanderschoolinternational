@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Abonnements informatique - Recouvrement{% endblock %}
+
+{% block page_header %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .module-header {
+        background: linear-gradient(135deg, #4b2e83 0%, #6f42c1 100%);
+        color: #fff; padding: 1.4rem 1.75rem; border-radius: 14px;
+        margin-bottom: 1.5rem; box-shadow: 0 4px 16px rgba(75,46,131,.25);
+    }
+    .module-header h1 { margin: 0; font-size: 1.6rem; font-weight: 700; }
+    .module-header p { margin: .3rem 0 0; opacity: .9; font-size: .92rem; }
+
+    .kpi-card {
+        background: #fff; border: 1px solid #e3e7ee; border-radius: 12px;
+        padding: 1rem 1.15rem; height: 100%; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+    .kpi-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .5px; color: #6c757d; font-weight: 600; }
+    .kpi-value { font-size: 1.4rem; font-weight: 700; color: #4b2e83; }
+
+    .bloc { background:#fff; border:1px solid #e3e7ee; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+
+    .mini-chart { display: flex; align-items: flex-end; gap: 6px; height: 130px; padding-top: .5rem; }
+    .mini-chart .barre-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+    .mini-chart .barre { width: 100%; background: linear-gradient(180deg, #9b7fd4 0%, #4b2e83 100%); border-radius: 4px 4px 0 0; min-height: 2px; }
+    .mini-chart .barre-libelle { font-size: .68rem; color: #6c757d; margin-top: .35rem; white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <div class="module-header d-flex justify-content-between align-items-center flex-wrap" style="gap:1rem;">
+        <div>
+            <h1><i class="fas fa-desktop me-2"></i>Abonnements informatique</h1>
+            <p>Suivi des abonnements des élèves, alertes de fin et cartes d'abonnement</p>
+        </div>
+        <div class="d-flex flex-wrap" style="gap:.5rem;">
+            <a href="{% url 'depenses:hub' %}" class="btn btn-light btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Recouvrement
+            </a>
+            <a href="{% url 'depenses:recouvrement_informatique_liste' %}" class="btn btn-light btn-sm">
+                <i class="fas fa-list me-1"></i>Liste des élèves abonnés
+            </a>
+            <a href="{% url 'depenses:recouvrement_informatique_ajouter' %}" class="btn btn-warning btn-sm">
+                <i class="fas fa-plus me-1"></i>Nouvel abonnement
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Abonnements</div>
+                <div class="kpi-value">{{ total|intcomma }}</div>
+                <div class="text-muted small">{{ actifs|intcomma }} actif(s)</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Fins proches</div>
+                <div class="kpi-value text-warning">{{ alertes_nombre|intcomma }}</div>
+                <div class="text-muted small">Dans les 7 prochains jours</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Expirés</div>
+                <div class="kpi-value text-danger">{{ expires|intcomma }}</div>
+                <div class="text-muted small">À renouveler</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Montant encaissé</div>
+                <div class="kpi-value">{{ montant_total|intcomma }} <small class="fs-6">GNF</small></div>
+                <div class="text-muted small">Dont {{ montant_mois|intcomma }} GNF ce mois</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Alertes de fin d'abonnement -->
+        <div class="col-lg-7">
+            <div class="bloc p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h2 class="h6 fw-bold mb-0">
+                        <i class="fas fa-bell text-warning me-1"></i>Alertes de fin d'abonnement
+                    </h2>
+                    <a class="btn btn-sm btn-outline-warning"
+                       href="{% url 'depenses:recouvrement_informatique_liste' %}?statut=alerte">Tout voir</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Matricule</th>
+                                <th>Élève</th>
+                                <th>Classe</th>
+                                <th>Fin</th>
+                                <th class="text-end">Jours restants</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for abonnement in alertes %}
+                            <tr>
+                                <td><code>{{ abonnement.eleve.matricule }}</code></td>
+                                <td>{{ abonnement.eleve.prenom }} {{ abonnement.eleve.nom }}</td>
+                                <td>{{ abonnement.eleve.classe.nom|default:"—" }}</td>
+                                <td>{{ abonnement.date_fin|date:"d/m/Y" }}</td>
+                                <td class="text-end">
+                                    <span class="badge bg-warning text-dark">{{ abonnement.jours_restants }} j</span>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="5" class="text-center text-muted py-3">Aucun abonnement n'arrive à échéance.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Abonnements expirés -->
+        <div class="col-lg-5">
+            <div class="bloc p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h2 class="h6 fw-bold mb-0">
+                        <i class="fas fa-circle-xmark text-danger me-1"></i>Abonnements expirés
+                    </h2>
+                    <a class="btn btn-sm btn-outline-danger"
+                       href="{% url 'depenses:recouvrement_informatique_liste' %}?statut=expire">Tout voir</a>
+                </div>
+                <ul class="list-group list-group-flush">
+                    {% for abonnement in expires_recents %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span>
+                            <strong>{{ abonnement.eleve.prenom }} {{ abonnement.eleve.nom }}</strong>
+                            <span class="text-muted small d-block">
+                                {{ abonnement.eleve.matricule }} · {{ abonnement.eleve.classe.nom|default:"—" }}
+                            </span>
+                        </span>
+                        <span class="badge bg-danger">{{ abonnement.date_fin|date:"d/m/Y" }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-muted text-center px-0">Aucun abonnement expiré.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-0">
+        <!-- Évolution des encaissements -->
+        <div class="col-lg-7">
+            <div class="bloc p-3 h-100">
+                <h2 class="h6 fw-bold mb-1">Encaissements sur 12 mois</h2>
+                <p class="text-muted small mb-1">Montants des abonnements enregistrés par mois</p>
+                <div class="mini-chart">
+                    {% for point in serie %}
+                    <div class="barre-col">
+                        <div class="barre" style="height: {{ point.hauteur }}%;"
+                             title="{{ point.libelle }} : {{ point.total|intcomma }} GNF"></div>
+                        <div class="barre-libelle">{{ point.libelle }}</div>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted small mb-0">Aucune donnée à afficher.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Derniers enregistrements -->
+        <div class="col-lg-5">
+            <div class="bloc p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h2 class="h6 fw-bold mb-0">Derniers abonnements</h2>
+                    <div class="d-flex" style="gap:.35rem;">
+                        <a class="btn btn-sm btn-success" href="{% url 'depenses:recouvrement_informatique_export_excel' %}">
+                            <i class="fas fa-file-excel"></i>
+                        </a>
+                        <a class="btn btn-sm btn-danger" target="_blank"
+                           href="{% url 'depenses:recouvrement_informatique_export_pdf' %}">
+                            <i class="fas fa-file-pdf"></i>
+                        </a>
+                    </div>
+                </div>
+                <ul class="list-group list-group-flush">
+                    {% for abonnement in derniers %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span>
+                            <strong>{{ abonnement.eleve.prenom }} {{ abonnement.eleve.nom }}</strong>
+                            <span class="text-muted small d-block">
+                                {{ abonnement.date_debut|date:"d/m/Y" }} → {{ abonnement.date_fin|date:"d/m/Y" }}
+                            </span>
+                        </span>
+                        <span class="badge bg-{{ abonnement.statut_couleur }}">{{ abonnement.statut_libelle }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-muted text-center px-0">Aucun abonnement enregistré.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

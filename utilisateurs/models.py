@@ -131,7 +131,7 @@ class Profil(models.Model):
 MENUS = [
     ('eleves', 'Élèves'),
     ('paiements', 'Paiements'),
-    ('depenses', 'Dépenses & Logistique'),
+    ('depenses', 'Recouvrement (dépenses, cuisine, documents, versements, informatique)'),
     ('bibliotheque', 'Bibliothèque'),
     ('salaires', 'Salaires'),
     ('bus', 'Transport & Cantine'),

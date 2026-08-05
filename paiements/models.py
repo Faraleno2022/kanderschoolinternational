@@ -293,20 +293,56 @@ class RemiseReduction(SyncTrackedModel):
 
 class PaiementRemise(SyncTrackedModel):
     """Modèle pour associer des remises aux paiements"""
+
+    # Motif saisi au moment où l'agent accorde la remise (obligatoire dans le
+    # formulaire). À ne pas confondre avec RemiseReduction.motif, qui qualifie
+    # la remise du catalogue et non son application à un reçu précis.
+    MOTIF_APPLICATION_CHOICES = [
+        ('CLIENT_FIDELE', 'Client fidèle'),
+        ('PROMOTION', 'Promotion'),
+        ('ERREUR_COMMERCIALE', 'Erreur commerciale'),
+        ('PARTENAIRE', 'Partenaire'),
+        ('GESTE_COMMERCIAL', 'Geste commercial'),
+        ('NE_PAIE_RIEN', 'Ne paie rien'),
+        ('LA_MOITIE', 'La moitié'),
+    ]
+
     paiement = models.ForeignKey(Paiement, on_delete=models.CASCADE, related_name='remises')
     remise = models.ForeignKey(RemiseReduction, on_delete=models.CASCADE)
     montant_remise = models.DecimalField(
         max_digits=10, decimal_places=0,
         verbose_name="Montant de la remise (GNF)"
     )
-    
+    portee_tranches = models.CharField(
+        max_length=10, blank=True, default='',
+        verbose_name="Tranches concernées",
+        help_text="Numéros de tranches couvertes, séparés par des virgules (ex: 1,2)"
+    )
+    motif_application = models.CharField(
+        max_length=30, choices=MOTIF_APPLICATION_CHOICES, blank=True, default='',
+        verbose_name="Motif de la remise"
+    )
+
     class Meta:
         verbose_name = "Remise appliquée"
         verbose_name_plural = "Remises appliquées"
         unique_together = ['paiement', 'remise']
-    
+
     def __str__(self):
         return f"{self.paiement.numero_recu} - {self.remise.nom} - {self.montant_remise:,.0f} GNF"
+
+    @property
+    def tranches_list(self):
+        """Liste des numéros de tranches couverts par la remise."""
+        return [n for n in (self.portee_tranches or '').split(',') if n.strip()]
+
+    @property
+    def portee_libelle(self):
+        """Libellé lisible de la portée, ex: « T1 + T2 »."""
+        tranches = self.tranches_list
+        if not tranches:
+            return "Scolarité (toutes tranches)"
+        return " + ".join(f"T{n}" for n in tranches)
 
 
 class Relance(SyncTrackedModel):
