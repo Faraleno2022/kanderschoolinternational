@@ -182,7 +182,7 @@
                                                         <th>Type de remise</th>
                                                         <th>Motif</th>
                                                         <th class="text-end">Montant remise</th>
-                                                        <th class="text-end">Montant final</th>
+                                                        <th class="text-end">Montant encaissé</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -202,9 +202,15 @@
                                                         </td>
                                                         <td>{{ remise.remise.nom }}</td>
                                                         <td>
+                                                            {% if remise.motif_application %}
+                                                            <span class="badge bg-primary">
+                                                                {{ remise.get_motif_application_display }}
+                                                            </span>
+                                                            {% endif %}
                                                             <span class="badge bg-secondary">
                                                                 {{ remise.remise.get_motif_display }}
                                                             </span>
+                                                            <small class="text-muted d-block">{{ remise.portee_libelle }}</small>
                                                         </td>
                                                         <td class="text-end">
                                                             <span class="montant-remise">

@@ -284,9 +284,17 @@
                         <span class="text-success">-{{ remises_total|floatformat:0|intcomma }} GNF</span>
                     </div>
                     {% for paiement_remise in paiement.remises.all %}
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span>{{ paiement_remise.remise.nom }}</span>
-                        <span class="text-success">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <span>
+                            {{ paiement_remise.remise.nom }}
+                            <small class="text-muted d-block">
+                                {{ paiement_remise.portee_libelle }}
+                                {% if paiement_remise.motif_application %}
+                                    — Motif : {{ paiement_remise.get_motif_application_display }}
+                                {% endif %}
+                            </small>
+                        </span>
+                        <span class="text-success text-nowrap">
                             -{{ paiement_remise.montant_remise|floatformat:0|intcomma }} GNF
                         </span>
                     </div>

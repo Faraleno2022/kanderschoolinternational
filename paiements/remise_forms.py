@@ -31,11 +31,46 @@ class PaiementRemiseForm(forms.Form):
         widget=forms.Select(attrs={'class': 'form-select'}),
         label="Remise scolarité (%)"
     )
-    
+
+    # Portée de la remise : la scolarité se découpe en trois tranches, et une
+    # remise ne doit jamais toucher les frais d'inscription/réinscription.
+    TRANCHE_CHOICES = [
+        ('1', '1ère tranche'),
+        ('2', '2ème tranche'),
+        ('3', '3ème tranche'),
+    ]
+    tranches = forms.MultipleChoiceField(
+        choices=TRANCHE_CHOICES,
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        required=False,
+        initial=['1'],
+        label="Tranches concernées"
+    )
+
+    BASE_CHOICES = [
+        ('TRANCHES', "Montant des tranches sélectionnées"),
+        ('ECHEANCE', "Paiement à l'échéance"),
+    ]
+    base_calcul = forms.ChoiceField(
+        choices=BASE_CHOICES,
+        required=False,
+        initial='TRANCHES',
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input'}),
+        label="Base de calcul"
+    )
+
+    motif_remise = forms.ChoiceField(
+        choices=[("", "— Choisir un motif —")] + PaiementRemise.MOTIF_APPLICATION_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label="Motif de la remise",
+        error_messages={'required': "Le motif de la remise est obligatoire."},
+    )
+
     def __init__(self, *args, **kwargs):
         paiement = kwargs.pop('paiement', None)
         super().__init__(*args, **kwargs)
-        
+
         if paiement:
             self.fields['montant_original'].initial = paiement.montant
             # Filtrer les remises valides à la date du paiement
@@ -45,7 +80,18 @@ class PaiementRemiseForm(forms.Form):
                 date_debut__lte=today,
                 date_fin__gte=today
             )
-    
+
+    def clean_base_calcul(self):
+        return self.cleaned_data.get('base_calcul') or 'TRANCHES'
+
+    def clean_tranches(self):
+        tranches = self.cleaned_data.get('tranches') or []
+        # Sans tranche cochée, la remise n'a aucune base de calcul : la
+        # refuser vaut mieux que de retomber silencieusement sur T1.
+        if not tranches:
+            raise forms.ValidationError("Sélectionnez au moins une tranche concernée par la remise.")
+        return sorted(tranches)
+
     def calculate_total_remise(self, montant_base):
         """Calcule le montant total des remises sélectionnées"""
         remises = self.cleaned_data.get('remises', [])
