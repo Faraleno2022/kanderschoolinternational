@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Salaires enseignants - Recouvrement{% endblock %}
+
+{% block page_header %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .module-header {
+        background: linear-gradient(135deg, #1f3864 0%, #2c5aa0 100%);
+        color: #fff; padding: 1.4rem 1.75rem; border-radius: 14px;
+        margin-bottom: 1.5rem; box-shadow: 0 4px 16px rgba(31,56,100,.22);
+    }
+    .module-header h1 { margin: 0; font-size: 1.6rem; font-weight: 700; }
+    .module-header p { margin: .3rem 0 0; opacity: .9; font-size: .92rem; }
+
+    .kpi-card {
+        background: #fff; border: 1px solid #e3e7ee; border-radius: 12px;
+        padding: 1rem 1.15rem; height: 100%; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+    .kpi-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .5px; color: #6c757d; font-weight: 600; }
+    .kpi-value { font-size: 1.4rem; font-weight: 700; color: #1f3864; }
+
+    .bloc { background:#fff; border:1px solid #e3e7ee; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+
+    .mini-chart { display: flex; align-items: flex-end; gap: 6px; height: 130px; padding-top: .5rem; overflow-x: auto; }
+    .mini-chart .barre-col { flex: 0 0 46px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+    .mini-chart .barre {
+        width: 100%; background: linear-gradient(180deg, #d39e00 0%, #1f3864 100%);
+        border-radius: 4px 4px 0 0; min-height: 2px;
+    }
+    .mini-chart .barre-libelle { font-size: .65rem; color: #6c757d; margin-top: .35rem; white-space: nowrap; }
+
+    .table-pivot { font-size: .88rem; }
+    .table-pivot th, .table-pivot td { white-space: nowrap; }
+    .niveau-badge { font-size: .72rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <div class="module-header d-flex justify-content-between align-items-center flex-wrap" style="gap:1rem;">
+        <div>
+            <h1><i class="fas fa-chalkboard-user me-2"></i>Salaires enseignants</h1>
+            <p>Suivi des salaires payés par enseignant, mois et niveau (Maternelle, Primaire, Collège, Lycée)</p>
+        </div>
+        <div class="d-flex flex-wrap" style="gap:.5rem;">
+            <a href="{% url 'depenses:hub' %}" class="btn btn-light btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Recouvrement
+            </a>
+            <a href="{% url 'depenses:recouvrement_salaires_export_excel' %}" class="btn btn-success btn-sm">
+                <i class="fas fa-file-excel me-1"></i>Export Excel
+            </a>
+        </div>
+    </div>
+
+    <!-- Tableau de bord -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Total payé</div>
+                <div class="kpi-value">{{ total_general|floatformat:0|intcomma }} <small class="fs-6">GNF</small></div>
+                <div class="text-muted small">{{ nb_enseignants|intcomma }} enseignant(s)</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Payé ce mois</div>
+                <div class="kpi-value">{{ total_mois_courant|floatformat:0|intcomma }} <small class="fs-6">GNF</small></div>
+                <div class="text-muted small">Mois en cours</div>
+            </div>
+        </div>
+        {% for niveau, total in totaux_par_niveau.items %}
+        {% if total %}
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">{{ niveau }}</div>
+                <div class="kpi-value">{{ total|floatformat:0|intcomma }} <small class="fs-6">GNF</small></div>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- Évolution mensuelle -->
+    <div class="bloc p-3 mb-4">
+        <h2 class="h6 fw-bold mb-1">Évolution mensuelle</h2>
+        <p class="text-muted small mb-1">Total des salaires payés, mois où des paiements ont été enregistrés</p>
+        <div class="mini-chart">
+            {% for point in evolution_mensuelle %}
+            <div class="barre-col">
+                <div class="barre" style="height: {{ point.hauteur }}%;"
+                     title="{{ point.label }} : {{ point.total|floatformat:0|intcomma }} GNF"></div>
+                <div class="barre-libelle">{{ point.label }}</div>
+            </div>
+            {% empty %}
+            <p class="text-muted small mb-0">Aucun salaire payé pour le moment.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Registre pivot: enseignant x mois -->
+    <div class="bloc p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap" style="gap:.5rem;">
+            <h2 class="h6 fw-bold mb-0">Registre des salaires payés</h2>
+            <span class="text-muted small">{{ nb_enseignants|intcomma }} enseignant(s) · {{ colonnes|length }} mois</span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover table-pivot align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Prénom et nom</th>
+                        <th>Niveau</th>
+                        {% for colonne in colonnes %}
+                        <th class="text-end">{{ colonne.label }}</th>
+                        {% endfor %}
+                        <th class="text-end">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ligne in lignes %}
+                    <tr>
+                        <td class="fw-semibold">{{ ligne.enseignant.nom_complet }}</td>
+                        <td><span class="badge bg-secondary niveau-badge">{{ ligne.niveau }}</span></td>
+                        {% for montant in ligne.montants %}
+                        <td class="text-end">{% if montant %}{{ montant|floatformat:0|intcomma }}{% else %}—{% endif %}</td>
+                        {% endfor %}
+                        <td class="text-end fw-bold">{{ ligne.total|floatformat:0|intcomma }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="{{ colonnes|length|add:3 }}" class="text-center text-muted py-4">
+                            Aucun salaire marqué comme payé pour le moment.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
