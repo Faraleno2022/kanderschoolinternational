@@ -21,6 +21,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from eleves.models import Eleve
+from salaires.models import AffectationClasse, Enseignant, EtatSalaire
 from utilisateurs.permissions import (
     can_add_expenses, can_delete_expenses, can_modify_expenses,
 )
@@ -233,6 +234,16 @@ def hub_recouvrement(request):
         date_fin__lte=aujourdhui + timedelta(days=AbonnementInformatique.ALERTE_JOURS_DEFAUT),
     ).count()
 
+    # Salaires enseignants payés
+    salaires_payes_qs = filter_by_user_school(
+        EtatSalaire.objects.filter(paye=True), request.user, 'enseignant__ecole'
+    )
+    salaires_total = salaires_payes_qs.aggregate(t=Sum('salaire_net'))['t'] or Decimal('0')
+    salaires_mois = salaires_payes_qs.filter(
+        periode__annee=aujourdhui.year, periode__mois=aujourdhui.month
+    ).aggregate(t=Sum('salaire_net'))['t'] or Decimal('0')
+    salaires_enseignants_count = salaires_payes_qs.values('enseignant_id').distinct().count()
+
     context = {
         'titre_page': 'Recouvrement',
         'total_general': int(total_general),
@@ -249,6 +260,9 @@ def hub_recouvrement(request):
         'abonnements_expires': abonnements_expires,
         'abonnements_alerte': abonnements_alerte,
         'abonnements_montant': int(_total(abonnements_qs)),
+        'salaires_total': int(salaires_total),
+        'salaires_mois': int(salaires_mois),
+        'salaires_enseignants_count': salaires_enseignants_count,
     }
     return render(request, 'depenses/recouvrement/hub.html', context)
 
@@ -941,3 +955,151 @@ def carte_abonnement_informatique(request, pk):
         f'inline; filename="carte_informatique_{abonnement.numero_carte}.pdf"'
     )
     return response
+
+
+# ---------------------------------------------------------------------------
+# Recouvrement des salaires enseignants
+# ---------------------------------------------------------------------------
+
+MOIS_NOMS = [
+    '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+]
+
+NIVEAUX_ENSEIGNANT = ('Maternelle', 'Primaire', 'Collège', 'Lycée', 'Autre')
+
+
+def _niveau_enseignants(enseignant_ids):
+    """Associe à chaque enseignant secondaire son niveau réel (Collège/Lycée)
+    d'après sa classe affectée la plus récente.
+    """
+    niveau_classe = {}
+    affectations = (
+        AffectationClasse.objects
+        .filter(enseignant_id__in=enseignant_ids)
+        .select_related('classe')
+        .order_by('-date_debut')
+    )
+    for affectation in affectations:
+        if affectation.enseignant_id in niveau_classe:
+            continue
+        if affectation.classe:
+            niveau_classe[affectation.enseignant_id] = affectation.classe.niveau or ''
+    return niveau_classe
+
+
+def _niveau_label(enseignant, niveau_classe_par_enseignant):
+    if enseignant.type_enseignant == 'MATERNELLE':
+        return 'Maternelle'
+    if enseignant.type_enseignant == 'PRIMAIRE':
+        return 'Primaire'
+    if enseignant.type_enseignant == 'SECONDAIRE':
+        niveau_classe = niveau_classe_par_enseignant.get(enseignant.id, '')
+        if niveau_classe.startswith('LYCEE'):
+            return 'Lycée'
+        return 'Collège'
+    return 'Autre'
+
+
+def _collecter_salaires_payes(request):
+    """Construit le tableau pivot (enseignant × mois) des salaires payés,
+    cloisonné à l'école de l'utilisateur, ainsi que les indicateurs du
+    tableau de bord.
+    """
+    etats_qs = filter_by_user_school(
+        EtatSalaire.objects.filter(paye=True).select_related('enseignant', 'periode'),
+        request.user, 'enseignant__ecole',
+    )
+
+    colonnes = [
+        {'annee': annee, 'mois': mois, 'label': f"{MOIS_NOMS[mois]} {annee}"}
+        for annee, mois in sorted(set(etats_qs.values_list('periode__annee', 'periode__mois')))
+    ]
+    index_colonne = {(c['annee'], c['mois']): i for i, c in enumerate(colonnes)}
+
+    enseignant_ids = list(etats_qs.values_list('enseignant_id', flat=True).distinct())
+    niveau_classe_par_enseignant = _niveau_enseignants(enseignant_ids)
+
+    lignes_par_enseignant = {}
+    for etat in etats_qs:
+        ens = etat.enseignant
+        ligne = lignes_par_enseignant.get(ens.id)
+        if ligne is None:
+            ligne = {
+                'enseignant': ens,
+                'niveau': _niveau_label(ens, niveau_classe_par_enseignant),
+                'montants': [Decimal('0')] * len(colonnes),
+                'total': Decimal('0'),
+            }
+            lignes_par_enseignant[ens.id] = ligne
+        idx = index_colonne[(etat.periode.annee, etat.periode.mois)]
+        ligne['montants'][idx] += etat.salaire_net
+        ligne['total'] += etat.salaire_net
+
+    lignes = sorted(
+        lignes_par_enseignant.values(),
+        key=lambda r: (r['enseignant'].nom, r['enseignant'].prenoms),
+    )
+
+    totaux_par_niveau = {niveau: Decimal('0') for niveau in NIVEAUX_ENSEIGNANT}
+    for ligne in lignes:
+        totaux_par_niveau[ligne['niveau']] += ligne['total']
+
+    evolution_mensuelle = [
+        {
+            'label': c['label'],
+            'total': sum((l['montants'][i] for l in lignes), Decimal('0')),
+        }
+        for i, c in enumerate(colonnes)
+    ]
+    maximum_evolution = max([e['total'] for e in evolution_mensuelle] or [Decimal('0')]) or Decimal('1')
+    for e in evolution_mensuelle:
+        e['hauteur'] = int((e['total'] * 100) / maximum_evolution)
+
+    aujourdhui = timezone.localdate()
+    idx_mois_courant = index_colonne.get((aujourdhui.year, aujourdhui.month))
+    total_mois_courant = (
+        sum((l['montants'][idx_mois_courant] for l in lignes), Decimal('0'))
+        if idx_mois_courant is not None else Decimal('0')
+    )
+    total_general = sum((l['total'] for l in lignes), Decimal('0'))
+
+    return {
+        'colonnes': colonnes,
+        'lignes': lignes,
+        'totaux_par_niveau': totaux_par_niveau,
+        'evolution_mensuelle': evolution_mensuelle,
+        'total_mois_courant': total_mois_courant,
+        'total_general': total_general,
+        'nb_enseignants': len(lignes),
+    }
+
+
+@login_required
+def salaires_dashboard(request):
+    """Tableau de bord Recouvrement > Salaires enseignants."""
+    donnees = _collecter_salaires_payes(request)
+
+    context = {
+        'titre_page': 'Salaires enseignants',
+        **donnees,
+    }
+    return render(request, 'depenses/recouvrement/salaires_dashboard.html', context)
+
+
+@login_required
+def export_salaires_excel(request):
+    """Export Excel du registre des salaires payés (pivot enseignant × mois)."""
+    donnees = _collecter_salaires_payes(request)
+
+    entetes = ['Enseignant', 'Niveau'] + [c['label'] for c in donnees['colonnes']] + ['Total']
+    lignes = []
+    for ligne in donnees['lignes']:
+        lignes.append(
+            [ligne['enseignant'].nom_complet, ligne['niveau']]
+            + [float(m) for m in ligne['montants']]
+            + [float(ligne['total'])]
+        )
+
+    wb = _classeur('Salaires enseignants', entetes, lignes)
+    return _reponse_excel(wb, 'salaires_enseignants')

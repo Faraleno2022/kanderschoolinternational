@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Sum
 from django.contrib.auth.models import User
 from decimal import Decimal
 from eleves.models import Eleve
@@ -216,11 +217,27 @@ class EcheancierPaiement(SyncTrackedModel):
     @property
     def total_paye(self):
         return self.frais_inscription_paye + self.tranche_1_payee + self.tranche_2_payee + self.tranche_3_payee
-    
+
+    @property
+    def total_remises_valides(self):
+        """Somme des remises appliquées aux paiements validés de l'élève.
+
+        Même requête que le contrôle anti-sur-paiement de la vue de saisie
+        (paiements/views.py) afin que reçu, formulaire, relances et rappels
+        annoncent tous le même reste à payer.
+        """
+        total = (
+            Paiement.objects
+            .filter(eleve_id=self.eleve_id, statut='VALIDE')
+            .aggregate(total=Sum('remises__montant_remise'))
+            .get('total') or 0
+        )
+        return Decimal(str(total))
+
     @property
     def solde_restant(self):
-        """Solde restant à payer (ne peut jamais être négatif)"""
-        return max(Decimal('0'), self.total_du - self.total_paye)
+        """Solde restant à payer, remises validées déduites (ne peut jamais être négatif)"""
+        return max(Decimal('0'), self.total_du - self.total_paye - self.total_remises_valides)
 
     @property
     def pourcentage_paye(self):

@@ -171,6 +171,19 @@
             </a>
         </div>
 
+        <!-- Salaires enseignants -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'depenses:recouvrement_salaires_dashboard' %}" class="module-card c-warning">
+                <i class="fas fa-chalkboard-user module-card-icon"></i>
+                <h3 class="module-card-title">Salaires enseignants</h3>
+                <p class="module-card-desc">Suivi des salaires payés par enseignant, mois et niveau</p>
+                <div class="module-card-stats">
+                    {{ salaires_enseignants_count|intcomma }} enseignant(s) · {{ salaires_total|intcomma }} GNF
+                    <span class="text-muted">(dont {{ salaires_mois|intcomma }} GNF ce mois)</span>
+                </div>
+            </a>
+        </div>
+
         <!-- Logistique -->
         <div class="col-md-6 col-lg-4">
             <a href="{% url 'depenses:dashboard_logistique' %}" class="module-card c-info">

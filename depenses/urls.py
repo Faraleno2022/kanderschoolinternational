@@ -56,6 +56,14 @@ urlpatterns = [
          views_recouvrement.rechercher_eleve_informatique,
          name='recouvrement_informatique_recherche_eleve'),
 
+    # ===== RECOUVREMENT : SALAIRES ENSEIGNANTS =====
+    # Déclaré avant les routes génériques <module> pour que « salaires »
+    # ne soit pas capturé comme un sous-module simple.
+    path('recouvrement/salaires/', views_recouvrement.salaires_dashboard,
+         name='recouvrement_salaires_dashboard'),
+    path('recouvrement/salaires/export/excel/', views_recouvrement.export_salaires_excel,
+         name='recouvrement_salaires_export_excel'),
+
     # ===== RECOUVREMENT : CUISINE / DOCUMENTS / VERSEMENTS =====
     path('recouvrement/<str:module>/', views_recouvrement.dashboard_module,
          name='recouvrement_dashboard_module'),
