@@ -1005,6 +1005,10 @@ def _collecter_salaires_payes(request):
     """Construit le tableau pivot (enseignant × mois) des salaires payés,
     cloisonné à l'école de l'utilisateur, ainsi que les indicateurs du
     tableau de bord.
+
+    Tout enseignant du module Salaires apparaît immédiatement dans le
+    registre (colonnes vides tant qu'aucun salaire n'a été marqué payé) ;
+    les montants reçus s'affichent devant son nom au fil des mois payés.
     """
     etats_qs = filter_by_user_school(
         EtatSalaire.objects.filter(paye=True).select_related('enseignant', 'periode'),
@@ -1017,14 +1021,25 @@ def _collecter_salaires_payes(request):
     ]
     index_colonne = {(c['annee'], c['mois']): i for i, c in enumerate(colonnes)}
 
-    enseignant_ids = list(etats_qs.values_list('enseignant_id', flat=True).distinct())
-    niveau_classe_par_enseignant = _niveau_enseignants(enseignant_ids)
+    enseignants = list(filter_by_user_school(Enseignant.objects.all(), request.user, 'ecole'))
+    niveau_classe_par_enseignant = _niveau_enseignants([e.id for e in enseignants])
 
-    lignes_par_enseignant = {}
+    lignes_par_enseignant = {
+        ens.id: {
+            'enseignant': ens,
+            'niveau': _niveau_label(ens, niveau_classe_par_enseignant),
+            'montants': [Decimal('0')] * len(colonnes),
+            'total': Decimal('0'),
+        }
+        for ens in enseignants
+    }
+
+    nb_enseignants_payes = 0
     for etat in etats_qs:
-        ens = etat.enseignant
-        ligne = lignes_par_enseignant.get(ens.id)
+        ligne = lignes_par_enseignant.get(etat.enseignant_id)
         if ligne is None:
+            # Enseignant hors périmètre courant (ex: transféré depuis) : on le rattache quand même.
+            ens = etat.enseignant
             ligne = {
                 'enseignant': ens,
                 'niveau': _niveau_label(ens, niveau_classe_par_enseignant),
@@ -1032,6 +1047,8 @@ def _collecter_salaires_payes(request):
                 'total': Decimal('0'),
             }
             lignes_par_enseignant[ens.id] = ligne
+        if ligne['total'] == 0:
+            nb_enseignants_payes += 1
         idx = index_colonne[(etat.periode.annee, etat.periode.mois)]
         ligne['montants'][idx] += etat.salaire_net
         ligne['total'] += etat.salaire_net
@@ -1072,6 +1089,7 @@ def _collecter_salaires_payes(request):
         'total_mois_courant': total_mois_courant,
         'total_general': total_general,
         'nb_enseignants': len(lignes),
+        'nb_enseignants_payes': nb_enseignants_payes,
     }
 
 

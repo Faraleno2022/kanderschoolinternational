@@ -62,7 +62,7 @@
             <div class="kpi-card">
                 <div class="kpi-label">Total payé</div>
                 <div class="kpi-value">{{ total_general|floatformat:0|intcomma }} <small class="fs-6">GNF</small></div>
-                <div class="text-muted small">{{ nb_enseignants|intcomma }} enseignant(s)</div>
+                <div class="text-muted small">{{ nb_enseignants_payes|intcomma }} enseignant(s) payé(s) sur {{ nb_enseignants|intcomma }}</div>
             </div>
         </div>
         <div class="col-6 col-lg-3">
@@ -133,7 +133,7 @@
                     {% empty %}
                     <tr>
                         <td colspan="{{ colonnes|length|add:3 }}" class="text-center text-muted py-4">
-                            Aucun salaire marqué comme payé pour le moment.
+                            Aucun enseignant enregistré dans le module Salaires pour le moment.
                         </td>
                     </tr>
                     {% endfor %}
