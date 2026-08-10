@@ -35,6 +35,16 @@ def create_sync_change_on_delete(sender, instance, **kwargs):
     if sync_is_muted() or _is_historical_model(sender) or not is_sync_model(instance):
         return
 
+    # Lorsqu'une école est supprimée, Django supprime en cascade toutes ses
+    # données. Créer ici de nouveaux SyncChange rattachés à cette même école
+    # laisse des lignes enfants après le passage du Collector et provoque une
+    # erreur de contrainte de clé étrangère au moment de supprimer l'école.
+    from eleves.models import Ecole
+    origin = kwargs.get('origin')
+    origin_model = getattr(origin, 'model', None)
+    if isinstance(instance, Ecole) or isinstance(origin, Ecole) or origin_model is Ecole:
+        return
+
     ecole = ecole_for_instance(instance)
     if not ecole or not getattr(ecole, 'pk', None):
         return

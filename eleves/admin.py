@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Ecole, Classe, GrilleTarifaire
+from .models import Ecole, Classe, Eleve, EleveCorbeille, GrilleTarifaire
 
 
 @admin.register(Ecole)
@@ -101,3 +101,62 @@ class GrilleTarifaireAdmin(admin.ModelAdmin):
             "description": "Si ces dates sont renseignées, elles seront utilisées pour initialiser les échéanciers des élèves de cette école/niveau/année."
         }),
     )
+
+
+@admin.register(Eleve)
+class EleveAdmin(admin.ModelAdmin):
+    list_display = (
+        'matricule', 'nom', 'prenom', 'classe', 'statut',
+        'date_inscription',
+    )
+    list_filter = ('statut', 'classe__ecole', 'classe')
+    search_fields = ('matricule', 'nom', 'prenom')
+    list_select_related = ('classe', 'classe__ecole')
+    actions = ('placer_dans_corbeille',)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(est_dans_corbeille=False)
+
+    @admin.action(description="Placer les élèves sélectionnés dans la corbeille")
+    def placer_dans_corbeille(self, request, queryset):
+        count = 0
+        for eleve in queryset:
+            count += int(eleve.placer_dans_corbeille(request.user))
+        self.message_user(request, f"{count} élève(s) placé(s) dans la corbeille.")
+
+    def delete_model(self, request, obj):
+        obj.placer_dans_corbeille(request.user)
+
+    def delete_queryset(self, request, queryset):
+        for eleve in queryset:
+            eleve.placer_dans_corbeille(request.user)
+
+
+@admin.register(EleveCorbeille)
+class EleveCorbeilleAdmin(admin.ModelAdmin):
+    list_display = (
+        'matricule', 'nom', 'prenom', 'classe', 'supprime_le', 'supprime_par',
+    )
+    list_filter = ('classe__ecole', 'classe', 'supprime_le')
+    search_fields = ('matricule', 'nom', 'prenom')
+    readonly_fields = (
+        'matricule', 'nom', 'prenom', 'classe', 'statut',
+        'supprime_le', 'supprime_par', 'statut_avant_suppression',
+    )
+    actions = ('restaurer_eleves',)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(est_dans_corbeille=True)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.action(description="Restaurer les élèves sélectionnés")
+    def restaurer_eleves(self, request, queryset):
+        count = 0
+        for eleve in queryset:
+            count += int(eleve.restaurer_depuis_corbeille())
+        self.message_user(request, f"{count} élève(s) restauré(s).")

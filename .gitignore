@@ -91,3 +91,7 @@ licenses_emises.json
 .trial_start
 ~WRL*.tmp
 .claude/worktrees/
+build_log*.txt
+iscc_log*.txt
+Capture d'écran*.png
+backups/db.sqlite3.*

@@ -282,7 +282,7 @@
                         </div>
                         <div class="teacher-meta">
                             <i class="fas fa-user-tag me-1"></i>{{ etat.enseignant.get_type_enseignant_display }}
-                            {% if etat.enseignant.type_enseignant == 'SECONDAIRE' and etat.total_heures %}
+                            {% if etat.enseignant.type_enseignant == 'SECONDAIRE' %}
                             <span class="ms-2">
                                 <i class="fas fa-clock me-1"></i>{{ etat.total_heures }}h
                             </span>
@@ -313,7 +313,7 @@
 
                 <!-- Détail du salaire -->
                 <div class="salary-breakdown">
-                    {% if etat.enseignant.est_taux_horaire and etat.total_heures and etat.enseignant.taux_horaire %}
+                    {% if etat.enseignant.est_taux_horaire %}
                     <!-- Calcul détaillé pour enseignants au taux horaire -->
                     <div class="breakdown-item calculation-detail">
                         <span><i class="fas fa-clock me-1"></i>Heures travaillées:</span>
@@ -321,11 +321,11 @@
                     </div>
                     <div class="breakdown-item calculation-detail">
                         <span><i class="fas fa-calculator me-1"></i>Taux horaire:</span>
-                        <span class="fw-bold">{{ etat.enseignant.taux_horaire|intcomma }} GNF/h</span>
+                        <span class="fw-bold">{{ etat.taux_horaire_applique|intcomma }} GNF/h</span>
                     </div>
                     <div class="breakdown-item calculation-formula">
                         <span><i class="fas fa-equals me-1"></i>Calcul:</span>
-                        <span class="text-primary fw-bold">{{ etat.total_heures }} h × {{ etat.enseignant.taux_horaire|intcomma }} GNF/h</span>
+                        <span class="text-primary fw-bold">{{ etat.total_heures }} h × {{ etat.taux_horaire_applique|intcomma }} GNF/h</span>
                     </div>
                     <div class="breakdown-item total-line">
                         <span class="fw-bold">Salaire de base:</span>
@@ -338,22 +338,16 @@
                         <span>{{ etat.salaire_base|intcomma }} GNF</span>
                     </div>
                     {% endif %}
-                    {% if etat.prime_transport and etat.prime_transport > 0 %}
+                    {% if etat.primes and etat.primes > 0 %}
                     <div class="breakdown-item">
-                        <span>Prime transport:</span>
-                        <span class="text-success">+{{ etat.prime_transport|intcomma }} GNF</span>
+                        <span>Primes:</span>
+                        <span class="text-success">+{{ etat.primes|intcomma }} GNF</span>
                     </div>
                     {% endif %}
-                    {% if etat.prime_performance and etat.prime_performance > 0 %}
+                    {% if etat.deductions and etat.deductions > 0 %}
                     <div class="breakdown-item">
-                        <span>Prime performance:</span>
-                        <span class="text-success">+{{ etat.prime_performance|intcomma }} GNF</span>
-                    </div>
-                    {% endif %}
-                    {% if etat.deduction_absence and etat.deduction_absence > 0 %}
-                    <div class="breakdown-item">
-                        <span>Déduction absence:</span>
-                        <span class="text-danger">-{{ etat.deduction_absence|intcomma }} GNF</span>
+                        <span>Retenues:</span>
+                        <span class="text-danger">-{{ etat.deductions|intcomma }} GNF</span>
                     </div>
                     {% endif %}
                     <div class="breakdown-item">
@@ -365,6 +359,10 @@
                 <!-- Actions -->
                 <div class="action-buttons">
                     {% if not etat.valide and not etat.paye %}
+                    <a href="{% url 'salaires:ajuster_etat_salaire' etat.id %}"
+                       class="btn btn-warning btn-action">
+                        <i class="fas fa-sliders-h"></i> Primes / retenues
+                    </a>
                     <form method="post" action="{% url 'salaires:valider_etat_salaire' etat.id %}" class="d-inline">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-success btn-action" 

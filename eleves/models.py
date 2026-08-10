@@ -478,7 +478,27 @@ class Eleve(SyncTrackedModel):
     date_creation = models.DateTimeField(auto_now_add=True)
     date_modification = models.DateTimeField(auto_now=True)
     cree_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-    
+    est_dans_corbeille = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="Dans la corbeille",
+    )
+    supprime_le = models.DateTimeField(null=True, blank=True, verbose_name="Supprimé le")
+    supprime_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='eleves_places_corbeille',
+        verbose_name="Supprimé par",
+    )
+    statut_avant_suppression = models.CharField(
+        max_length=20,
+        choices=STATUT_CHOICES,
+        blank=True,
+        verbose_name="Statut avant suppression",
+    )
+
     class Meta:
         verbose_name = "Élève"
         verbose_name_plural = "Élèves"
@@ -503,6 +523,38 @@ class Eleve(SyncTrackedModel):
             return None
         today = date.today()
         return today.year - self.date_naissance.year - ((today.month, today.day) < (self.date_naissance.month, self.date_naissance.day))
+
+    def placer_dans_corbeille(self, utilisateur=None):
+        """Archive l'élève sans perdre ses données associées."""
+        from django.utils import timezone
+
+        if self.est_dans_corbeille:
+            return False
+        self.statut_avant_suppression = self.statut or 'ACTIF'
+        self.est_dans_corbeille = True
+        self.supprime_le = timezone.now()
+        self.supprime_par = utilisateur if getattr(utilisateur, 'is_authenticated', False) else None
+        self.statut = 'EXCLU'
+        self.save(update_fields=[
+            'statut', 'statut_avant_suppression', 'est_dans_corbeille',
+            'supprime_le', 'supprime_par', 'date_modification',
+        ])
+        return True
+
+    def restaurer_depuis_corbeille(self):
+        """Restaure l'élève et son statut précédent."""
+        if not self.est_dans_corbeille:
+            return False
+        self.statut = self.statut_avant_suppression or 'ACTIF'
+        self.est_dans_corbeille = False
+        self.supprime_le = None
+        self.supprime_par = None
+        self.statut_avant_suppression = ''
+        self.save(update_fields=[
+            'statut', 'statut_avant_suppression', 'est_dans_corbeille',
+            'supprime_le', 'supprime_par', 'date_modification',
+        ])
+        return True
 
     def _reaffecter_matricules_ancienne_classe(self, ancienne_classe, ancien_matricule):
         """Désactivée pour éviter les conflits UNIQUE"""
@@ -943,6 +995,16 @@ class Eleve(SyncTrackedModel):
             )
 
         return {'transferees': notes_transferees, 'ignorees': notes_ignorees}
+
+
+class EleveCorbeille(Eleve):
+    """Vue proxy des élèves archivés, utilisée par l'administration."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "Élève dans la corbeille"
+        verbose_name_plural = "Corbeille des élèves"
+
 
 class HistoriqueEleve(SyncTrackedModel):
     """Modèle pour l'historique des modifications d'un élève"""

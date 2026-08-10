@@ -1,8 +1,10 @@
 from django.contrib import admin
 from .models import ClasseNote, MatiereNote, Evaluation, NoteEleve, NoteMensuelle, CompositionNote, AppreciationMaternelle, ThemeBulletin, ActiviteJournaliere, PieceJointeActivite
 
+from administration.corbeille import CorbeilleAdminMixin
+
 @admin.register(ClasseNote)
-class ClasseNoteAdmin(admin.ModelAdmin):
+class ClasseNoteAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['nom', 'niveau', 'annee_scolaire', 'effectif', 'actif', 'ecole', 'date_creation']
     list_filter = ['niveau', 'actif', 'annee_scolaire', 'ecole']
     search_fields = ['nom', 'description']
@@ -28,7 +30,7 @@ class ClasseNoteAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 @admin.register(MatiereNote)
-class MatiereNoteAdmin(admin.ModelAdmin):
+class MatiereNoteAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['nom', 'code', 'classe', 'coefficient', 'actif', 'date_creation']
     list_filter = ['actif', 'classe']
     search_fields = ['nom', 'code']
@@ -40,7 +42,7 @@ class MatiereNoteAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 @admin.register(Evaluation)
-class EvaluationAdmin(admin.ModelAdmin):
+class EvaluationAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['titre', 'matiere', 'type_evaluation', 'periode', 'date_evaluation', 'note_sur', 'coefficient']
     list_filter = ['type_evaluation', 'periode', 'matiere__classe']
     search_fields = ['titre', 'matiere__nom']
@@ -53,7 +55,7 @@ class EvaluationAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 @admin.register(NoteEleve)
-class NoteEleveAdmin(admin.ModelAdmin):
+class NoteEleveAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['eleve', 'evaluation', 'note', 'absent', 'date_creation']
     list_filter = ['absent', 'evaluation__matiere__classe', 'evaluation__periode']
     search_fields = ['eleve__nom', 'eleve__prenom', 'evaluation__titre']
@@ -66,7 +68,7 @@ class NoteEleveAdmin(admin.ModelAdmin):
 
 
 @admin.register(NoteMensuelle)
-class NoteMensuelleAdmin(admin.ModelAdmin):
+class NoteMensuelleAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['eleve', 'matiere', 'mois', 'note', 'absent', 'annee_scolaire', 'date_creation']
     list_filter = ['mois', 'absent', 'annee_scolaire', 'matiere__classe']
     search_fields = ['eleve__nom', 'eleve__prenom', 'matiere__nom']
@@ -93,7 +95,7 @@ class NoteMensuelleAdmin(admin.ModelAdmin):
 
 
 @admin.register(CompositionNote)
-class CompositionNoteAdmin(admin.ModelAdmin):
+class CompositionNoteAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['eleve', 'matiere', 'periode', 'note', 'absent', 'annee_scolaire', 'date_creation']
     list_filter = ['periode', 'absent', 'annee_scolaire', 'matiere__classe']
     search_fields = ['eleve__nom', 'eleve__prenom', 'matiere__nom']
@@ -120,7 +122,7 @@ class CompositionNoteAdmin(admin.ModelAdmin):
 
 
 @admin.register(AppreciationMaternelle)
-class AppreciationMaternelleAdmin(admin.ModelAdmin):
+class AppreciationMaternelleAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['eleve', 'matiere', 'trimestre', 'appreciation', 'absent', 'annee_scolaire', 'date_creation']
     list_filter = ['trimestre', 'appreciation', 'absent', 'annee_scolaire', 'matiere__classe']
     search_fields = ['eleve__nom', 'eleve__prenom', 'matiere__nom']
@@ -147,7 +149,7 @@ class AppreciationMaternelleAdmin(admin.ModelAdmin):
 
 
 @admin.register(ThemeBulletin)
-class ThemeBulletinAdmin(admin.ModelAdmin):
+class ThemeBulletinAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['nom', 'ecole', 'actif', 'par_defaut', 'date_creation']
     list_filter = ['actif', 'par_defaut', 'ecole']
     search_fields = ['nom']
@@ -203,7 +205,7 @@ class PieceJointeInline(admin.TabularInline):
 
 
 @admin.register(ActiviteJournaliere)
-class ActiviteJournaliereAdmin(admin.ModelAdmin):
+class ActiviteJournaliereAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['titre', 'type_activite', 'eleve', 'classe', 'date', 'appreciation', 'date_creation']
     list_filter = ['type_activite', 'date', 'classe']
     search_fields = ['titre', 'eleve__nom', 'eleve__prenom']

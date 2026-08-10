@@ -1,38 +1,74 @@
 from django.contrib import admin
-from .models import TypePaiement, ModePaiement, Paiement, RemiseReduction, EcheancierPaiement, TwilioInboundMessage, ConfigurationPaiement
+
+from administration.corbeille import CorbeilleAdminMixin
+
+from .models import (
+    TypePaiement, ModePaiement, Paiement, HistoriqueModificationPaiement,
+    RemiseReduction, EcheancierPaiement, TwilioInboundMessage,
+    ConfigurationPaiement,
+)
 
 
 @admin.register(TypePaiement)
-class TypePaiementAdmin(admin.ModelAdmin):
+class TypePaiementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ("nom", "actif")
     search_fields = ("nom",)
     list_filter = ("actif",)
 
 
 @admin.register(ModePaiement)
-class ModePaiementAdmin(admin.ModelAdmin):
+class ModePaiementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ("nom", "frais_supplementaires", "actif")
     search_fields = ("nom",)
     list_filter = ("actif",)
 
 
 @admin.register(Paiement)
-class PaiementAdmin(admin.ModelAdmin):
+class PaiementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ("numero_recu", "eleve", "type_paiement", "mode_paiement", "montant", "date_paiement", "statut")
     search_fields = ("numero_recu", "eleve__nom", "eleve__prenom", "eleve__matricule")
     list_filter = ("statut", "type_paiement", "mode_paiement")
     date_hierarchy = "date_paiement"
 
+    def save_model(self, request, obj, form, change):
+        if change:
+            obj._audit_user = request.user
+            obj._audit_reason = "Modification depuis l'administration Django"
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(HistoriqueModificationPaiement)
+class HistoriqueModificationPaiementAdmin(admin.ModelAdmin):
+    list_display = (
+        'date_modification', 'numero_recu', 'eleve', 'utilisateur', 'motif',
+    )
+    list_filter = ('date_modification', 'utilisateur')
+    search_fields = ('numero_recu', 'eleve', 'motif', 'utilisateur__username')
+    readonly_fields = (
+        'paiement', 'numero_recu', 'eleve', 'utilisateur', 'motif',
+        'champs_modifies', 'donnees_avant', 'donnees_apres', 'date_modification',
+    )
+    date_hierarchy = 'date_modification'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(RemiseReduction)
-class RemiseReductionAdmin(admin.ModelAdmin):
+class RemiseReductionAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ("nom", "type_remise", "valeur", "motif", "actif")
     search_fields = ("nom",)
     list_filter = ("type_remise", "motif", "actif")
 
 
 @admin.register(EcheancierPaiement)
-class EcheancierPaiementAdmin(admin.ModelAdmin):
+class EcheancierPaiementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ("eleve", "annee_scolaire", "statut", "total_du", "total_paye")
     search_fields = ("eleve__nom", "eleve__prenom", "eleve__matricule")
 
@@ -46,7 +82,7 @@ class TwilioInboundMessageAdmin(admin.ModelAdmin):
 
 
 @admin.register(ConfigurationPaiement)
-class ConfigurationPaiementAdmin(admin.ModelAdmin):
+class ConfigurationPaiementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ("classe", "montant_inscription", "montant_scolarite", "nombre_tranches", "montant_total")
     search_fields = ("classe__nom", "classe__ecole__nom")
     list_filter = ("nombre_tranches", "classe__niveau")

@@ -1,13 +1,15 @@
 from django.contrib import admin
 from .models import (
-    Enseignant, TypeEnseignant, StatutEnseignant, 
-    AffectationClasse, PeriodeSalaire, EtatSalaire, 
+    Enseignant, TypeEnseignant, StatutEnseignant,
+    AffectationClasse, PeriodeSalaire, EtatSalaire,
     DetailHeuresClasse, PresenceEnseignant
 )
 
+from administration.corbeille import CorbeilleAdminMixin
+
 
 @admin.register(PresenceEnseignant)
-class PresenceEnseignantAdmin(admin.ModelAdmin):
+class PresenceEnseignantAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['enseignant', 'date', 'statut', 'heure_arrivee', 'heure_depart', 'heures_travaillees', 'justifie']
     list_filter = ['statut', 'date', 'justifie', 'enseignant__ecole']
     search_fields = ['enseignant__nom', 'enseignant__prenoms', 'observations']

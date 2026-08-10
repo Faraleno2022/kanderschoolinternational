@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block title %}Corbeille des élèves{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-trash-restore me-2"></i>Corbeille des élèves</h2>
+            <p class="text-muted mb-0">Les paiements, notes et abonnements sont conservés.</p>
+        </div>
+        <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-outline-secondary">Retour à la liste</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr><th>Matricule</th><th>Élève</th><th>Classe</th><th>Supprimé le</th><th>Par</th><th></th></tr>
+                </thead>
+                <tbody>
+                {% for eleve in page_obj %}
+                    <tr>
+                        <td>{{ eleve.matricule }}</td>
+                        <td><strong>{{ eleve.nom_complet }}</strong></td>
+                        <td>{{ eleve.classe.nom }} — {{ eleve.classe.ecole.nom }}</td>
+                        <td>{{ eleve.supprime_le|date:"d/m/Y à H:i" }}</td>
+                        <td>{{ eleve.supprime_par|default:"Système" }}</td>
+                        <td class="text-end">
+                            <form method="post" action="{% url 'eleves:restaurer_eleve' eleve.id %}" class="d-inline"
+                                  onsubmit="return confirm('Restaurer cet élève ?');">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-success"><i class="fas fa-undo me-1"></i>Restaurer</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted py-5">La corbeille est vide.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -44,6 +44,11 @@
         <a href="{% url 'paiements:ajouter_paiement_eleve' paiement.eleve.id %}" class="btn btn-outline-success">
             <i class="fas fa-plus me-1"></i>Nouveau paiement
         </a>
+        {% if is_admin or user_permissions.can_modify_payments %}
+            <a href="{% url 'paiements:modifier_paiement' paiement.id %}" class="btn btn-outline-warning">
+                <i class="fas fa-edit me-1"></i>Corriger le paiement
+            </a>
+        {% endif %}
         <!-- Bouton Relance visible en tête de page -->
         <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#relanceModal">
             <i class="fas fa-bell me-1"></i>Relance
@@ -220,8 +225,30 @@
                     {% endif %}
                 </div>
             </div>
+
+            {% if historique_modifications %}
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="card-title mb-0"><i class="fas fa-archive me-2"></i>Mémoire des modifications</h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                    {% for modification in historique_modifications %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between gap-2">
+                                <strong>{{ modification.date_modification|date:"d/m/Y à H:i" }}</strong>
+                                <span class="text-muted">{{ modification.utilisateur|default:"Système" }}</span>
+                            </div>
+                            <div class="small mt-1">{{ modification.motif }}</div>
+                            <div class="small text-muted">Champs : {{ modification.champs_modifies|join:", " }}</div>
+                        </div>
+                    {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
-        
+
         <!-- Informations de traçabilité -->
         <div class="col-lg-4">
             <div class="card">

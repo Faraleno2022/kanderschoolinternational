@@ -79,10 +79,6 @@ def _traiter_import_eleves(request):
         generer_matricules = request.POST.get('generer_matricules') == 'on'
         fichier = request.FILES.get('fichier')
         
-        if not classe_id:
-            messages.error(request, "Veuillez sélectionner une classe.")
-            return redirect('eleves:importer_eleves')
-        
         if not fichier:
             messages.error(request, "Veuillez sélectionner un fichier.")
             return redirect('eleves:importer_eleves')
@@ -97,39 +93,82 @@ def _traiter_import_eleves(request):
             # Lire le fichier
             df = lire_fichier_eleves(tmp_path)
             
-            # Valider les données
-            validator = ImportElevesValidator(df, classe_id)
-            
-            if not validator.valider():
-                # Afficher les erreurs
-                for erreur in validator.erreurs[:5]:  # Limiter à 5 erreurs
-                    messages.error(request, erreur)
-                if len(validator.erreurs) > 5:
-                    messages.error(request, f"... et {len(validator.erreurs) - 5} autres erreurs")
-                return redirect('eleves:importer_eleves')
-            
-            # Afficher les avertissements
-            for avertissement in validator.avertissements[:3]:
-                messages.warning(request, avertissement)
-            
-            # Importer les données
-            processor = ImportElevesProcessor(
-                df=df,
-                classe_id=classe_id,
-                user=request.user,
-                generer_matricules=generer_matricules
-            )
-            
-            stats = processor.importer()
-            
-            # Afficher les résultats
-            classe = Classe.objects.get(id=classe_id)
-            
-            messages.success(
-                request,
-                f"✅ Importation terminée pour la classe {classe.nom}!"
-            )
-            
+            groupes = []
+            if classe_id:
+                classe = get_object_or_404(Classe, pk=classe_id)
+                if not request.user.is_superuser:
+                    from utilisateurs.utils import user_school
+                    ecole_user = user_school(request.user)
+                    if not ecole_user or classe.ecole_id != ecole_user.id:
+                        raise ImportElevesError("Classe de destination non autorisée.")
+                groupes.append((classe, df))
+            elif 'Classe' in df.columns:
+                # Un export complet peut être réimporté sans choisir une
+                # classe : chaque ligne est dirigée vers sa classe d'origine.
+                group_columns = ['Classe']
+                if 'Année scolaire' in df.columns:
+                    group_columns.append('Année scolaire')
+                if request.user.is_superuser and 'École' in df.columns:
+                    group_columns.append('École')
+
+                for keys, groupe_df in df.groupby(group_columns, dropna=False, sort=False):
+                    if not isinstance(keys, tuple):
+                        keys = (keys,)
+                    criteres = dict(zip(group_columns, keys))
+                    classe_nom = str(criteres['Classe']).strip()
+                    classes_qs = Classe.objects.filter(nom__iexact=classe_nom)
+                    annee = criteres.get('Année scolaire')
+                    if annee is not None and str(annee).strip() not in ('', 'nan'):
+                        classes_qs = classes_qs.filter(annee_scolaire=str(annee).strip())
+                    if request.user.is_superuser:
+                        ecole_nom = criteres.get('École')
+                        if ecole_nom is not None and str(ecole_nom).strip() not in ('', 'nan'):
+                            classes_qs = classes_qs.filter(ecole__nom__iexact=str(ecole_nom).strip())
+                    else:
+                        from utilisateurs.utils import user_school
+                        ecole_user = user_school(request.user)
+                        if not ecole_user:
+                            raise ImportElevesError("Aucune école n'est associée à votre compte.")
+                        classes_qs = classes_qs.filter(ecole=ecole_user)
+
+                    if classes_qs.count() != 1:
+                        raise ImportElevesError(
+                            f"Classe introuvable ou ambiguë dans le poste de destination : "
+                            f"{classe_nom} ({annee or 'année non indiquée'})."
+                        )
+                    groupes.append((classes_qs.first(), groupe_df.copy()))
+            else:
+                raise ImportElevesError(
+                    "Sélectionnez une classe, ou utilisez un export complet contenant la colonne 'Classe'."
+                )
+
+            # Tout valider avant la première écriture.
+            validations = []
+            for classe, groupe_df in groupes:
+                validator = ImportElevesValidator(groupe_df, classe.id)
+                validations.append((classe, groupe_df, validator))
+                if not validator.valider():
+                    for erreur in validator.erreurs[:5]:
+                        messages.error(request, f"{classe.nom} : {erreur}")
+                    if len(validator.erreurs) > 5:
+                        messages.error(request, f"{classe.nom} : ... et {len(validator.erreurs) - 5} autres erreurs")
+                    return redirect('eleves:importer_eleves')
+
+            stats = {'total': 0, 'crees': 0, 'modifies': 0, 'erreurs': 0, 'matricules_generes': 0}
+            for classe, groupe_df, validator in validations:
+                for avertissement in validator.avertissements[:3]:
+                    messages.warning(request, f"{classe.nom} : {avertissement}")
+                resultat = ImportElevesProcessor(
+                    df=groupe_df,
+                    classe_id=classe.id,
+                    user=request.user,
+                    generer_matricules=generer_matricules,
+                ).importer()
+                for key in stats:
+                    stats[key] += resultat[key]
+
+            messages.success(request, f"✅ Importation terminée pour {len(groupes)} classe(s).")
+
             if stats['crees'] > 0:
                 messages.success(
                     request,
@@ -346,3 +385,59 @@ def exporter_eleves_classe(request, classe_id):
     except Exception as e:
         messages.error(request, f"Erreur lors de l'export: {e}")
         return redirect('eleves:gestion_classes')
+
+
+@login_required
+def exporter_tous_eleves_modele(request):
+    """Exporte tous les élèves visibles dans un fichier directement réimportable."""
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from eleves.import_eleves import exporter_liste_eleves_queryset
+
+    eleves = Eleve.objects.select_related(
+        'classe', 'classe__ecole', 'responsable_principal', 'responsable_secondaire',
+    ).filter(est_dans_corbeille=False)
+    if not request.user.is_superuser:
+        from utilisateurs.utils import user_school
+        ecole = user_school(request.user)
+        if not ecole:
+            messages.error(request, "Aucune école n'est associée à votre compte.")
+            return redirect('eleves:liste_eleves')
+        eleves = eleves.filter(classe__ecole=ecole)
+    eleves = eleves.order_by('classe__ecole__nom', 'classe__nom', 'nom', 'prenom')
+
+    df = exporter_liste_eleves_queryset(eleves, inclure_classe=True)
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    filename = f"eleves_complets_reimportables_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    with pd.ExcelWriter(response, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='Élèves', index=False)
+        ws = writer.sheets['Élèves']
+        ws.freeze_panes = 'A2'
+        ws.auto_filter.ref = ws.dimensions
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color='FFFFFF')
+            cell.fill = PatternFill('solid', fgColor='1F4E78')
+            cell.alignment = Alignment(horizontal='center')
+        for column_cells in ws.columns:
+            width = min(35, max(12, max(len(str(cell.value or '')) for cell in column_cells) + 2))
+            ws.column_dimensions[column_cells[0].column_letter].width = width
+
+        instructions = writer.book.create_sheet('Instructions')
+        lignes = [
+            "EXPORT COMPLET RÉIMPORTABLE",
+            "",
+            "Ce fichier reprend exactement les colonnes du modèle d'importation.",
+            "Sur l'autre poste : Élèves > Importer, laissez la classe de destination vide, puis choisissez ce fichier.",
+            "Les colonnes École, Classe et Année scolaire permettent de répartir automatiquement les élèves.",
+            "Les classes correspondantes doivent exister sur le poste de destination.",
+            "Ne modifiez pas les noms des colonnes.",
+        ]
+        for index, value in enumerate(lignes, 1):
+            instructions.cell(index, 1, value)
+        instructions['A1'].font = Font(bold=True, size=14, color='1F4E78')
+        instructions.column_dimensions['A'].width = 110
+
+    return response

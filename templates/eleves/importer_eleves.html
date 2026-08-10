@@ -208,10 +208,10 @@
             <!-- Sélection de la classe -->
             <div class="mb-4">
                 <label for="classe_id" class="form-label fw-bold">
-                    <i class="fas fa-school me-2"></i>Classe de destination *
+                    <i class="fas fa-school me-2"></i>Classe de destination
                 </label>
-                <select name="classe_id" id="classe_id" class="form-select form-select-lg" required>
-                    <option value="">-- Sélectionner une classe --</option>
+                <select name="classe_id" id="classe_id" class="form-select form-select-lg">
+                    <option value="">-- Automatique depuis la colonne Classe --</option>
                     {% for classe in classes %}
                         <option value="{{ classe.id }}" data-nom="{{ classe.nom }}">
                             {{ classe.nom }} - {{ classe.get_niveau_display|default:classe.niveau }}
@@ -219,7 +219,7 @@
                         </option>
                     {% endfor %}
                 </select>
-                <small class="text-muted">Les élèves seront ajoutés à cette classe</small>
+                <small class="text-muted">Choisissez une classe pour un fichier simple, ou laissez automatique pour l'export complet réimportable.</small>
             </div>
 
             <!-- Options d'importation -->
@@ -387,9 +387,10 @@ document.addEventListener('DOMContentLoaded', function() {
             steps[1].classList.add('active');
         } else {
             btnTemplate.disabled = true;
-            btnImport.disabled = true;
             steps[1].classList.remove('active');
-            steps[2].classList.remove('active');
+            const fichierPresent = fileInput.files && fileInput.files[0];
+            btnImport.disabled = !fichierPresent;
+            if (!fichierPresent) steps[2].classList.remove('active');
         }
     });
 
@@ -405,10 +406,8 @@ document.addEventListener('DOMContentLoaded', function() {
     fileInput.addEventListener('change', function() {
         if (this.files && this.files[0]) {
             showFileInfo(this.files[0]);
-            if (classeSelect.value) {
-                btnImport.disabled = false;
-                steps[2].classList.add('active');
-            }
+            btnImport.disabled = false;
+            steps[2].classList.add('active');
         }
     });
 
@@ -433,10 +432,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (file.name.match(/\.(xlsx|xls|csv)$/i)) {
                 fileInput.files = files;
                 showFileInfo(file);
-                if (classeSelect.value) {
-                    btnImport.disabled = false;
-                    steps[2].classList.add('active');
-                }
+                btnImport.disabled = false;
+                steps[2].classList.add('active');
             } else {
                 alert('Veuillez sélectionner un fichier Excel (.xlsx, .xls) ou CSV');
             }
@@ -460,12 +457,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Validation avant soumission
     document.getElementById('importForm').addEventListener('submit', function(e) {
-        if (!classeSelect.value) {
-            e.preventDefault();
-            alert('Veuillez sélectionner une classe');
-            return false;
-        }
-        
         if (!fileInput.files || !fileInput.files[0]) {
             e.preventDefault();
             alert('Veuillez sélectionner un fichier à importer');

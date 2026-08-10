@@ -188,6 +188,24 @@
                     setTimeout(() => showMessage('PDF généré avec succès !'), 1000);
                 });
             }
+
+            // Gestion du bouton Cartes Cantine en masse
+            const btnTicketsCantineMasse = zone.querySelector('#btn-tickets-cantine-masse');
+            if (btnTicketsCantineMasse) {
+                const newBtn = btnTicketsCantineMasse.cloneNode(true);
+                btnTicketsCantineMasse.parentNode.replaceChild(newBtn, btnTicketsCantineMasse);
+                newBtn.addEventListener('click', () => {
+                    const classeId = select.value;
+                    if (!classeId) {
+                        showMessage('Veuillez sélectionner une classe pour générer les cartes cantine.', 'error');
+                        return;
+                    }
+                    showMessage('Génération du PDF en cours...', 'info');
+                    const url = `{% url 'eleves:tickets_cantine_classe_pdf' 0 %}`.replace('0', classeId);
+                    window.open(url, '_blank');
+                    setTimeout(() => showMessage('PDF généré avec succès !'), 1000);
+                });
+            }
         }
 
         const debounce = (fn, delay = 300) => {

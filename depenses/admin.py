@@ -16,24 +16,26 @@ from .models_recouvrement import (
     AbonnementInformatique, DepenseCuisine, DepenseDocument, Versement
 )
 
+from administration.corbeille import CorbeilleAdminMixin
+
 
 # ===== DÉPENSES =====
 @admin.register(CategorieDepense)
-class CategorieDepenseAdmin(admin.ModelAdmin):
+class CategorieDepenseAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['code', 'nom', 'actif']
     list_filter = ['actif']
     search_fields = ['nom', 'code']
 
 
 @admin.register(Fournisseur)
-class FournisseurAdmin(admin.ModelAdmin):
+class FournisseurAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['nom', 'type_fournisseur', 'telephone', 'email', 'actif']
     list_filter = ['type_fournisseur', 'actif']
     search_fields = ['nom', 'telephone', 'email']
 
 
 @admin.register(Depense)
-class DepenseAdmin(admin.ModelAdmin):
+class DepenseAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['numero_facture', 'libelle', 'fournisseur', 'montant_ttc', 'date_facture', 'statut']
     list_filter = ['statut', 'type_depense', 'categorie']
     search_fields = ['numero_facture', 'libelle', 'fournisseur__nom']
@@ -42,14 +44,14 @@ class DepenseAdmin(admin.ModelAdmin):
 
 # ===== LOGISTIQUE =====
 @admin.register(CategorieArticle)
-class CategorieArticleAdmin(admin.ModelAdmin):
+class CategorieArticleAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['code', 'nom', 'type_categorie', 'actif']
     list_filter = ['type_categorie', 'actif']
     search_fields = ['nom', 'code']
 
 
 @admin.register(Article)
-class ArticleAdmin(admin.ModelAdmin):
+class ArticleAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['code_article', 'nom', 'categorie', 'stock_actuel', 'stock_minimum', 'prix_unitaire', 'etat']
     list_filter = ['categorie', 'etat', 'actif']
     search_fields = ['code_article', 'nom', 'marque', 'reference']
@@ -57,14 +59,14 @@ class ArticleAdmin(admin.ModelAdmin):
 
 
 @admin.register(BienEtablissement)
-class BienEtablissementAdmin(admin.ModelAdmin):
+class BienEtablissementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['code_bien', 'nom', 'type_bien', 'localisation', 'etat', 'actif']
     list_filter = ['type_bien', 'etat', 'actif']
     search_fields = ['code_bien', 'nom', 'localisation']
 
 
 @admin.register(MouvementStock)
-class MouvementStockAdmin(admin.ModelAdmin):
+class MouvementStockAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['numero_mouvement', 'article', 'type_mouvement', 'quantite', 'date_mouvement', 'cree_par']
     list_filter = ['type_mouvement', 'motif', 'date_mouvement']
     search_fields = ['numero_mouvement', 'article__nom', 'destinataire']
@@ -73,7 +75,7 @@ class MouvementStockAdmin(admin.ModelAdmin):
 
 
 @admin.register(Inventaire)
-class InventaireAdmin(admin.ModelAdmin):
+class InventaireAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['numero_inventaire', 'date_inventaire', 'statut', 'nombre_articles', 'valeur_totale']
     list_filter = ['statut', 'date_inventaire']
     search_fields = ['numero_inventaire']
@@ -81,7 +83,7 @@ class InventaireAdmin(admin.ModelAdmin):
 
 
 @admin.register(LigneInventaire)
-class LigneInventaireAdmin(admin.ModelAdmin):
+class LigneInventaireAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['inventaire', 'article', 'stock_theorique', 'stock_physique', 'ecart']
     list_filter = ['inventaire']
     search_fields = ['article__nom']
@@ -89,7 +91,7 @@ class LigneInventaireAdmin(admin.ModelAdmin):
 
 # ===== FOURNITURES SCOLAIRES =====
 @admin.register(ProduitFourniture)
-class ProduitFournitureAdmin(admin.ModelAdmin):
+class ProduitFournitureAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = [
         'nom', 'ecole', 'quantite_stock', 'quantite_vendue',
         'quantite_restante', 'prix_achat_unitaire', 'prix_vente_unitaire', 'actif',
@@ -100,7 +102,7 @@ class ProduitFournitureAdmin(admin.ModelAdmin):
 
 
 @admin.register(VenteFourniture)
-class VenteFournitureAdmin(admin.ModelAdmin):
+class VenteFournitureAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = [
         'produit', 'quantite', 'montant_vente', 'solde',
         'acheteur', 'date_vente', 'statut',
@@ -122,14 +124,14 @@ class VenteFournitureAdmin(admin.ModelAdmin):
 
 # ===== BIBLIOTHÈQUE =====
 @admin.register(CategorieLivre)
-class CategorieLivreAdmin(admin.ModelAdmin):
+class CategorieLivreAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['code', 'nom', 'actif']
     list_filter = ['actif']
     search_fields = ['nom', 'code']
 
 
 @admin.register(Livre)
-class LivreAdmin(admin.ModelAdmin):
+class LivreAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['code_livre', 'titre', 'auteur', 'categorie', 'statut', 'exemplaires_disponibles', 'etat']
     list_filter = ['categorie', 'statut', 'etat', 'langue']
     search_fields = ['code_livre', 'isbn', 'titre', 'auteur', 'editeur']
@@ -137,7 +139,7 @@ class LivreAdmin(admin.ModelAdmin):
 
 
 @admin.register(Emprunt)
-class EmpruntAdmin(admin.ModelAdmin):
+class EmpruntAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['numero_emprunt', 'livre', 'eleve', 'date_emprunt', 'date_retour_prevue', 'statut', 'jours_retard']
     list_filter = ['statut', 'date_emprunt']
     search_fields = ['numero_emprunt', 'livre__titre', 'eleve__nom', 'eleve__prenom']
@@ -146,7 +148,7 @@ class EmpruntAdmin(admin.ModelAdmin):
 
 
 @admin.register(Reservation)
-class ReservationAdmin(admin.ModelAdmin):
+class ReservationAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = [
         'numero_reservation', 'livre', 'eleve', 'date_reservation',
         'date_expiration', 'statut', 'exemplaire_bloque',
@@ -162,7 +164,7 @@ class ReservationAdmin(admin.ModelAdmin):
 
 
 @admin.register(ParametreBibliotheque)
-class ParametreBibliothequeAdmin(admin.ModelAdmin):
+class ParametreBibliothequeAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['duree_emprunt_defaut', 'nombre_emprunts_max', 'penalite_retard_journalier']
     
     def has_add_permission(self, request):
@@ -176,7 +178,7 @@ class ParametreBibliothequeAdmin(admin.ModelAdmin):
 # ===== RECOUVREMENT =====
 
 @admin.register(DepenseCuisine)
-class DepenseCuisineAdmin(admin.ModelAdmin):
+class DepenseCuisineAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['date', 'designation', 'montant', 'ecole', 'cree_par']
     list_filter = ['date', 'ecole']
     search_fields = ['designation', 'observation']
@@ -184,7 +186,7 @@ class DepenseCuisineAdmin(admin.ModelAdmin):
 
 
 @admin.register(DepenseDocument)
-class DepenseDocumentAdmin(admin.ModelAdmin):
+class DepenseDocumentAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['date', 'designation', 'montant', 'ecole', 'cree_par']
     list_filter = ['date', 'ecole']
     search_fields = ['designation', 'observation']
@@ -192,7 +194,7 @@ class DepenseDocumentAdmin(admin.ModelAdmin):
 
 
 @admin.register(Versement)
-class VersementAdmin(admin.ModelAdmin):
+class VersementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['date', 'lieu_versement', 'montant', 'ecole', 'cree_par']
     list_filter = ['date', 'ecole']
     search_fields = ['lieu_versement', 'observation']
@@ -200,7 +202,7 @@ class VersementAdmin(admin.ModelAdmin):
 
 
 @admin.register(AbonnementInformatique)
-class AbonnementInformatiqueAdmin(admin.ModelAdmin):
+class AbonnementInformatiqueAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ['eleve', 'date_debut', 'date_fin', 'montant', 'statut_libelle', 'cree_par']
     list_filter = ['date_fin', 'date_debut']
     search_fields = ['eleve__matricule', 'eleve__nom', 'eleve__prenom', 'observation']

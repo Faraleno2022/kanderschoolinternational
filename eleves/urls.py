@@ -1,7 +1,10 @@
 from django.urls import path
 from . import views
 from . import views_sante
-from .views_import import importer_eleves, telecharger_template_eleves, exporter_eleves_classe
+from .views_import import (
+    importer_eleves, telecharger_template_eleves, exporter_eleves_classe,
+    exporter_tous_eleves_modele,
+)
 from .views_nouvelle_annee import (
     nouvelle_annee_apercu,
     nouvelle_annee_creer,
@@ -24,6 +27,8 @@ urlpatterns = [
     path('ajouter/<int:eleve_id>/reussi/', views.ajout_eleve_reussi, name='ajout_eleve_reussi'),
     path('<int:eleve_id>/modifier/', views.modifier_eleve, name='modifier_eleve'),
     path('<int:eleve_id>/supprimer/', views.supprimer_eleve, name='supprimer_eleve'),
+    path('corbeille/', views.corbeille_eleves, name='corbeille_eleves'),
+    path('corbeille/<int:eleve_id>/restaurer/', views.restaurer_eleve, name='restaurer_eleve'),
     path('supprimer-masse/', views.supprimer_eleves_masse, name='supprimer_eleves_masse'),
     
     # Gestion des classes
@@ -47,12 +52,14 @@ urlpatterns = [
     path('<int:eleve_id>/fiche-inscription-pdf/', views.fiche_inscription_pdf, name='fiche_inscription_pdf'),
     path('<int:eleve_id>/ticket-retrait-pdf/', views.generer_ticket_retrait_pdf, name='ticket_retrait_pdf'),
     path('<int:eleve_id>/ticket-bus-pdf/', views.generer_ticket_bus_pdf, name='ticket_bus_pdf'),
+    path('<int:eleve_id>/carte-cantine-pdf/', views.generer_ticket_cantine_pdf, name='ticket_cantine_pdf'),
     path('<int:eleve_id>/carte-scolaire-pdf/', views.generer_carte_scolaire_pdf, name='carte_scolaire_pdf'),
     path('<int:eleve_id>/carte-scolaire-preview/', views.carte_scolaire_preview, name='carte_scolaire_preview'),
     
     # Génération en masse de tickets par classe
     path('classe/<int:classe_id>/tickets-retrait-pdf/', views.generer_tickets_retrait_classe_pdf, name='tickets_retrait_classe_pdf'),
     path('classe/<int:classe_id>/tickets-bus-pdf/', views.generer_tickets_bus_classe_pdf, name='tickets_bus_classe_pdf'),
+    path('classe/<int:classe_id>/cartes-cantine-pdf/', views.generer_tickets_cantine_classe_pdf, name='tickets_cantine_classe_pdf'),
     path('classe/<int:classe_id>/cartes-scolaires-pdf/', views.generer_cartes_classe_pdf, name='cartes_scolaires_classe_pdf'),
 
     # Exports par classe
@@ -80,4 +87,5 @@ urlpatterns = [
     path('importer/', importer_eleves, name='importer_eleves'),
     path('template-eleves/', telecharger_template_eleves, name='telecharger_template_eleves'),
     path('exporter/classe/<int:classe_id>/', exporter_eleves_classe, name='exporter_eleves_classe'),
+    path('exporter/tous/modele-import/', exporter_tous_eleves_modele, name='exporter_tous_eleves_modele'),
 ]

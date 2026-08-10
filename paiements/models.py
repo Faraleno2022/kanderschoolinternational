@@ -5,6 +5,16 @@ from decimal import Decimal
 from eleves.models import Eleve
 from synchronisation.mixins import SyncTrackedModel
 
+
+def _audit_json_value(value):
+    """Convertit une valeur Django en donnée JSON stable pour l'audit."""
+    if isinstance(value, Decimal):
+        return str(value)
+    if hasattr(value, 'isoformat'):
+        return value.isoformat()
+    return value
+
+
 class TypePaiement(SyncTrackedModel):
     """Modèle pour les types de paiements"""
     nom = models.CharField(max_length=100, unique=True, verbose_name="Nom du type")
@@ -95,8 +105,23 @@ class Paiement(SyncTrackedModel):
     def __str__(self):
         return f"{self.numero_recu} - {self.eleve.nom_complet} - {self.montant:,.0f} GNF"
     
+    AUDIT_FIELDS = (
+        'eleve_id', 'type_paiement_id', 'mode_paiement_id', 'montant',
+        'date_paiement', 'statut', 'reference_externe', 'observations',
+        'valide_par_id', 'date_validation',
+    )
+
+    @classmethod
+    def _audit_snapshot(cls, pk):
+        values = cls.objects.filter(pk=pk).values(*cls.AUDIT_FIELDS).first()
+        if not values:
+            return None
+        return {key: _audit_json_value(value) for key, value in values.items()}
+
     def save(self, *args, **kwargs):
-        """Génère automatiquement un numéro de reçu si non défini"""
+        """Génère le reçu et mémorise chaque modification du paiement."""
+        before = self._audit_snapshot(self.pk) if self.pk else None
+
         if not self.numero_recu:
             from django.utils import timezone
             from django.db import transaction, IntegrityError
@@ -123,7 +148,7 @@ class Paiement(SyncTrackedModel):
                 self.numero_recu = f"{prefix}{seq:04d}"
                 try:
                     super().save(*args, **kwargs)
-                    return
+                    break
                 except IntegrityError:
                     # Une collision est survenue, on retente avec le numéro suivant
                     continue
@@ -132,10 +157,73 @@ class Paiement(SyncTrackedModel):
                 raise ValueError("Impossible de générer un numéro de reçu unique après 10 tentatives")
         else:
             super().save(*args, **kwargs)
-    
+
+        if before is not None:
+            after = self._audit_snapshot(self.pk)
+            if after and before != after:
+                changed_fields = [
+                    field for field in self.AUDIT_FIELDS
+                    if before.get(field) != after.get(field)
+                ]
+                try:
+                    eleve_label = f"{self.eleve.matricule} - {self.eleve.nom_complet}"
+                except Exception:
+                    eleve_label = ''
+                HistoriqueModificationPaiement.objects.create(
+                    paiement=self,
+                    numero_recu=self.numero_recu,
+                    eleve=eleve_label,
+                    utilisateur=getattr(self, '_audit_user', None),
+                    motif=(
+                        getattr(self, '_audit_reason', '')
+                        or "Modification automatique du paiement"
+                    ),
+                    champs_modifies=changed_fields,
+                    donnees_avant=before,
+                    donnees_apres=after,
+                )
+
+        self._audit_user = None
+        self._audit_reason = ''
+
     @property
     def montant_avec_frais(self):
         return self.montant + self.mode_paiement.frais_supplementaires
+
+
+class HistoriqueModificationPaiement(models.Model):
+    """Mémoire inaltérable des changements apportés aux paiements."""
+
+    paiement = models.ForeignKey(
+        Paiement,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='historique_modifications',
+    )
+    numero_recu = models.CharField(max_length=20, db_index=True)
+    eleve = models.CharField(max_length=250, blank=True)
+    utilisateur = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='modifications_paiements',
+    )
+    motif = models.TextField()
+    champs_modifies = models.JSONField(default=list, blank=True)
+    donnees_avant = models.JSONField(default=dict)
+    donnees_apres = models.JSONField(default=dict)
+    date_modification = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-date_modification', '-id']
+        verbose_name = "Historique de modification de paiement"
+        verbose_name_plural = "Historique des modifications de paiements"
+
+    def __str__(self):
+        return f"{self.numero_recu} - {self.date_modification:%d/%m/%Y %H:%M}"
+
 
 class EcheancierPaiement(SyncTrackedModel):
     """Modèle pour l'échéancier des paiements d'un élève"""

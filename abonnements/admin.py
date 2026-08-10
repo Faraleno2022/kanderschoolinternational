@@ -5,23 +5,25 @@ from .models import (
     PresenceCantine
 )
 
+from administration.corbeille import CorbeilleAdminMixin
+
 
 @admin.register(TypeAbonnement)
-class TypeAbonnementAdmin(admin.ModelAdmin):
+class TypeAbonnementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ('nom', 'tarif_mensuel', 'tarif_trimestriel', 'tarif_annuel', 'actif')
     list_filter = ('actif', 'nom')
     search_fields = ('nom', 'description')
 
 
 @admin.register(Itineraire)
-class ItineraireAdmin(admin.ModelAdmin):
+class ItineraireAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ('nom', 'heure_depart_matin', 'heure_retour_soir', 'capacite', 'nombre_abonnes', 'actif')
     list_filter = ('actif',)
     search_fields = ('nom', 'quartiers')
 
 
 @admin.register(MenuCantine)
-class MenuCantineAdmin(admin.ModelAdmin):
+class MenuCantineAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ('jour', 'semaine', 'date_menu', 'plat_principal', 'actif')
     list_filter = ('jour', 'semaine', 'actif')
     search_fields = ('plat_principal', 'entree', 'dessert')
@@ -29,7 +31,7 @@ class MenuCantineAdmin(admin.ModelAdmin):
 
 
 @admin.register(Abonnement)
-class AbonnementAdmin(admin.ModelAdmin):
+class AbonnementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ('eleve', 'type_abonnement', 'duree', 'date_debut', 'date_fin', 'montant', 'statut')
     list_filter = ('statut', 'duree', 'type_abonnement')
     search_fields = ('eleve__nom', 'eleve__prenom', 'eleve__matricule')
@@ -38,7 +40,7 @@ class AbonnementAdmin(admin.ModelAdmin):
 
 
 @admin.register(AbonnementBus)
-class AbonnementBusAdmin(admin.ModelAdmin):
+class AbonnementBusAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ('eleve', 'itineraire', 'duree', 'date_debut', 'date_fin', 'statut')
     list_filter = ('statut', 'duree', 'itineraire')
     search_fields = ('eleve__nom', 'eleve__prenom', 'eleve__matricule', 'point_montee', 'point_descente')
@@ -47,7 +49,7 @@ class AbonnementBusAdmin(admin.ModelAdmin):
 
 
 @admin.register(AbonnementCantine)
-class AbonnementCantineAdmin(admin.ModelAdmin):
+class AbonnementCantineAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ('eleve', 'duree', 'regime_alimentaire', 'date_debut', 'date_fin', 'statut')
     list_filter = ('statut', 'duree', 'regime_alimentaire')
     search_fields = ('eleve__nom', 'eleve__prenom', 'eleve__matricule')
@@ -56,7 +58,7 @@ class AbonnementCantineAdmin(admin.ModelAdmin):
 
 
 @admin.register(PresenceCantine)
-class PresenceCantineAdmin(admin.ModelAdmin):
+class PresenceCantineAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_display = ('abonnement', 'date', 'present', 'menu')
     list_filter = ('present', 'date')
     search_fields = ('abonnement__eleve__nom', 'abonnement__eleve__prenom')

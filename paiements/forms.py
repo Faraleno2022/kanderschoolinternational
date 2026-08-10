@@ -3,6 +3,7 @@ from django.core.validators import MinValueValidator
 from decimal import Decimal
 from datetime import date, datetime
 from django.utils import timezone
+from django.db.models import Q
 
 from .models import Paiement, EcheancierPaiement, TypePaiement, ModePaiement, RemiseReduction, PaiementRemise
 from eleves.models import Eleve, Ecole
@@ -96,6 +97,57 @@ class PaiementForm(forms.ModelForm):
             except Exception:
                 self.add_error('remise_pourcentage', "Valeur de remise invalide.")
         return cleaned
+
+
+class ModificationPaiementForm(forms.ModelForm):
+    """Correction contrôlée d'un paiement existant."""
+
+    motif_modification = forms.CharField(
+        required=True,
+        min_length=5,
+        label="Motif de la modification",
+        help_text="Ce motif sera conservé dans l'historique.",
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': "Ex. : montant saisi incomplet lors de l'encaissement",
+        }),
+    )
+
+    class Meta:
+        model = Paiement
+        fields = (
+            'type_paiement', 'mode_paiement', 'montant', 'date_paiement',
+            'reference_externe', 'observations',
+        )
+        widgets = {
+            'type_paiement': forms.Select(attrs={'class': 'form-select'}),
+            'mode_paiement': forms.Select(attrs={'class': 'form-select'}),
+            'montant': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '1', 'step': '1000',
+            }),
+            'date_paiement': forms.DateInput(attrs={
+                'class': 'form-control', 'type': 'date',
+            }),
+            'reference_externe': forms.TextInput(attrs={'class': 'form-control'}),
+            'observations': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['type_paiement'].queryset = TypePaiement.objects.filter(
+            Q(actif=True) | Q(pk=getattr(self.instance, 'type_paiement_id', None))
+        ).distinct()
+        self.fields['mode_paiement'].queryset = ModePaiement.objects.filter(
+            Q(actif=True) | Q(pk=getattr(self.instance, 'mode_paiement_id', None))
+        ).distinct()
+
+    def clean_montant(self):
+        montant = self.cleaned_data.get('montant')
+        if montant is None or montant <= 0:
+            raise forms.ValidationError("Le montant doit être supérieur à zéro.")
+        return montant
+
 
 class EcheancierForm(forms.ModelForm):
     """Formulaire pour créer/modifier un échéancier"""

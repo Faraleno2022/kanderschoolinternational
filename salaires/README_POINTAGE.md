@@ -353,7 +353,7 @@ python test_pointage_urls.py
 ### Fonctionnalités Potentielles
 
 - [ ] Notifications automatiques pour absences répétées
-- [ ] Intégration avec le calcul des salaires
+- [x] Intégration avec le calcul des salaires au taux horaire
 - [ ] Pointage biométrique ou par badge
 - [ ] Application mobile pour pointage
 - [ ] Graphiques de présence

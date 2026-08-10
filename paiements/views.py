@@ -37,7 +37,7 @@ from ecole_moderne.security_decorators import require_school_object
 from .models import Paiement, EcheancierPaiement, TypePaiement, ModePaiement, RemiseReduction, PaiementRemise, Relance, TwilioInboundMessage
 from eleves.models import Eleve, GrilleTarifaire, Classe
 from eleves.utils_annee import get_annee_active
-from .forms import PaiementForm, EcheancierForm, RechercheForm
+from .forms import PaiementForm, ModificationPaiementForm, EcheancierForm, RechercheForm
 from .remise_forms import PaiementRemiseForm, CalculateurRemiseForm
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school, user_school
 from utilisateurs.permissions import has_permission, get_user_permissions, can_add_payments, can_modify_payments, can_delete_payments, can_validate_payments, can_view_reports, can_apply_discounts
@@ -1520,8 +1520,49 @@ def detail_paiement(request, paiement_id:int):
         'remises_total': int(remises_total or 0),
         'paiements_eleve': paiements_eleve,
         'nombre_paiements_eleve': len(paiements_eleve),
+        'historique_modifications': paiement.historique_modifications.select_related('utilisateur').all()[:20],
     }
     return render(request, 'paiements/detail_paiement.html', context)
+
+
+@login_required
+@can_modify_payments
+@require_school_object(Paiement, pk_kwarg='paiement_id', field_path='eleve__classe__ecole')
+def modifier_paiement(request, paiement_id: int):
+    """Corrige un paiement et conserve automatiquement l'état avant/après."""
+    paiement_qs = Paiement.objects.select_related(
+        'eleve', 'eleve__classe', 'eleve__classe__ecole',
+        'type_paiement', 'mode_paiement',
+    )
+    paiement_qs = filter_by_user_school(
+        paiement_qs, request.user, 'eleve__classe__ecole'
+    )
+    paiement = get_object_or_404(paiement_qs, pk=paiement_id)
+
+    if request.method == 'POST':
+        form = ModificationPaiementForm(request.POST, instance=paiement)
+        if form.is_valid():
+            with transaction.atomic():
+                paiement = form.save(commit=False)
+                paiement._audit_user = request.user
+                paiement._audit_reason = form.cleaned_data['motif_modification'].strip()
+                paiement.save()
+                if paiement.statut == 'VALIDE':
+                    _auto_validate_echeancier_for_eleve(paiement.eleve)
+            messages.success(
+                request,
+                f"Le paiement {paiement.numero_recu} a été corrigé et mémorisé dans l'historique.",
+            )
+            return redirect('paiements:detail_paiement', paiement_id=paiement.id)
+    else:
+        form = ModificationPaiementForm(instance=paiement)
+
+    return render(request, 'paiements/modifier_paiement.html', {
+        'form': form,
+        'paiement': paiement,
+        'titre_page': f"Modifier le paiement {paiement.numero_recu}",
+    })
+
 
 @login_required
 def ajouter_paiement(request, eleve_id:int=None):
@@ -2156,6 +2197,8 @@ def valider_paiement(request, paiement_id:int):
             paiement.date_modification = timezone.now()
         except Exception:
             pass
+        paiement._audit_user = request.user if request.user.is_authenticated else None
+        paiement._audit_reason = "Validation du paiement"
         paiement.save()
 
         # Allocation intelligente à l'échéancier

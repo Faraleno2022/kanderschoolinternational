@@ -27,6 +27,12 @@
           <button type="button" id="btn-cartes-scolaires" class="btn btn-outline-primary">
             <i class="fas fa-id-card me-1"></i>Cartes Scolaires
           </button>
+          <a href="{% url 'eleves:corbeille_eleves' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-trash-restore me-1"></i>Corbeille
+          </a>
+          <a href="{% url 'eleves:exporter_tous_eleves_modele' %}" class="btn btn-success">
+            <i class="fas fa-file-export me-1"></i>Export complet réimportable
+          </a>
         </div>
       </div>
     </div>
@@ -38,6 +44,9 @@
           </button>
           <button type="button" id="btn-tickets-bus-masse" class="btn btn-outline-warning">
             <i class="fas fa-bus me-1"></i>Tickets Bus (Classe)
+          </button>
+          <button type="button" id="btn-tickets-cantine-masse" class="btn btn-outline-success">
+            <i class="fas fa-utensils me-1"></i>Cartes Cantine (Classe)
           </button>
         </div>
       </div>

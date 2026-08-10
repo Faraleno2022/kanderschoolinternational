@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import SystemLog, MaintenanceMode
+from .corbeille import ObjetSupprimeAdmin  # noqa: F401  (enregistre la corbeille)
 
 
 @admin.register(SystemLog)

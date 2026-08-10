@@ -270,10 +270,9 @@ document.querySelectorAll('input[type="time"]').forEach(input => {
             const minutesA = hA * 60 + mA;
             const minutesD = hD * 60 + mD;
             
-            if (minutesD > minutesA) {
-                const diff = (minutesD - minutesA) / 60;
-                heuresInput.value = diff.toFixed(2);
-            }
+            let diffMinutes = minutesD - minutesA;
+            if (diffMinutes < 0) diffMinutes += 24 * 60;
+            heuresInput.value = (diffMinutes / 60).toFixed(2);
         }
     });
 });

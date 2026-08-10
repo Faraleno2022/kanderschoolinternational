@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="fas fa-edit me-2"></i>{{ titre_page }}</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <strong>{{ paiement.eleve.nom_complet }}</strong> —
+                        {{ paiement.montant|floatformat:0|intcomma }} GNF —
+                        statut {{ paiement.get_statut_display }}.
+                        Toute correction est enregistrée avec son auteur, son motif et les valeurs avant/après.
+                    </div>
+                    <form method="post">
+                        {% csrf_token %}
+                        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+                        <div class="row g-3">
+                            {% for field in form %}
+                            <div class="{% if field.name == 'observations' or field.name == 'motif_modification' %}col-12{% else %}col-md-6{% endif %}">
+                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+                                {{ field }}
+                                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                                {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{% url 'paiements:detail_paiement' paiement.id %}" class="btn btn-secondary">Annuler</a>
+                            <button type="submit" class="btn btn-primary" onclick="return confirm('Enregistrer cette correction ?');">
+                                <i class="fas fa-save me-1"></i>Enregistrer la correction
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,15 +1,18 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q, Count, Sum
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import csv
 
 from .models import Enseignant, PresenceEnseignant
 from .forms import PresenceForm
+from .services import STATUTS_HEURES_PAYEES
 from utilisateurs.utils import user_school, user_is_admin
 
 
@@ -51,7 +54,10 @@ def liste_presences(request):
         presents=Count('id', filter=Q(statut='PRESENT')),
         absents=Count('id', filter=Q(statut='ABSENT')),
         retards=Count('id', filter=Q(statut='RETARD')),
-        total_heures=Sum('heures_travaillees')
+        total_heures=Sum(
+            'heures_travaillees',
+            filter=Q(statut__in=STATUTS_HEURES_PAYEES),
+        )
     )
     
     # Liste des enseignants pour le filtre
@@ -94,69 +100,69 @@ def pointer_presence(request):
             messages.error(request, "Format de date invalide.")
             return redirect('salaires:pointer_presence')
         
+        try:
+            ids = list(dict.fromkeys(int(value) for value in enseignants_ids))
+        except (TypeError, ValueError):
+            messages.error(request, "Sélection d'enseignants invalide.")
+            return redirect('salaires:pointer_presence')
+
+        enseignants_valides = {
+            enseignant.id: enseignant
+            for enseignant in Enseignant.objects.filter(
+                id__in=ids, ecole=user_school_obj, statut='ACTIF'
+            )
+        }
+        if set(ids) != set(enseignants_valides):
+            messages.error(request, "Un enseignant sélectionné n'est pas autorisé.")
+            return redirect('salaires:pointer_presence')
+
         count_created = 0
         count_updated = 0
-        
-        # Valider que tous les enseignants sélectionnés appartiennent à l'école de l'utilisateur
-        enseignants_valides = set(
-            Enseignant.objects.filter(
-                id__in=enseignants_ids,
-                ecole=user_school_obj
-            ).values_list('id', flat=True)
-        )
-        
-        for ens_id in enseignants_ids:
-            if int(ens_id) not in enseignants_valides:
-                continue  # Ignorer les enseignants qui n'appartiennent pas à l'école
-            statut = request.POST.get(f'statut_{ens_id}', 'PRESENT')
-            heure_arrivee_str = request.POST.get(f'heure_arrivee_{ens_id}') or None
-            heure_depart_str = request.POST.get(f'heure_depart_{ens_id}') or None
-            heures_travaillees_str = request.POST.get(f'heures_travaillees_{ens_id}') or None
-            observations = request.POST.get(f'observations_{ens_id}', '')
-            justifie = request.POST.get(f'justifie_{ens_id}') == 'on'
-            
-            # Convertir les heures en objets time
-            heure_arrivee = None
-            heure_depart = None
-            heures_travaillees = None
-            
-            if heure_arrivee_str:
-                try:
-                    heure_arrivee = datetime.strptime(heure_arrivee_str, '%H:%M').time()
-                except ValueError:
-                    pass
-            
-            if heure_depart_str:
-                try:
-                    heure_depart = datetime.strptime(heure_depart_str, '%H:%M').time()
-                except ValueError:
-                    pass
-            
-            if heures_travaillees_str:
-                try:
-                    heures_travaillees = Decimal(heures_travaillees_str)
-                except:
-                    pass
-            
-            # Créer ou mettre à jour la présence
-            presence, created = PresenceEnseignant.objects.update_or_create(
-                enseignant_id=ens_id,
-                date=date_pointage,
-                defaults={
-                    'statut': statut,
-                    'heure_arrivee': heure_arrivee,
-                    'heure_depart': heure_depart,
-                    'heures_travaillees': heures_travaillees,
-                    'observations': observations,
-                    'justifie': justifie,
-                    'pointe_par': request.user,
-                }
-            )
-            
-            if created:
-                count_created += 1
-            else:
-                count_updated += 1
+
+        try:
+            with transaction.atomic():
+                for ens_id in ids:
+                    statut = request.POST.get(f'statut_{ens_id}', 'PRESENT')
+                    heure_arrivee_str = request.POST.get(f'heure_arrivee_{ens_id}') or None
+                    heure_depart_str = request.POST.get(f'heure_depart_{ens_id}') or None
+                    heures_str = request.POST.get(f'heures_travaillees_{ens_id}') or None
+
+                    heure_arrivee = (
+                        datetime.strptime(heure_arrivee_str, '%H:%M').time()
+                        if heure_arrivee_str else None
+                    )
+                    heure_depart = (
+                        datetime.strptime(heure_depart_str, '%H:%M').time()
+                        if heure_depart_str else None
+                    )
+                    heures_travaillees = Decimal(heures_str) if heures_str else None
+
+                    presence = PresenceEnseignant.objects.select_for_update().filter(
+                        enseignant_id=ens_id, date=date_pointage
+                    ).first()
+                    created = presence is None
+                    if created:
+                        presence = PresenceEnseignant(
+                            enseignant=enseignants_valides[ens_id],
+                            date=date_pointage,
+                        )
+
+                    presence.statut = statut
+                    presence.heure_arrivee = heure_arrivee
+                    presence.heure_depart = heure_depart
+                    presence.heures_travaillees = heures_travaillees
+                    presence.observations = request.POST.get(
+                        f'observations_{ens_id}', ''
+                    )
+                    presence.justifie = request.POST.get(f'justifie_{ens_id}') == 'on'
+                    presence.pointe_par = request.user
+                    presence.save()
+
+                    count_created += int(created)
+                    count_updated += int(not created)
+        except (ValueError, InvalidOperation, ValidationError) as exc:
+            messages.error(request, f"Pointage non enregistré : {exc}")
+            return redirect('salaires:pointer_presence')
         
         messages.success(
             request,
@@ -185,7 +191,10 @@ def pointer_presence(request):
     total_heures_jour = Decimal('0')
     for presence in PresenceEnseignant.objects.filter(date=date_pointage_obj, enseignant__ecole=user_school_obj):
         presences_existantes[presence.enseignant_id] = presence
-        if presence.heures_travaillees:
+        if (
+            presence.statut in STATUTS_HEURES_PAYEES
+            and presence.heures_travaillees
+        ):
             total_heures_jour += presence.heures_travaillees
     
     # Calculer les heures cumulées du mois pour chaque enseignant
@@ -198,7 +207,10 @@ def pointer_presence(request):
         date__gte=debut_mois,
         date__lte=fin_mois
     ).values('enseignant_id').annotate(
-        total_heures=Sum('heures_travaillees'),
+        total_heures=Sum(
+            'heures_travaillees',
+            filter=Q(statut__in=STATUTS_HEURES_PAYEES),
+        ),
         jours_presents=Count('id', filter=Q(statut='PRESENT')),
         jours_absents=Count('id', filter=Q(statut='ABSENT')),
         jours_retards=Count('id', filter=Q(statut='RETARD'))
@@ -251,7 +263,7 @@ def modifier_presence(request, presence_id):
     )
     
     if request.method == 'POST':
-        form = PresenceForm(request.POST, instance=presence)
+        form = PresenceForm(request.POST, instance=presence, ecole=user_school_obj)
         if form.is_valid():
             presence = form.save(commit=False)
             presence.pointe_par = request.user
@@ -259,7 +271,7 @@ def modifier_presence(request, presence_id):
             messages.success(request, "Présence modifiée avec succès.")
             return redirect('salaires:liste_presences')
     else:
-        form = PresenceForm(instance=presence)
+        form = PresenceForm(instance=presence, ecole=user_school_obj)
     
     context = {
         'form': form,
@@ -354,7 +366,10 @@ def rapport_presences(request):
         elif presence.statut == 'PERMISSION':
             rapport_par_enseignant[ens]['permissions'] += 1
         
-        if presence.heures_travaillees:
+        if (
+            presence.statut in STATUTS_HEURES_PAYEES
+            and presence.heures_travaillees
+        ):
             rapport_par_enseignant[ens]['total_heures'] += presence.heures_travaillees
     
     # Convertir en liste
@@ -581,7 +596,10 @@ def export_presences_excel(request):
         elif presence.statut == 'PERMISSION':
             stats_enseignant[ens.id]['permissions'] += 1
         
-        if presence.heures_travaillees:
+        if (
+            presence.statut in STATUTS_HEURES_PAYEES
+            and presence.heures_travaillees
+        ):
             stats_enseignant[ens.id]['heures'] += presence.heures_travaillees
     
     # Écrire les données récap
