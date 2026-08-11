@@ -507,6 +507,25 @@ def _get_payment_allocation_breakdown(paiement: "Paiement") -> dict:
         return {}
 
 
+def _repartition_previsionnelle(montant, postes) -> dict:
+    """Affecte un montant aux postes restants, dans l'ordre inscription → T3.
+
+    `postes` est une liste de (libellé, reste dû). Sert à montrer à l'agent
+    où ira réellement un montant supérieur au type sélectionné, avant
+    enregistrement. Le reliquat éventuel est remonté à part.
+    """
+    restant = max(0, int(montant or 0))
+    lignes = []
+    for libelle, reste in postes:
+        if restant <= 0:
+            break
+        part = min(restant, max(0, int(reste or 0)))
+        if part > 0:
+            lignes.append({'libelle': libelle, 'montant': part})
+            restant -= part
+    return {'lignes': lignes, 'non_alloue': restant}
+
+
 def _auto_validate_echeancier_for_eleve(eleve: "Eleve") -> None:
     """Synchronise l'échéancier de l'élève avec les paiements VALIDÉS avant impression du reçu.
 
@@ -1711,12 +1730,50 @@ def ajouter_paiement(request, eleve_id:int=None):
                             'show_partial_confirmation': True,
                         })
                 else:
-                    # Montant supérieur au montant standard: autoriser.
-                    # Raison: pour les types combinés et même pour certaines tranches,
-                    # on souhaite permettre que l'excédent soit alloué à la tranche suivante
-                    # (allocation intelligente lors de la validation). Les contrôles
-                    # anti-surpaiement par groupe et le plafond global empêcheront tout excès réel.
-                    pass
+                    # Montant supérieur au montant standard : l'excédent est bien
+                    # reporté sur les tranches suivantes par l'allocation
+                    # automatique, mais plus en silence. Les contrôles par type
+                    # étant neutralisés par `cascade_automatique` ci-dessous, ce
+                    # cas ne rencontrait aucune confirmation, alors que le montant
+                    # inférieur en demandait une : la voici, symétrique, avec la
+                    # répartition réelle sous les yeux de l'agent.
+                    if not request.POST.get('confirmation_montant_superieur'):
+                        from django.utils.safestring import mark_safe
+
+                        libelle_inscription = (
+                            'Réinscription' if _is_reinscription_type(type_nom) else 'Inscription'
+                        )
+                        repartition = _repartition_previsionnelle(montant_saisi, [
+                            (libelle_inscription, fi_due - fi_payee),
+                            ('1ère tranche', t1_due - t1_payee),
+                            ('2ème tranche', t2_due - t2_payee),
+                            ('3ème tranche', t3_due - t3_payee),
+                        ])
+                        detail_txt = ' + '.join(
+                            f"{ligne['libelle']} : {ligne['montant']:,} GNF".replace(',', ' ')
+                            for ligne in repartition['lignes']
+                        )
+                        message_html = mark_safe(
+                            f'<span style="color: #f39c12; font-weight: bold; font-size: 1.1em;">'
+                            f'⚠️ ATTENTION: Le montant saisi ({montant_saisi:,} GNF) est supérieur '
+                            f'au montant standard pour {type_description} '
+                            f'({montant_attendu:,} GNF).</span><br>'
+                            f'<strong>Répartition prévue :</strong> {detail_txt}<br>'
+                            f'<strong>Confirmez-vous cette répartition ?</strong>'
+                        )
+                        messages.warning(request, message_html)
+                        return render(request, 'paiements/form_paiement.html', {
+                            'titre_page': titre_page,
+                            'action': action,
+                            'form': form,
+                            'eleve': eleve,
+                            'montant_attendu': montant_attendu,
+                            'montant_saisi': montant_saisi,
+                            'type_description': type_description,
+                            'show_overflow_confirmation': True,
+                            'repartition_previsionnelle': repartition['lignes'],
+                            'montant_non_alloue': repartition['non_alloue'],
+                        })
 
             # Les anciens contrôles par type sont gardés comme solution de
             # repli. Le report automatique est actif; seul le plafond annuel
@@ -4032,6 +4089,75 @@ def _base_remise(detail_tranches, tranches, base_calcul) -> Decimal:
     return total
 
 
+def _montant_brut_recu(paiement) -> Decimal:
+    """Montant du reçu avant toute déduction de remise.
+
+    Quand une remise a été déduite, `paiement.montant` est déjà le net.
+    Rouvrir l'écran et resoumettre déduirait une seconde fois : on repart
+    donc systématiquement du brut reconstitué à partir des lignes marquées
+    `deduite_du_paiement`.
+    """
+    try:
+        deja_deduit = (
+            PaiementRemise.objects
+            .filter(paiement=paiement, deduite_du_paiement=True)
+            .aggregate(total=Sum('montant_remise'))
+            .get('total') or 0
+        )
+    except Exception:
+        deja_deduit = 0
+    return Decimal(str(paiement.montant or 0)) + Decimal(str(deja_deduit))
+
+
+def _couverture_hors_recu(paiement) -> tuple:
+    """(total dû de l'année, couverture déjà acquise par les autres reçus).
+
+    La couverture agrège l'argent encaissé et les remises accordées sur les
+    paiements validés, à l'exclusion du reçu en cours d'édition.
+    """
+    total_du = Decimal('0')
+    try:
+        ech = getattr(paiement.eleve, 'echeancier', None)
+        if ech:
+            total_du = Decimal(str(ech.total_du or 0))
+    except Exception:
+        total_du = Decimal('0')
+
+    autres = Paiement.objects.filter(eleve=paiement.eleve, statut='VALIDE')
+    if paiement.pk:
+        autres = autres.exclude(pk=paiement.pk)
+    try:
+        encaisse = autres.aggregate(total=Sum('montant')).get('total') or 0
+        remises = (
+            PaiementRemise.objects
+            .filter(paiement__in=autres)
+            .aggregate(total=Sum('montant_remise'))
+            .get('total') or 0
+        )
+    except Exception:
+        encaisse = remises = 0
+
+    return total_du, Decimal(str(encaisse)) + Decimal(str(remises))
+
+
+def _plafond_remise(paiement, deduire: bool) -> tuple:
+    """(plafond de remise accordable, montant brut du reçu).
+
+    Sans déduction, la remise s'ajoute à l'encaissement : elle est bornée
+    par ce qui reste dû une fois ce reçu pris en compte.
+    Avec déduction, le reçu baisse d'autant que la remise monte — la
+    couverture totale ne bouge pas — et la seule borne est le reçu lui-même.
+    """
+    montant_brut = _montant_brut_recu(paiement)
+    total_du, couverture_hors_recu = _couverture_hors_recu(paiement)
+
+    if deduire:
+        return montant_brut, montant_brut
+
+    reste = total_du - couverture_hors_recu - montant_brut
+    return max(Decimal('0'), reste), montant_brut
+
+
 @login_required
 @can_apply_discounts
 @require_school_object(Paiement, pk_kwarg='paiement_id', field_path='eleve__classe__ecole')
@@ -4066,6 +4192,8 @@ def appliquer_remise_paiement(request, paiement_id:int):
                 pct_value = 0
 
             base_remise = _base_remise(detail_tranches, tranches, base_calcul)
+            deduire = bool(form.cleaned_data.get('deduire_du_paiement'))
+            plafond_remise, montant_brut = _plafond_remise(paiement, deduire)
 
             def _rendu_avec_erreur(message):
                 messages.error(request, message)
@@ -4082,6 +4210,10 @@ def appliquer_remise_paiement(request, paiement_id:int):
                     'base_remise': int(base_remise or 0),
                     'tranches_cochees': tranches,
                     'base_calcul_choisie': base_calcul,
+                    'montant_brut': int(montant_brut or 0),
+                    'plafond_remise': int(plafond_remise or 0),
+                    'plafond_sans_deduction': int(_plafond_remise(paiement, False)[0] or 0),
+                    'deduire_choisi': deduire,
                 })
 
             # Si aucune remise n'est sélectionnée, ne rien modifier et afficher une erreur
@@ -4111,22 +4243,69 @@ def appliquer_remise_paiement(request, paiement_id:int):
 
             portee = ','.join(tranches)
 
+            # Les montants sont calculés avant toute écriture : le plafond doit
+            # porter sur le total réellement accordé, remise catalogue et
+            # pourcentage scolarité confondus.
+            montants_catalogue = []
+            for remise in remises:
+                try:
+                    montants_catalogue.append((remise, remise.calculer_remise(base_remise)))
+                except Exception:
+                    montants_catalogue.append((remise, Decimal('0')))
+
+            montant_remise_pct = Decimal('0')
+            if pct_value > 0:
+                # Le pourcentage porte sur la base retenue (tranches cochées),
+                # jamais sur les frais d'inscription. Il est plafonné à cette
+                # base : une remise ne peut pas dépasser ce qu'elle couvre.
+                montant_remise_pct = (base_remise * Decimal(pct_value)) / Decimal('100')
+                montant_remise_pct = max(Decimal('0'), min(montant_remise_pct, base_remise))
+
+            total_remise = sum(
+                (montant for _, montant in montants_catalogue), Decimal('0')
+            ) + montant_remise_pct
+
+            # Une année déjà sur-couverte ne se règle pas par une remise :
+            # échanger de l'encaissement contre de la remise n'y change rien.
+            total_du_annee, couverture_hors_recu = _couverture_hors_recu(paiement)
+            if total_du_annee > 0 and (couverture_hors_recu + montant_brut) > total_du_annee:
+                excedent = couverture_hors_recu + montant_brut - total_du_annee
+                return _rendu_avec_erreur(
+                    f"Cet élève est déjà couvert au-delà du total dû "
+                    f"({excedent:,.0f} GNF de trop) avant toute remise. "
+                    "Corrigez les encaissements avant d'accorder une remise."
+                    .replace(',', ' ')
+                )
+
+            if total_remise > plafond_remise:
+                if deduire:
+                    return _rendu_avec_erreur(
+                        f"La remise ({total_remise:,.0f} GNF) dépasse le montant du reçu "
+                        f"({montant_brut:,.0f} GNF), qu'elle ne peut pas rendre négatif."
+                        .replace(',', ' ')
+                    )
+                return _rendu_avec_erreur(
+                    f"La remise ({total_remise:,.0f} GNF) dépasse ce qui reste dû "
+                    f"({plafond_remise:,.0f} GNF) une fois ce reçu pris en compte : "
+                    "l'élève serait en trop-perçu. Réduisez la remise, ou cochez "
+                    "« Déduire la remise du montant du reçu » pour ramener le reçu "
+                    "au net sans changer la couverture totale."
+                    .replace(',', ' ')
+                )
+
             # pourcentage_scolarite est un aperçu UI, on ne le persiste pas ici faute de modèle dédié
             with transaction.atomic():
                 # Remplacer les remises existantes par la sélection
                 PaiementRemise.objects.filter(paiement=paiement).delete()
                 created = 0
-                for remise in remises:
-                    try:
-                        montant_remise = remise.calculer_remise(base_remise)
-                    except Exception:
-                        montant_remise = 0
+                for remise, montant_remise in montants_catalogue:
                     PaiementRemise.objects.create(
                         paiement=paiement,
                         remise=remise,
                         montant_remise=montant_remise,
                         portee_tranches=portee,
                         motif_application=motif_remise,
+                        deduite_du_paiement=deduire,
                     )
                     created += 1
 
@@ -4156,20 +4335,38 @@ def appliquer_remise_paiement(request, paiement_id:int):
                             date_fin=date(annee, 12, 31),
                             actif=True,
                         )
-                    # Le pourcentage porte sur la base retenue (tranches cochées),
-                    # jamais sur les frais d'inscription. Il est plafonné à cette
-                    # base : une remise ne peut pas dépasser ce qu'elle couvre.
-                    montant_remise_pct = (base_remise * Decimal(pct_value)) / Decimal('100')
-                    montant_remise_pct = max(Decimal('0'), min(montant_remise_pct, base_remise))
                     PaiementRemise.objects.create(
                         paiement=paiement,
                         remise=remise_pct,
                         montant_remise=montant_remise_pct,
                         portee_tranches=portee,
                         motif_application=motif_remise,
+                        deduite_du_paiement=deduire,
                     )
                     created += 1
-            messages.success(request, f"Remises appliquées: {created}.")
+
+                # Le reçu est toujours recalculé depuis le brut : décocher la
+                # case restaure le montant plein au lieu de laisser un reçu
+                # amputé sans remise en face.
+                montant_final = montant_brut - total_remise if deduire else montant_brut
+                if Decimal(str(paiement.montant or 0)) != montant_final:
+                    paiement.montant = montant_final
+                    paiement._audit_user = request.user if request.user.is_authenticated else None
+                    paiement._audit_reason = (
+                        f"Remise de {total_remise:,.0f} GNF déduite du reçu".replace(',', ' ')
+                        if deduire else
+                        "Montant du reçu restauré (remise non déduite)"
+                    )
+                    paiement.save()
+
+            if deduire:
+                messages.success(
+                    request,
+                    f"Remises appliquées: {created}. Reçu ramené au net : "
+                    f"{montant_final:,.0f} GNF.".replace(',', ' ')
+                )
+            else:
+                messages.success(request, f"Remises appliquées: {created}.")
             return redirect('paiements:detail_paiement', paiement_id=paiement.id)
         else:
             messages.error(request, "Veuillez corriger les erreurs du formulaire de remises.")
@@ -4190,6 +4387,16 @@ def appliquer_remise_paiement(request, paiement_id:int):
             tranches_cochees = existante.tranches_list
             break
 
+    # En réédition, la case doit refléter l'état enregistré, sinon un simple
+    # renvoi du formulaire restaurerait le brut sans que l'agent l'ait voulu.
+    deduction_en_cours = any(
+        getattr(existante, 'deduite_du_paiement', False)
+        for existante in remises_existantes
+    )
+    if request.method == 'GET':
+        form.fields['deduire_du_paiement'].initial = deduction_en_cours
+
+    plafond_affiche, montant_brut_affiche = _plafond_remise(paiement, False)
     context = {
         'paiement': paiement,
         'form': form,
@@ -4198,6 +4405,10 @@ def appliquer_remise_paiement(request, paiement_id:int):
         'detail_tranches': detail_tranches,
         'tranches_cochees': tranches_cochees,
         'base_calcul_choisie': 'TRANCHES',
+        'montant_brut': int(montant_brut_affiche or 0),
+        'plafond_remise': int(plafond_affiche or 0),
+        'plafond_sans_deduction': int(plafond_affiche or 0),
+        'deduire_choisi': deduction_en_cours,
     }
     return render(request, 'paiements/appliquer_remise.html', context)
 
@@ -4225,12 +4436,39 @@ def annuler_remise_paiement(request, paiement_id:int, remise_id:int=None):
         pk=paiement_id,
     )
     try:
+        lignes = PaiementRemise.objects.filter(paiement=paiement)
         if remise_id:
-            PaiementRemise.objects.filter(paiement=paiement, id=remise_id).delete()
+            lignes = lignes.filter(id=remise_id)
+
+        # Une remise déduite avait amputé le reçu : la supprimer sans rendre
+        # le montant laisserait un encaissement minoré sans contrepartie.
+        a_restituer = (
+            lignes.filter(deduite_du_paiement=True)
+            .aggregate(total=Sum('montant_remise'))
+            .get('total') or 0
+        )
+
+        with transaction.atomic():
+            lignes.delete()
+            if a_restituer:
+                paiement.montant = Decimal(str(paiement.montant or 0)) + Decimal(str(a_restituer))
+                paiement._audit_user = request.user if request.user.is_authenticated else None
+                paiement._audit_reason = (
+                    f"Annulation de remise : {a_restituer:,.0f} GNF rendus au reçu"
+                    .replace(',', ' ')
+                )
+                paiement.save()
+
+        if remise_id:
             messages.success(request, "Remise supprimée.")
         else:
-            PaiementRemise.objects.filter(paiement=paiement).delete()
             messages.success(request, "Toutes les remises de ce paiement ont été supprimées.")
+        if a_restituer:
+            messages.info(
+                request,
+                f"Le montant du reçu est revenu à {paiement.montant:,.0f} GNF."
+                .replace(',', ' ')
+            )
     except Exception:
         messages.error(request, "Impossible d'annuler la remise.")
     return redirect('paiements:detail_paiement', paiement_id=paiement.id)

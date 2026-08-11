@@ -463,7 +463,37 @@
                         </div>
                     </div>
                     {% endif %}
-                    
+
+                    <!-- Confirmation pour montant supérieur au type sélectionné -->
+                    {% if show_overflow_confirmation %}
+                    <div class="alert alert-warning mt-3" style="border: 2px solid #f39c12;">
+                        <h6 style="color: #b8860b; font-weight: bold;"><i class="fas fa-exclamation-triangle me-2"></i>⚠️ CONFIRMATION REQUISE - MONTANT SUPÉRIEUR AU TYPE</h6>
+                        <p class="mb-3" style="color: #856404; font-weight: bold; font-size: 1.05em;">
+                            Le montant saisi (<span style="color: #b8860b;">{{ montant_saisi|floatformat:0 }} GNF</span>) est supérieur au montant standard
+                            pour {{ type_description }} (<span style="color: #b8860b;">{{ montant_attendu|floatformat:0 }} GNF</span>).
+                        </p>
+                        <div class="p-3 mb-3" style="background-color: #fff3cd; border-radius: 5px; border: 1px solid #f39c12;">
+                            <strong style="color: #856404;">Répartition prévue de l'excédent :</strong>
+                            <ul class="mb-0 mt-2" style="color: #856404;">
+                                {% for ligne in repartition_previsionnelle %}
+                                <li>{{ ligne.libelle }} : <strong>{{ ligne.montant|floatformat:0 }} GNF</strong></li>
+                                {% endfor %}
+                            </ul>
+                            {% if montant_non_alloue %}
+                            <p class="mb-0 mt-2" style="color: #721c24;">
+                                <strong>{{ montant_non_alloue|floatformat:0 }} GNF</strong> ne correspondent à aucune échéance restante.
+                            </p>
+                            {% endif %}
+                        </div>
+                        <div class="form-check p-3" style="background-color: #fff3cd; border-radius: 5px; border: 1px solid #f39c12;">
+                            <input class="form-check-input" type="checkbox" name="confirmation_montant_superieur" id="confirmationMontantSuperieur" value="1" required>
+                            <label class="form-check-label" for="confirmationMontantSuperieur" style="color: #856404; font-weight: bold;">
+                                <i class="fas fa-check-square me-2"></i>Je confirme cette répartition et souhaite enregistrer le paiement.
+                            </label>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <!-- Confirmation pour paiement partiel vers tranche suivante -->
                     {% if show_partial_next_confirmation %}
                     <div class="alert alert-warning mt-3" style="border: 2px solid #f39c12;">

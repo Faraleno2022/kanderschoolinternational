@@ -67,6 +67,15 @@ class PaiementRemiseForm(forms.Form):
         error_messages={'required': "Le motif de la remise est obligatoire."},
     )
 
+    # Par défaut la remise s'ajoute à l'encaissement comme couverture de
+    # scolarité. Cochée, elle ramène au contraire le reçu à son net : la
+    # famille verse moins, la couverture totale ne bouge pas.
+    deduire_du_paiement = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        label="Déduire la remise du montant du reçu",
+    )
+
     def __init__(self, *args, **kwargs):
         paiement = kwargs.pop('paiement', None)
         super().__init__(*args, **kwargs)

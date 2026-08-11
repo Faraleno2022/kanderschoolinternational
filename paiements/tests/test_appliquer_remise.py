@@ -126,13 +126,30 @@ class AppliquerRemiseTest(TestCase):
         self.assertEqual(pr.portee_tranches, '1,2')
 
     def test_pourcentage_scolarite_utilise_la_base_des_tranches_cochees(self):
-        """100 % sur les trois tranches = 1 500 000, sans toucher aux 20 000 d'inscription."""
+        """100 % sur les trois tranches = 1 500 000, sans toucher aux 20 000 d'inscription.
+
+        Le reçu est ramené à la seule réinscription : avec les 500 000 de T1
+        déjà encaissés, une remise couvrant aussi T1 paierait la tranche deux
+        fois et serait désormais refusée comme trop-perçu.
+        """
+        self.paiement.montant = Decimal("20000")
+        self.paiement.save()
+
         response = self._post(pourcentage_scolarite='100', tranches=['1', '2', '3'])
 
         self.assertEqual(response.status_code, 302)
         pr = PaiementRemise.objects.get(paiement=self.paiement)
         self.assertEqual(pr.montant_remise, Decimal("1500000"))
         self.assertEqual(pr.portee_tranches, '1,2,3')
+
+    def test_remise_au_dela_du_reste_du_refusee(self):
+        """Le reçu couvre déjà T1 : 100 % sur T1+T2+T3 dépasserait le total dû."""
+        response = self._post(pourcentage_scolarite='100', tranches=['1', '2', '3'])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(PaiementRemise.objects.filter(paiement=self.paiement).exists())
+        self.paiement.refresh_from_db()
+        self.assertEqual(self.paiement.montant, Decimal("520000"))
 
     def test_motif_obligatoire(self):
         response = self._post(remises=[self.remise.id], motif_remise='')

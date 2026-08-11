@@ -275,10 +275,32 @@
                                         {% endif %}
                                     </div>
                                 </div>
+
+                                <div class="card border-primary mt-3">
+                                    <div class="card-body">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"
+                                                   name="deduire_du_paiement" id="id_deduire_du_paiement"
+                                                   value="1" {% if deduire_choisi %}checked{% endif %}>
+                                            <label class="form-check-label fw-bold" for="id_deduire_du_paiement">
+                                                Déduire la remise du montant du reçu
+                                            </label>
+                                        </div>
+                                        <p class="mb-0 mt-2 small text-muted">
+                                            Décochée, la remise s'ajoute à l'encaissement comme couverture de
+                                            scolarité : le reçu reste à {{ montant_brut|floatformat:0 }} GNF et la
+                                            remise ne peut pas dépasser <strong>{{ plafond_sans_deduction|floatformat:0 }} GNF</strong>,
+                                            sans quoi l'élève serait en trop-perçu.<br>
+                                            Cochée, elle ramène le reçu au net : la famille verse moins, la
+                                            couverture totale ne bouge pas, et la remise est bornée par le reçu
+                                            lui-même ({{ montant_brut|floatformat:0 }} GNF).
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
-                            
+
                             <div class="col-md-4">
-                                <div class="card sticky-top">
+                                <div class="card sticky-top" data-montant-brut="{{ montant_brut }}">
                                     <div class="card-header">
                                         <h6 class="mb-0">Aperçu du calcul</h6>
                                     </div>
@@ -286,7 +308,7 @@
                                         <div id="calculPreview">
                                             <p class="mb-2">
                                                 <strong>Montant encaissé (reçu):</strong><br>
-                                                <span class="montant-original" id="montantOriginal">{{ paiement.montant|floatformat:0 }} GNF</span>
+                                                <span class="montant-original" id="montantOriginal">{{ montant_brut|floatformat:0 }} GNF</span>
                                             </p>
                                             <p class="mb-2">
                                                 <strong>Base de calcul:</strong><br>
@@ -301,15 +323,22 @@
                                                 <span id="porteePreview" class="text-muted">Aucune tranche</span>
                                             </p>
                                             <hr>
-                                            <p class="mb-2 small text-muted">
+                                            <p class="mb-2 small text-muted" id="explicationDeduction">
                                                 La remise ne réduit pas ce reçu : le montant encaissé
-                                                reste <strong>{{ paiement.montant|floatformat:0 }} GNF</strong>.
+                                                reste <strong>{{ montant_brut|floatformat:0 }} GNF</strong>.
                                                 Elle vient s'ajouter comme couverture de scolarité sur
                                                 l'échéancier de l'élève.
                                             </p>
                                             <p class="mb-2">
+                                                <strong id="labelMontantRecu">Montant du reçu:</strong><br>
+                                                <span id="montantRecuFinal">{{ montant_brut|floatformat:0 }} GNF</span>
+                                            </p>
+                                            <p class="mb-2">
                                                 <strong>Couverture totale (reçu + remise):</strong><br>
-                                                <span class="montant-final" id="montantFinal">{{ paiement.montant|floatformat:0 }} GNF</span>
+                                                <span class="montant-final" id="montantFinal">{{ montant_brut|floatformat:0 }} GNF</span>
+                                            </p>
+                                            <p class="mb-2 d-none" id="alerteePlafond">
+                                                <span class="badge bg-danger">Au-delà du plafond</span>
                                             </p>
                                             <div id="remisesDetails" class="mt-3"></div>
                                         </div>
@@ -338,13 +367,16 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const checkboxes = document.querySelectorAll('.remise-checkbox');
-    const montantOriginalInput = document.getElementById('id_montant_original');
-    const montantOriginal = parseFloat(montantOriginalInput && montantOriginalInput.value ? montantOriginalInput.value.replace(/\s/g, '') : '0');
     const btnAppliquer = document.getElementById('btnAppliquer');
     const selectPct = document.getElementById('id_pourcentage_scolarite');
     const selectMotif = document.getElementById('id_motif_remise');
     const trancheCheckboxes = document.querySelectorAll('.tranche-checkbox');
     const baseRadios = document.querySelectorAll('.base-calcul-radio');
+    const caseDeduire = document.getElementById('id_deduire_du_paiement');
+    // Le brut, jamais le net : rouvrir l'écran après une déduction doit
+    // repartir du montant d'origine, comme le fait la vue côté serveur.
+    const montantBrut = parseFloat('{{ montant_brut|default:0 }}') || 0;
+    const plafondSansDeduction = parseFloat('{{ plafond_sans_deduction|default:0 }}') || 0;
 
     // Base de calcul = somme, sur les tranches cochées, soit du montant dû,
     // soit de la part de ce reçu affectée à la tranche (hors inscription).
@@ -429,14 +461,37 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('basePreview').textContent = baseTexte;
         document.getElementById('porteePreview').textContent = libellePortee();
 
-        // La remise ne réduit jamais le reçu encaissé : elle s'ajoute comme
-        // couverture de scolarité supplémentaire sur l'échéancier.
-        const couvertureTotale = montantOriginal + totalRemises;
+        // Deux régimes : soit la remise s'ajoute au reçu comme couverture
+        // supplémentaire, soit elle ramène le reçu au net et la couverture
+        // totale reste égale au brut. Le plafond suit le régime choisi.
+        const deduire = !!(caseDeduire && caseDeduire.checked);
+        const montantRecu = deduire ? Math.max(0, montantBrut - totalRemises) : montantBrut;
+        const couvertureTotale = montantRecu + totalRemises;
+        const plafond = deduire ? montantBrut : plafondSansDeduction;
 
         // Mettre à jour l'affichage
         document.getElementById('totalRemises').textContent = totalRemises.toLocaleString('fr-FR') + ' GNF';
+        document.getElementById('montantRecuFinal').textContent = montantRecu.toLocaleString('fr-FR') + ' GNF';
         document.getElementById('montantFinal').textContent = couvertureTotale.toLocaleString('fr-FR') + ' GNF';
-        
+
+        const explication = document.getElementById('explicationDeduction');
+        if (explication) {
+            explication.innerHTML = deduire
+                ? 'La remise est déduite du reçu : la famille verse <strong>'
+                  + montantRecu.toLocaleString('fr-FR') + ' GNF</strong> au lieu de '
+                  + montantBrut.toLocaleString('fr-FR') + ' GNF. La couverture de '
+                  + 'scolarité, elle, ne change pas.'
+                : 'La remise ne réduit pas ce reçu : le montant encaissé reste <strong>'
+                  + montantBrut.toLocaleString('fr-FR') + ' GNF</strong>. Elle vient '
+                  + "s'ajouter comme couverture de scolarité sur l'échéancier de l'élève.";
+        }
+
+        const alertePlafond = document.getElementById('alerteePlafond');
+        const depassePlafond = totalRemises > plafond;
+        if (alertePlafond) {
+            alertePlafond.classList.toggle('d-none', !depassePlafond);
+        }
+
         // Afficher les détails des remises
         const detailsDiv = document.getElementById('remisesDetails');
         if (remisesDetails.length > 0) {
@@ -449,8 +504,9 @@ document.addEventListener('DOMContentLoaded', function() {
             detailsDiv.innerHTML = '';
         }
         
-        // Une remise sans base de calcul serait nulle : on bloque l'envoi.
-        btnAppliquer.disabled = !hasSelection || base <= 0;
+        // Une remise sans base de calcul serait nulle, une remise au-delà du
+        // plafond serait refusée par le serveur : on bloque l'envoi des deux.
+        btnAppliquer.disabled = !hasSelection || base <= 0 || depassePlafond;
     }
 
     // Écouter les changements sur les checkboxes
@@ -459,6 +515,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     trancheCheckboxes.forEach(cb => cb.addEventListener('change', updatePreview));
     baseRadios.forEach(radio => radio.addEventListener('change', updatePreview));
+    if (caseDeduire) {
+        caseDeduire.addEventListener('change', updatePreview);
+    }
     if (selectPct) {
         selectPct.addEventListener('change', updatePreview);
     }
@@ -522,13 +581,22 @@ document.addEventListener('DOMContentLoaded', function() {
         const couvertureTotale = parseFloat(document.getElementById('montantFinal').textContent.replace(/[^\d]/g, ''));
         const motifLabel = selectMotif ? selectMotif.options[selectMotif.selectedIndex].text : '';
 
+        const deduireConfirm = !!(caseDeduire && caseDeduire.checked);
+        const montantRecuConfirm = parseFloat(
+            document.getElementById('montantRecuFinal').textContent.replace(/[^\d]/g, '')
+        );
+        const ligneRecu = deduireConfirm
+            ? `Montant du reçu ramené au net: ${montantRecuConfirm.toLocaleString('fr-FR')} GNF `
+              + `(au lieu de ${montantBrut.toLocaleString('fr-FR')} GNF)`
+            : `Montant encaissé (reçu, inchangé): ${montantBrut.toLocaleString('fr-FR')} GNF`;
+
         let message = (
             `Confirmer l'application des remises ?\n\n` +
             `Portée: ${libellePortee()}\n` +
             `Motif: ${motifLabel}\n` +
             `Base de calcul: ${base.toLocaleString('fr-FR')} GNF\n` +
             `Remise scolarité accordée: ${totalRemises.toLocaleString('fr-FR')} GNF\n` +
-            `Montant encaissé (reçu, inchangé): ${montantOriginal.toLocaleString('fr-FR')} GNF\n` +
+            `${ligneRecu}\n` +
             `Couverture totale sur l'échéancier: ${couvertureTotale.toLocaleString('fr-FR')} GNF`
         );
         // Alerte spécifique 100%

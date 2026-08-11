@@ -427,6 +427,15 @@ class PaiementRemise(SyncTrackedModel):
         max_length=30, choices=MOTIF_APPLICATION_CHOICES, blank=True, default='',
         verbose_name="Motif de la remise"
     )
+    deduite_du_paiement = models.BooleanField(
+        default=False,
+        verbose_name="Déduite du montant du reçu",
+        help_text=(
+            "Le montant du reçu a été ramené au net de cette remise. "
+            "Permet de reconstituer le montant brut lors d'une réédition "
+            "ou d'une annulation."
+        ),
+    )
 
     class Meta:
         verbose_name = "Remise appliquée"
