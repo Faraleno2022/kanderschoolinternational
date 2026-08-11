@@ -123,8 +123,12 @@ class ModificationPaiementForm(forms.ModelForm):
         widgets = {
             'type_paiement': forms.Select(attrs={'class': 'form-select'}),
             'mode_paiement': forms.Select(attrs={'class': 'form-select'}),
+            # En HTML, la base du pas est le `min` : avec min=1 et step=1000,
+            # le navigateur n'acceptait que 1, 1001, 2001… et refusait donc
+            # tout montant réel avant même l'envoi. Le montant est un entier
+            # de GNF (decimal_places=0), le pas est donc 1.
             'montant': forms.NumberInput(attrs={
-                'class': 'form-control', 'min': '1', 'step': '1000',
+                'class': 'form-control', 'min': '1', 'step': '1',
             }),
             'date_paiement': forms.DateInput(attrs={
                 'class': 'form-control', 'type': 'date',
