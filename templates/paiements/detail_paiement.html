@@ -320,6 +320,9 @@
                                     — Motif : {{ paiement_remise.get_motif_application_display }}
                                 {% endif %}
                             </small>
+                            {% if paiement_remise.deduite_du_paiement %}
+                            <small class="badge bg-info text-dark">Déduite du montant du reçu</small>
+                            {% endif %}
                         </span>
                         <span class="text-success text-nowrap">
                             -{{ paiement_remise.montant_remise|floatformat:0|intcomma }} GNF
