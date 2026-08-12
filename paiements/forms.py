@@ -43,11 +43,14 @@ class PaiementForm(forms.ModelForm):
             'mode_paiement': forms.Select(attrs={
                 'class': 'form-select'
             }),
+            # Pas de 1 : le montant est un entier de GNF (decimal_places=0).
+            # Un pas de 1000 faisait refuser par le navigateur tout montant
+            # non rond, comme 1 130 500.
             'montant': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Montant en GNF',
                 'min': '0',
-                'step': '1000'
+                'step': '1'
             }),
             'date_paiement': forms.DateInput(attrs={
                 'class': 'form-control',

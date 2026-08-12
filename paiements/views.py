@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta
 from io import BytesIO
 import os
 import logging
+import re
 import unicodedata
 import urllib.parse
 from openpyxl import Workbook
@@ -58,6 +59,102 @@ def _normalize_payment_type(value) -> str:
 def _is_reinscription_type(value) -> bool:
     normalized = _normalize_payment_type(value).replace('-', '').replace(' ', '')
     return 'reinscription' in normalized
+
+
+# Mots ordinaux acceptés en toutes lettres, une fois les accents retirés.
+_MOTS_TRANCHES = {
+    'premiere': 1, 'premier': 1,
+    'deuxieme': 2, 'seconde': 2, 'second': 2,
+    'troisieme': 3,
+}
+
+# Un libellé peut désigner la scolarité entière sans nommer les tranches.
+_MOTS_ANNUELS = ('annuel', 'annuelle', 'annee complete', 'totalite', 'integralite', 'complet')
+
+_MOTIFS_TRANCHES = (
+    r'tranche\s*n?\s*o?\s*([1-3])',          # « tranche 2 », « tranche n°2 »
+    r'([1-3])\s*(?:ere|er|eme|re|e)?\s*tranche',  # « 1ère tranche », « 2eme tranche »
+    r'\bt\s*([1-3])\b',                       # « T1 », « t 2 »
+)
+
+_LIBELLES_TRANCHES = {1: "1ère tranche", 2: "2ème tranche", 3: "3ème tranche"}
+
+
+def analyser_type_paiement(nom) -> dict:
+    """Décompose un libellé de type de paiement en postes de l'échéancier.
+
+    Un même poste s'écrit de vingt façons — « Tranche 1 », « 1ère tranche »,
+    « T1 » — et les libellés combinés (« Réinscription + Tranche 1 ») étaient
+    jusqu'ici reconnus par des chaînes de `elif` divergentes selon l'endroit
+    du code. Cette fonction est la seule autorité : elle renvoie les postes
+    couverts, à charge de l'appelant d'en tirer un montant.
+    """
+    compact = _normalize_payment_type(nom).replace('-', ' ').replace('+', ' + ')
+    # « n°2 » et « nº2 » s'écrivent avec un signe degré que la normalisation
+    # Unicode laisse intact : on le ramène à un simple « o ».
+    compact = compact.replace('°', 'o').replace('º', 'o')
+    compact = re.sub(r'\s+', ' ', compact)
+
+    tranches = set()
+    for motif in _MOTIFS_TRANCHES:
+        tranches.update(int(numero) for numero in re.findall(motif, compact))
+    if 'tranche' in compact:
+        for mot, numero in _MOTS_TRANCHES.items():
+            if mot in compact:
+                tranches.add(numero)
+
+    # « Annuel » couvre toute la scolarité, quelles que soient les tranches
+    # déjà nommées ; « scolarité » seule ne vaut que faute de mieux.
+    couvre_annee = any(mot in compact for mot in _MOTS_ANNUELS)
+    if couvre_annee or (not tranches and 'scolarite' in compact):
+        tranches = {1, 2, 3}
+
+    return {
+        'inscription': 'inscription' in compact,
+        'reinscription': _is_reinscription_type(nom),
+        'tranches': sorted(tranches),
+    }
+
+
+def montant_exact_pour_type(echeancier, type_nom) -> dict:
+    """Montant restant exact à payer pour ce type, poste par poste.
+
+    « Restant » et non « dû » : si la 1ère tranche est déjà à moitié réglée,
+    le montant exact pour « Réinscription + Tranche 1 » est ce qui manque,
+    pas le tarif plein.
+    """
+    postes = analyser_type_paiement(type_nom)
+
+    def _reste(du, paye):
+        return max(0, int(du or 0) - int(paye or 0))
+
+    lignes = []
+    if postes['inscription']:
+        lignes.append({
+            'poste': 'inscription',
+            'libelle': "Réinscription" if postes['reinscription'] else "Inscription",
+            'montant': _reste(
+                getattr(echeancier, 'frais_inscription_du', 0),
+                getattr(echeancier, 'frais_inscription_paye', 0),
+            ),
+        })
+    for numero in postes['tranches']:
+        lignes.append({
+            'poste': f'tranche_{numero}',
+            'libelle': _LIBELLES_TRANCHES[numero],
+            'montant': _reste(
+                getattr(echeancier, f'tranche_{numero}_due', 0),
+                getattr(echeancier, f'tranche_{numero}_payee', 0),
+            ),
+        })
+
+    return {
+        'total': sum(ligne['montant'] for ligne in lignes),
+        'lignes': lignes,
+        'postes': postes,
+        'description': ' + '.join(ligne['libelle'] for ligne in lignes),
+        'reconnu': bool(lignes),
+    }
 
 def ensure_echeancier_for_eleve(eleve: "Eleve", *, created_by=None, prefer_reinscription: bool = False) -> "EcheancierPaiement":
     """Crée (silencieusement) un `EcheancierPaiement` pour l'élève s'il n'existe pas.
@@ -254,42 +351,11 @@ def ajax_montant_suggere(request):
         rt2 = max(0, t2_due - t2_pay)
         rt3 = max(0, t3_due - t3_pay)
 
-        suggested = 0
-        description = ''
-        # Types combinés prioritairement
-        if ((('inscription' in type_nom) and ('annuel' in type_nom)) or ((('réinscription' in type_nom) or ('reinscription' in type_nom)) and ('annuel' in type_nom))):
-            suggested = rfi + rt1 + rt2 + rt3
-            description = "frais d'inscription/réinscription + Annuel (reste)"
-        elif ((('inscription' in type_nom) or ('réinscription' in type_nom) or ('reinscription' in type_nom)) and ('tranche 1 + tranche 2' in type_nom or 'tranche1 + tranche2' in type_nom)):
-            suggested = rfi + rt1 + rt2
-            description = "frais d'inscription/réinscription + Tranche 1 + Tranche 2 (reste)"
-        elif ((('inscription' in type_nom) or ('réinscription' in type_nom) or ('reinscription' in type_nom)) and ('tranche 1' in type_nom or '1ère tranche' in type_nom or '1ere tranche' in type_nom)):
-            suggested = rfi + rt1
-            description = "frais d'inscription/réinscription + Tranche 1 (reste)"
-        elif ('inscription' in type_nom) or ('réinscription' in type_nom) or ('reinscription' in type_nom):
-            suggested = rfi
-            description = "frais d'inscription/réinscription (reste)"
-        elif ('tranche 1 + tranche 2 + tranche 3' in type_nom or 'tranche1 + tranche2 + tranche3' in type_nom):
-            suggested = rt1 + rt2 + rt3
-            description = "Tranche 1 + Tranche 2 + Tranche 3 (reste)"
-        elif 'tranche 1 + tranche 2' in type_nom or 'tranche1 + tranche2' in type_nom:
-            suggested = rt1 + rt2
-            description = "Tranche 1 + Tranche 2 (reste)"
-        elif 'tranche 2 + tranche 3' in type_nom or 'tranche2 + tranche3' in type_nom:
-            suggested = rt2 + rt3
-            description = "Tranche 2 + Tranche 3 (reste)"
-        elif 'tranche 1' in type_nom or '1ère tranche' in type_nom or '1ere tranche' in type_nom:
-            suggested = rt1
-            description = "1ère tranche (reste)"
-        elif 'tranche 2' in type_nom or '2ème tranche' in type_nom or '2eme tranche' in type_nom:
-            suggested = rt2
-            description = "2ème tranche (reste)"
-        elif 'tranche 3' in type_nom or '3ème tranche' in type_nom or '3eme tranche' in type_nom:
-            suggested = rt3
-            description = "3ème tranche (reste)"
-        elif 'scolarité' in type_nom:
-            suggested = rt1 + rt2 + rt3
-            description = "Scolarité (reste)"
+        # Le moteur est la seule autorité : la même décomposition sert ici, à
+        # la validation de la saisie et à l'affichage du détail.
+        calcul = montant_exact_pour_type(ech, type_pmt.nom)
+        suggested = calcul['total']
+        description = f"{calcul['description']} (reste)" if calcul['reconnu'] else ''
 
         breakdown = {
             'fi_restant': rfi,
@@ -297,6 +363,9 @@ def ajax_montant_suggere(request):
             't2_restant': rt2,
             't3_restant': rt3,
             'description': description,
+            # Détail poste par poste, limité à ce que le type couvre vraiment.
+            'lignes': calcul['lignes'],
+            'reconnu': calcul['reconnu'],
         }
         return JsonResponse({'ok': True, 'suggested': int(suggested or 0), 'breakdown': breakdown})
     except Exception:
@@ -1659,45 +1728,13 @@ def ajouter_paiement(request, eleve_id:int=None):
             except Exception:
                 fi_due = fi_payee = t1_due = t1_payee = t2_due = t2_payee = t3_due = t3_payee = 0
 
-            # Validation du montant selon le type de paiement
+            # Validation du montant saisi contre le montant exact attendu.
+            # Le même moteur alimente la suggestion affichée à l'écran : ce
+            # que le formulaire propose est donc exactement ce qu'il valide.
             montant_saisi = int(paiement.montant or 0)
-            montant_attendu = 0
-            type_description = ""
-            
-            # IMPORTANT: évaluer d'abord les types combinés pour éviter que 'inscription' seul ne matche
-            if ('inscription' in type_nom and 'annuel' in type_nom):
-                # Frais d'inscription + Annuel (T1+T2+T3)
-                montant_attendu = fi_due + t1_due + t2_due + t3_due
-                type_description = "frais d'inscription + Annuel"
-            elif ('inscription' in type_nom and ('tranche 1 + tranche 2' in type_nom or 'tranche1 + tranche2' in type_nom)):
-                # Frais d'inscription + T1 + T2
-                montant_attendu = fi_due + t1_due + t2_due
-                type_description = "frais d'inscription + Tranche 1 + Tranche 2"
-            elif ('inscription' in type_nom and ('tranche 1' in type_nom or '1ère tranche' in type_nom or '1ere tranche' in type_nom)):
-                # Frais d'inscription + T1
-                montant_attendu = fi_due + t1_due
-                type_description = "frais d'inscription + Tranche 1"
-            elif 'inscription' in type_nom:
-                montant_attendu = fi_due
-                type_description = "frais d'inscription"
-            elif ('tranche 1 + tranche 2 + tranche 3' in type_nom or 'tranche1 + tranche2 + tranche3' in type_nom):
-                montant_attendu = t1_due + t2_due + t3_due
-                type_description = "Tranche 1 + Tranche 2 + Tranche 3"
-            elif 'tranche 1 + tranche 2' in type_nom or 'tranche1 + tranche2' in type_nom:
-                montant_attendu = t1_due + t2_due
-                type_description = "Tranche 1 + Tranche 2"
-            elif 'tranche 2 + tranche 3' in type_nom or 'tranche2 + tranche3' in type_nom:
-                montant_attendu = t2_due + t3_due
-                type_description = "Tranche 2 + Tranche 3"
-            elif 'tranche 1' in type_nom or '1ère tranche' in type_nom or '1ere tranche' in type_nom:
-                montant_attendu = t1_due
-                type_description = "1ère tranche"
-            elif 'tranche 2' in type_nom or '2ème tranche' in type_nom or '2eme tranche' in type_nom:
-                montant_attendu = t2_due
-                type_description = "2ème tranche"
-            elif 'tranche 3' in type_nom or '3ème tranche' in type_nom or '3eme tranche' in type_nom:
-                montant_attendu = t3_due
-                type_description = "3ème tranche"
+            calcul_attendu = montant_exact_pour_type(ech, type_nom)
+            montant_attendu = calcul_attendu['total']
+            type_description = calcul_attendu['description']
             
             # Vérifier si le montant correspond au type sélectionné
             if montant_attendu > 0 and montant_saisi != montant_attendu:
@@ -1714,7 +1751,7 @@ def ajouter_paiement(request, eleve_id:int=None):
                         from django.utils.safestring import mark_safe
                         message_html = mark_safe(
                             f'<span style="color: #dc3545; font-weight: bold; font-size: 1.1em;">'
-                            f'⚠️ ATTENTION: Le montant saisi ({montant_saisi:,} GNF) est inférieur au montant standard '
+                            f'⚠️ ATTENTION: Le montant saisi ({montant_saisi:,} GNF) est inférieur au reste à payer '
                             f'pour {type_description} ({montant_attendu:,} GNF).</span><br>'
                             f'<strong>S\'agit-il d\'un paiement partiel ?</strong> Si oui, confirmez ci-dessous.'
                         )
@@ -1756,7 +1793,7 @@ def ajouter_paiement(request, eleve_id:int=None):
                         message_html = mark_safe(
                             f'<span style="color: #f39c12; font-weight: bold; font-size: 1.1em;">'
                             f'⚠️ ATTENTION: Le montant saisi ({montant_saisi:,} GNF) est supérieur '
-                            f'au montant standard pour {type_description} '
+                            f'au reste à payer pour {type_description} '
                             f'({montant_attendu:,} GNF).</span><br>'
                             f'<strong>Répartition prévue :</strong> {detail_txt}<br>'
                             f'<strong>Confirmez-vous cette répartition ?</strong>'
