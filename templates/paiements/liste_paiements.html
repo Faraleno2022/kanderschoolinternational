@@ -39,6 +39,11 @@
                         <i class="fas fa-file-pdf me-2"></i>Tranches par classe (PDF)
                     </a>
                 </li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="exportTranchesParClasseExcel(); return false;">
+                        <i class="fas fa-file-excel me-2"></i>Tranches par classe (Excel)
+                    </a>
+                </li>
             </ul>
         </div>
 
@@ -345,10 +350,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Ouvre l'export PDF "Tranches par classe" en conservant les filtres de l'URL
-function exportTranchesParClassePdf() {
+// Construit l'export "Tranches par classe" en conservant les filtres courants.
+function exportTranchesParClasse(format) {
     const u = new URL(window.location.href);
-    const base = '{% url "paiements:export_tranches_par_classe_pdf" %}';
+    const base = format === 'excel'
+        ? '{% url "paiements:export_tranches_par_classe_excel" %}'
+        : '{% url "paiements:export_tranches_par_classe_pdf" %}';
     const out = new URL(base, window.location.origin);
     const annee = u.searchParams.get('annee_scolaire');
     const classe = u.searchParams.get('classe') || u.searchParams.get('classe_id'); // compat
@@ -359,6 +366,14 @@ function exportTranchesParClassePdf() {
     if (ecole) out.searchParams.set('ecole', ecole);
 
     window.open(out.toString(), '_blank');
+}
+
+function exportTranchesParClassePdf() {
+    exportTranchesParClasse('pdf');
+}
+
+function exportTranchesParClasseExcel() {
+    exportTranchesParClasse('excel');
 }
 
 // Export Excel de la liste courante (préserve le filtre q)
