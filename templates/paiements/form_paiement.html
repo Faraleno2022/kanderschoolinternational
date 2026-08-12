@@ -383,6 +383,8 @@
                                             <div><span class="text-muted">T2 restant:</span> <strong id="sbT2">0 GNF</strong></div>
                                             <div><span class="text-muted">T3 restant:</span> <strong id="sbT3">0 GNF</strong></div>
                                         </div>
+                                        <!-- Composition exacte du type choisi, calculée par le serveur -->
+                                        <div class="small mt-2" id="sbLignes" style="display:none;"></div>
                                         <div class="small text-muted mt-1">
                                             <i class="fas fa-info-circle me-1"></i>
                                             <span id="sbDesc">Suggestion calculée selon le type sélectionné.</span>
@@ -446,7 +448,7 @@
                     <div class="alert alert-danger mt-3" style="border: 2px solid #dc3545;">
                         <h6 style="color: #dc3545; font-weight: bold;"><i class="fas fa-exclamation-triangle me-2"></i>⚠️ CONFIRMATION REQUISE - PAIEMENT PARTIEL</h6>
                         <p class="mb-3" style="color: #721c24; font-weight: bold; font-size: 1.05em;">
-                            Le montant saisi (<span style="color: #dc3545;">{{ montant_saisi|floatformat:0 }} GNF</span>) est inférieur au montant standard 
+                            Le montant saisi (<span style="color: #dc3545;">{{ montant_saisi|floatformat:0 }} GNF</span>) est inférieur au reste à payer
                             pour {{ type_description }} (<span style="color: #dc3545;">{{ montant_attendu|floatformat:0 }} GNF</span>).
                         </p>
                         <div class="form-check p-3" style="background-color: #f8d7da; border-radius: 5px; border: 1px solid #dc3545;">
@@ -469,7 +471,7 @@
                     <div class="alert alert-warning mt-3" style="border: 2px solid #f39c12;">
                         <h6 style="color: #b8860b; font-weight: bold;"><i class="fas fa-exclamation-triangle me-2"></i>⚠️ CONFIRMATION REQUISE - MONTANT SUPÉRIEUR AU TYPE</h6>
                         <p class="mb-3" style="color: #856404; font-weight: bold; font-size: 1.05em;">
-                            Le montant saisi (<span style="color: #b8860b;">{{ montant_saisi|floatformat:0 }} GNF</span>) est supérieur au montant standard
+                            Le montant saisi (<span style="color: #b8860b;">{{ montant_saisi|floatformat:0 }} GNF</span>) est supérieur au reste à payer
                             pour {{ type_description }} (<span style="color: #b8860b;">{{ montant_attendu|floatformat:0 }} GNF</span>).
                         </p>
                         <div class="p-3 mb-3" style="background-color: #fff3cd; border-radius: 5px; border: 1px solid #f39c12;">
@@ -897,6 +899,90 @@ document.addEventListener('DOMContentLoaded', function() {
         return false;
     }
 
+    // Le serveur décompose le libellé du type et renvoie le reste exact,
+    // poste par poste. C'est la même fonction qui valide ensuite la saisie :
+    // ce qui est proposé ici est donc exactement ce qui sera accepté.
+    let suggestionEnCours = null;
+    async function rafraichirSuggestionServeur() {
+        try {
+            const csrfInput = document.querySelector('#paiementForm input[name="csrfmiddlewaretoken"]');
+            const eleveField = document.getElementById('id_eleve');
+            const typeSelectEl = document.getElementById('id_type_paiement');
+            const eleveId = eleveField && eleveField.value ? eleveField.value : null;
+            const typeId = typeSelectEl && typeSelectEl.value ? typeSelectEl.value : null;
+            if (!eleveId || !typeId) { return; }
+
+            // Une seule requête en vol : les changements rapides de type ne
+            // doivent pas faire gagner une réponse périmée.
+            const jeton = Symbol('suggestion');
+            suggestionEnCours = jeton;
+            const resp = await fetch(ajaxMontantSuggereUrl, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': csrfInput ? csrfInput.value : ''
+                },
+                body: new URLSearchParams({ eleve_id: eleveId, type_id: typeId }).toString()
+            });
+            const data = await resp.json();
+            if (suggestionEnCours !== jeton || !data || !data.ok) { return; }
+
+            const exact = Number(data.suggested || 0);
+            const bd = data.breakdown || {};
+            const fmt = (v) => Number(v || 0).toLocaleString('fr-FR') + ' GNF';
+
+            if (exact > 0 && montantInput) {
+                montantInput.value = exact;
+                const txt = fmt(exact);
+                const montantDisplayEl = document.getElementById('montantDisplay');
+                const stickyMontant = document.getElementById('stickyMontant');
+                if (montantDisplayEl) montantDisplayEl.textContent = txt;
+                if (stickyMontant) stickyMontant.textContent = txt;
+                if (badge && badgeValue) {
+                    badgeValue.textContent = Number(exact).toLocaleString('fr-FR');
+                    badge.style.display = 'inline-flex';
+                }
+                if (typeof updateFinalAmount === 'function') updateFinalAmount();
+            }
+
+            const sb = document.getElementById('suggestionBreakdown');
+            if (sb) {
+                const set = (id, valeur) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = fmt(valeur);
+                };
+                set('sbFi', bd.fi_restant);
+                set('sbT1', bd.t1_restant);
+                set('sbT2', bd.t2_restant);
+                set('sbT3', bd.t3_restant);
+                const sbDesc = document.getElementById('sbDesc');
+                if (sbDesc) {
+                    sbDesc.textContent = bd.reconnu
+                        ? (bd.description || '')
+                        : "Type non reconnu : le montant proposé couvre tout le reste dû.";
+                }
+                const sbLignes = document.getElementById('sbLignes');
+                if (sbLignes) {
+                    const lignes = Array.isArray(bd.lignes) ? bd.lignes : [];
+                    if (lignes.length) {
+                        sbLignes.innerHTML = lignes
+                            .map(l => `<span class="badge bg-light text-dark border me-1">${l.libelle} : ${fmt(l.montant)}</span>`)
+                            .join('')
+                            + `<span class="ms-1">= <strong>${fmt(exact)}</strong></span>`;
+                        sbLignes.style.display = '';
+                    } else {
+                        sbLignes.style.display = 'none';
+                    }
+                }
+                sb.style.display = '';
+            }
+        } catch (e) {
+            // Hors ligne ou erreur serveur : l'estimation locale reste affichée.
+            console.warn('rafraichirSuggestionServeur a échoué', e);
+        }
+    }
+
     function updateMontantSuggestion() {
         console.log('updateMontantSuggestion called');
         if (!typeSelect || !montantInput) {
@@ -940,40 +1026,40 @@ document.addEventListener('DOMContentLoaded', function() {
 
         console.log('Selected type text:', selectedText);
 
+        // Estimation locale, volontairement additive : chaque poste nommé par
+        // le libellé ajoute son reste. L'ancienne cascade de « else if »
+        // s'arrêtait au premier poste reconnu et sous-estimait tous les types
+        // combinés — « Tranche 1 + Tranche 2 » ne proposait que la T1.
+        // Le serveur (ajax_montant_suggere) reste l'autorité et corrige cette
+        // estimation dès qu'il répond ; voir rafraichirSuggestionServeur().
         var amount = 0;
 
         const hasIns = selectedText.includes('inscription') || selectedText.includes('insc');
-        const hasAnn = selectedText.includes('annuel') || selectedText.includes('annuelle');
-        var nearTranche = function(n) { 
-            return new RegExp('(tranche\\\\D{0,8}' + n + '|' + n + '\\\\D{0,8}tranche)').test(selectedText);
+        const hasAnn = /annuel|annuelle|totalite|integralite|complet/.test(selectedText);
+        var nearTranche = function(n) {
+            return new RegExp('(tranche\\D{0,8}' + n + '|' + n + '\\D{0,8}tranche)').test(selectedText);
         };
-        const hasT1 = /tranche\s*1|1ere|1er|premiere|\bt1\b/.test(selectedText) || nearTranche(1);
-        const hasT2 = /tranche\s*2|2eme|deuxieme|\bt2\b/.test(selectedText) || nearTranche(2);
-        const hasT3 = /tranche\s*3|3eme|troisieme|\bt3\b/.test(selectedText) || nearTranche(3);
+        const hasT1 = /tranche\s*1|1ere|1er|premiere|\bt\s*1\b/.test(selectedText) || nearTranche(1);
+        const hasT2 = /tranche\s*2|2eme|deuxieme|seconde|\bt\s*2\b/.test(selectedText) || nearTranche(2);
+        const hasT3 = /tranche\s*3|3eme|troisieme|\bt\s*3\b/.test(selectedText) || nearTranche(3);
 
         console.log('Type detection - Ins:', hasIns, 'Ann:', hasAnn, 'T1:', hasT1, 'T2:', hasT2, 'T3:', hasT3);
 
-        if (hasIns && hasT1 && hasT2) {
-            amount = remIns + rem1 + rem2;
-        } else if (hasIns && hasT1) {
-            amount = remIns + rem1;
-        } else if (hasIns && hasAnn) {
-            amount = reste;
-        } else if (hasAnn) {
-            amount = reste;
-        } else if (hasT1) {
-            amount = rem1;
-        } else if (hasT2) {
-            amount = rem2;
-        } else if (hasT3) {
-            amount = rem3;
-        } else if (hasIns) {
-            amount = remIns;
+        if (hasIns) { amount += remIns; }
+        if (hasAnn) {
+            amount += rem1 + rem2 + rem3;
         } else {
+            if (hasT1) { amount += rem1; }
+            if (hasT2) { amount += rem2; }
+            if (hasT3) { amount += rem3; }
+        }
+        // Libellé non reconnu : à défaut, tout ce qui reste dû.
+        if (!hasIns && !hasAnn && !hasT1 && !hasT2 && !hasT3) {
             amount = reste;
         }
 
         console.log('Calculated amount:', amount);
+        rafraichirSuggestionServeur();
 
         // Toujours renseigner le champ
         var suggested = Math.floor(amount);
@@ -1071,65 +1157,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     await ensureEcheancierLoaded();
                 }
                 updateMontantSuggestion();
-                // Fallback: si toujours vide, appeler le serveur pour une suggestion exacte
-                setTimeout(async () => {
+                // Le repli serveur est désormais celui de updateMontantSuggestion :
+                // une seule implémentation, celle qui fait autorité.
+                setTimeout(() => {
                     if (montantInput && !montantInput.value) {
-                        console.log('Fallback to server ajax_montant_suggere');
-                        try {
-                            const csrfInput = document.querySelector('#paiementForm input[name="csrfmiddlewaretoken"]');
-                            const eleveHidden = document.getElementById('id_eleve');
-                            const typeSelectEl = document.getElementById('id_type_paiement');
-                            const eleveId = eleveHidden && eleveHidden.value ? eleveHidden.value : null;
-                            const typeId = typeSelectEl && typeSelectEl.value ? typeSelectEl.value : null;
-                            if (!eleveId || !typeId) return;
-                            const resp = await fetch('{% url "paiements:ajax_montant_suggere" %}', {
-                                method: 'POST',
-                                headers: {
-                                    'X-Requested-With': 'XMLHttpRequest',
-                                    'Content-Type': 'application/x-www-form-urlencoded',
-                                    'X-CSRFToken': csrfInput ? csrfInput.value : ''
-                                },
-                                body: new URLSearchParams({ eleve_id: eleveId, type_id: typeId }).toString()
-                            });
-                            const data = await resp.json();
-                            if (data && data.ok) {
-                                const suggested = Number(data.suggested || 0);
-                                if (suggested > 0) {
-                                    montantInput.value = suggested;
-                                    const txt = suggested.toLocaleString('fr-FR') + ' GNF';
-                                    if (montantDisplay) montantDisplay.textContent = txt;
-                                    const stickyMontant = document.getElementById('stickyMontant');
-                                    if (stickyMontant) stickyMontant.textContent = txt;
-                                    const finalDisp = document.getElementById('finalAmountDisplay');
-                                    const stickyFinal = document.getElementById('stickyFinal');
-                                    if (finalDisp) finalDisp.textContent = txt;
-                                    if (stickyFinal) stickyFinal.textContent = txt;
-                                    if (badge && badgeValue) {
-                                        badge.style.display = 'inline-flex';
-                                        badgeValue.textContent = Number(suggested).toLocaleString('fr-FR');
-                                    }
-                                    // Mettre à jour le breakdown si disponible
-                                    const bd = data.breakdown || {};
-                                    const sb = document.getElementById('suggestionBreakdown');
-                                    const fmt = (v) => { try { return Number(v||0).toLocaleString('fr-FR') + ' GNF'; } catch(_) { return String(v||0) + ' GNF'; } };
-                                    if (sb) {
-                                        const sbFi = document.getElementById('sbFi');
-                                        const sbT1 = document.getElementById('sbT1');
-                                        const sbT2 = document.getElementById('sbT2');
-                                        const sbT3 = document.getElementById('sbT3');
-                                        const sbDesc = document.getElementById('sbDesc');
-                                        if (sbFi) sbFi.textContent = fmt(bd.fi_restant);
-                                        if (sbT1) sbT1.textContent = fmt(bd.t1_restant);
-                                        if (sbT2) sbT2.textContent = fmt(bd.t2_restant);
-                                        if (sbT3) sbT3.textContent = fmt(bd.t3_restant);
-                                        if (sbDesc) sbDesc.textContent = bd.description || '';
-                                        sb.style.display = '';
-                                    }
-                                }
-                            }
-                        } catch(e) {
-                            console.warn('ajax_montant_suggere fallback failed', e);
-                        }
+                        rafraichirSuggestionServeur();
                     }
                 }, 400);
             }
