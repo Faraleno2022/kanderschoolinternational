@@ -1392,12 +1392,26 @@ def liste_paiements(request):
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(page)
 
+    classes_rapport = filter_by_user_school(
+        Classe.objects.select_related('ecole').order_by(
+            'ecole__nom', 'annee_scolaire', 'nom'
+        ),
+        request.user,
+        'ecole',
+    )
+    if annee_active:
+        classes_rapport = classes_rapport.filter(annee_scolaire=annee_active)
+
     context = {
         'titre_page': titre_page,
         'q': q,
         'statut': statut,
         'annee_filtre': annee_filtre or (annee_active or ''),
         'annee_active': annee_active or '',
+        'classes_rapport': classes_rapport,
+        'can_view_reports': has_permission(
+            request.user, 'peut_consulter_rapports'
+        ),
         'paiements': page_obj.object_list,
         'page_obj': page_obj,
         # Totaux pour l'UI (utilisés par _paiements_resultats.html)

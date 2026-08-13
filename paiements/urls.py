@@ -9,6 +9,12 @@ from .views_rapport_comptable import (
     export_rapport_comptable_pdf,
     export_rapport_comptable_excel,
 )
+from .rapports_professionnels import (
+    export_comptabilite_excel,
+    export_comptabilite_pdf,
+    export_recouvrement_excel,
+    export_recouvrement_pdf,
+)
 
 app_name = 'paiements'
 
@@ -43,6 +49,10 @@ urlpatterns = [
     path('export/tranches-par-classe/excel/', export_tranches_par_classe_excel, name='export_tranches_par_classe_excel'),
     path('export/liste/excel/', views.export_liste_paiements_excel, name='export_liste_paiements_excel'),
     path('export/recap-par-classe/excel/', views.export_recap_par_classe_excel, name='export_recap_par_classe_excel'),
+    path('export/comptabilite/pdf/', export_comptabilite_pdf, name='export_comptabilite_pdf'),
+    path('export/comptabilite/excel/', export_comptabilite_excel, name='export_comptabilite_excel'),
+    path('export/recouvrement/pdf/', export_recouvrement_pdf, name='export_recouvrement_pdf'),
+    path('export/recouvrement/excel/', export_recouvrement_excel, name='export_recouvrement_excel'),
     # Export par période (Excel)
     path('export/periode/excel/', views.export_paiements_periode_excel, name='export_paiements_periode_excel'),
     path('rapport/remises/', views.rapport_remises, name='rapport_remises'),
@@ -97,4 +107,3 @@ urlpatterns = [
     path('recu-public/<int:paiement_id>/', recu_public_pdf, name='recu_public_pdf'),
     path('note-rappel-public/<int:eleve_id>/', note_rappel_public_pdf, name='note_rappel_public_pdf'),
 ]
-
