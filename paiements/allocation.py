@@ -217,3 +217,69 @@ def allocate_discounts(echeancier, discounts, balances=None):
             amount -= take
 
     return allocation, current_balances
+
+
+def allocate_cash_and_discounts(echeancier, cash_amount, discounts):
+    """Ventile une couverture en respectant d'abord la portée des remises.
+
+    Une remise déduite du reçu doit réduire la tranche choisie avant que le
+    paiement net ne soit distribué sur les autres postes. Si l'encaissement
+    était ventilé en premier, une remise T1 pouvait être ignorée lorsque le
+    paiement avait déjà rempli T1, laissant à tort un solde sur T3.
+
+    Les montants enregistrés et effectivement imputés sont retournés
+    séparément afin que les rapports signalent toute remise incohérente au
+    lieu de la masquer.
+    """
+    discounts = list(discounts or ())
+    full_balances = {
+        key: max(Decimal('0'), _decimal(getattr(echeancier, due_field, 0)))
+        for key, due_field, _paid_field in ALLOCATION_COMPONENTS
+    }
+    discount_allocation, _balances_after_discount = allocate_discounts(
+        echeancier,
+        discounts,
+        balances=full_balances,
+    )
+    cash_allocation, covered_by_component, cash_unapplied = (
+        allocate_amount_sequentially(
+            echeancier,
+            cash_amount,
+            initial_paid=discount_allocation,
+        )
+    )
+    balances = {
+        key: max(
+            Decimal('0'),
+            _decimal(getattr(echeancier, due_field, 0))
+            - covered_by_component[key],
+        )
+        for key, due_field, _paid_field in ALLOCATION_COMPONENTS
+    }
+    discount_recorded = sum(
+        (
+            max(
+                Decimal('0'),
+                _decimal(getattr(discount, 'montant_remise', 0)),
+            )
+            for discount in discounts
+        ),
+        Decimal('0'),
+    )
+    discount_applied = sum(discount_allocation.values(), Decimal('0'))
+
+    return {
+        'cash_allocation': cash_allocation,
+        'cash_applied': sum(cash_allocation.values(), Decimal('0')),
+        'cash_unapplied': cash_unapplied,
+        'discount_allocation': discount_allocation,
+        'discount_recorded': discount_recorded,
+        'discount_applied': discount_applied,
+        'discount_unapplied': max(
+            Decimal('0'), discount_recorded - discount_applied,
+        ),
+        'covered_by_component': covered_by_component,
+        'balances': balances,
+        'total_coverage': sum(covered_by_component.values(), Decimal('0')),
+        'balance': sum(balances.values(), Decimal('0')),
+    }

@@ -241,6 +241,45 @@ class ProfessionalReportsTests(TestCase):
         self.assertEqual(data['priority_rows'][0]['reminder_count'], 1)
         self.assertEqual(data['reminder_by_channel']['WhatsApp']['sent'], 1)
 
+    def test_remise_ciblee_solde_eleve_et_est_precisee_dans_les_exports(self):
+        ligne_remise = PaiementRemise.objects.get(paiement=self.valid_partial)
+        ligne_remise.portee_tranches = '1'
+        ligne_remise.save(update_fields=['portee_tranches'])
+        self._payment(
+            self.students[0], 'RAP-REC-006', '230000', 'VALIDE',
+            date(2026, 1, 25),
+        )
+
+        data = collect_recovery_data(self._request())
+        eleve = next(
+            item for item in data['student_rows']
+            if item['matricule'] == 'RAP-001'
+        )
+        self.assertEqual(eleve['cash'], Decimal('310000'))
+        self.assertEqual(eleve['discount'], Decimal('10000'))
+        self.assertEqual(eleve['coverage'], Decimal('320000'))
+        self.assertEqual(eleve['balance'], Decimal('0'))
+        self.assertEqual(eleve['status'], 'Soldé avec remise')
+        self.assertAlmostEqual(float(eleve['discount_rate']), 10 / 3, places=2)
+        self.assertIn("L'élève est soldé grâce au paiement et à la remise", eleve['settlement_note'])
+
+        params = {'classe_id': self.classe.pk, 'au': self.cutoff.isoformat()}
+        excel_response = self.client.get(
+            reverse('paiements:export_recouvrement_excel'), params,
+        )
+        workbook = load_workbook(BytesIO(excel_response.content), data_only=True)
+        sheet = workbook['Portefeuille élèves']
+        row = next(
+            values for values in sheet.iter_rows(min_row=6, values_only=True)
+            if values[0] == 'RAP-001'
+        )
+        self.assertEqual(row[7], 10000)
+        self.assertAlmostEqual(row[8], 1 / 30)
+        self.assertEqual(row[9], 320000)
+        self.assertEqual(row[10], 0)
+        self.assertEqual(row[13], 'Soldé avec remise')
+        self.assertIn('Remise appliquée', row[14])
+
     def test_exports_pdf_et_excel_sont_disponibles(self):
         params = {'classe_id': self.classe.pk, 'au': self.cutoff.isoformat()}
         for route in ('export_comptabilite_pdf', 'export_recouvrement_pdf'):

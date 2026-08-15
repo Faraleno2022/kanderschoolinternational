@@ -10,7 +10,8 @@ from openpyxl import load_workbook
 
 from eleves.models import Classe, Ecole, Eleve, GrilleTarifaire
 from paiements.models import (
-    EcheancierPaiement, ModePaiement, Paiement, TypePaiement,
+    EcheancierPaiement, ModePaiement, Paiement, PaiementRemise,
+    RemiseReduction, TypePaiement,
 )
 
 from .support import TEST_MIDDLEWARE
@@ -102,7 +103,8 @@ class TranchesParClasseExportsTests(TestCase):
             [
                 'Élève', 'Inscription payée', 'Réinscription payée',
                 'Tranche 1 payée', 'Tranche 2 payée', 'Tranche 3 payée',
-                'Total dû', 'Total payé', 'Reste',
+                'Total dû', 'Total encaissé', 'Remise', 'Remise (%)',
+                'Couverture', 'Reste', 'Situation', 'Précision remise',
             ],
         )
         lignes = list(sheet.iter_rows(min_row=3, values_only=True))
@@ -135,7 +137,9 @@ class TranchesParClasseExportsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.content.startswith(b'%PDF'))
         self.assertTrue(tables)
-        self.assertEqual(tables[0][0][2], 'Réinscription payée')
+        self.assertEqual(
+            tables[0][0][2].getPlainText(), 'Réinscription payée',
+        )
         # La réinscription n'est jamais recopiée dans la colonne inscription.
         ligne_reinscription = next(
             row for row in tables[0][1:]
@@ -143,3 +147,53 @@ class TranchesParClasseExportsTests(TestCase):
         )
         self.assertEqual(ligne_reinscription[1], '0')
         self.assertEqual(ligne_reinscription[2], '20 000')
+
+    def test_remise_solde_eleve_et_apparait_dans_pdf_et_excel(self):
+        eleve = self.classe.eleves.get(matricule='EXP-REI')
+        echeancier = eleve.echeancier
+        echeancier.tranche_1_payee = Decimal('100000')
+        echeancier.tranche_2_payee = Decimal('110000')
+        echeancier.save(update_fields=['tranche_1_payee', 'tranche_2_payee'])
+
+        paiement = Paiement.objects.create(
+            eleve=eleve, type_paiement=self.type_reinscription,
+            mode_paiement=self.mode, montant=Decimal('150000'),
+            date_paiement=date(2026, 2, 10), statut='VALIDE',
+        )
+        remise = RemiseReduction.objects.create(
+            nom='Remise T3 export', type_remise='MONTANT_FIXE',
+            valeur=Decimal('120000'), motif='SOCIALE',
+            date_debut=date(2025, 9, 1), date_fin=date(2026, 8, 31),
+        )
+        PaiementRemise.objects.create(
+            paiement=paiement, remise=remise,
+            montant_remise=Decimal('120000'), portee_tranches='3',
+            deduite_du_paiement=True,
+        )
+
+        excel_response = self.client.get(
+            reverse('paiements:export_tranches_par_classe_excel'),
+            self._params(),
+        )
+        workbook = load_workbook(BytesIO(excel_response.content), data_only=True)
+        sheet = workbook[self.classe.nom]
+        ligne = next(
+            row for row in sheet.iter_rows(min_row=3, values_only=True)
+            if row[0] and 'EXP-REI' in row[0]
+        )
+        self.assertEqual(ligne[7], 230000)
+        self.assertEqual(ligne[8], 120000)
+        self.assertAlmostEqual(ligne[9], 120000 / 330000)
+        self.assertEqual(ligne[10], 350000)
+        self.assertEqual(ligne[11], 0)
+        self.assertEqual(ligne[12], 'Soldé avec remise')
+        self.assertIn('Élève soldé', ligne[13])
+
+        pdf_response = self.client.get(
+            reverse('paiements:export_tranches_par_classe_pdf'),
+            self._params(),
+        )
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
+        self.assertTrue(pdf_response.content.startswith(b'%PDF'))
+        self.assertGreater(len(pdf_response.content), 1000)

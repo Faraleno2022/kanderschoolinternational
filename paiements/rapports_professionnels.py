@@ -22,7 +22,7 @@ from utilisateurs.utils import filter_by_user_school, user_school
 from .allocation import (
     ALLOCATION_COMPONENTS,
     allocate_amount_sequentially,
-    allocate_discounts,
+    allocate_cash_and_discounts,
     registration_kind_for_type,
 )
 from .models import EcheancierPaiement, Paiement, PaiementRemise, Relance
@@ -61,6 +61,17 @@ def _display_user(user):
         if len(words) == 2 and words[0].casefold() == words[1].casefold():
             full_name = words[0]
     return full_name or getattr(user, 'username', '') or 'Système'
+
+
+def _display_phone(value):
+    """Formate les numéros guinéens sans laisser Excel les convertir en nombre."""
+    raw = str(value or '').strip()
+    compact = re.sub(r'[\s.-]+', '', raw)
+    if compact.startswith('+224') and compact[4:].isdigit():
+        local = compact[4:]
+        groups = [local[index:index + 3] for index in range(0, len(local), 3)]
+        return '+224 ' + ' '.join(groups)
+    return raw or '-'
 
 
 def _make_report_reference(prefix, generated_at):
@@ -457,7 +468,8 @@ def collect_recovery_data(request):
         period_relances = [item for item in period_relances if item.date_creation.date() <= data['end']]
 
     class_summary = defaultdict(lambda: {
-        'students': 0, 'due': ZERO, 'cash': ZERO, 'discount': ZERO,
+        'students': 0, 'due': ZERO, 'tuition_due': ZERO,
+        'cash': ZERO, 'discount': ZERO, 'discount_applied': ZERO,
         'balance': ZERO, 'overdue': ZERO, 'upcoming': ZERO, 'reminders': 0,
     })
     aging = {
@@ -469,7 +481,10 @@ def collect_recovery_data(request):
     priority_rows = []
     student_rows = []
     settled_count = partial_count = unpaid_count = overdue_count = 0
-    total_due = total_cash = total_discount = total_balance = total_overdue = total_upcoming = ZERO
+    settled_with_discount_count = 0
+    total_due = total_tuition_due = total_cash = total_discount = ZERO
+    total_discount_applied = total_discount_unapplied = ZERO
+    total_balance = total_overdue = total_upcoming = ZERO
 
     for schedule in schedules:
         discounts = discounts_by_schedule[schedule.eleve_id]
@@ -480,28 +495,25 @@ def collect_recovery_data(request):
             if data['cutoff'] >= timezone.localdate()
             else payment_cash
         )
-        _cash_allocation, cash_paid, _unallocated = allocate_amount_sequentially(
-            schedule,
-            cash_source,
-            initial_paid={
-                key: ZERO for key, _due_field, _paid_field in ALLOCATION_COMPONENTS
-            },
+        coverage = allocate_cash_and_discounts(
+            schedule, cash_source, discounts,
         )
-        balances_after_cash = {
-            key: max(
-                ZERO,
-                Decimal(str(getattr(schedule, due_field, 0) or 0))
-                - cash_paid[key],
-            )
-            for key, due_field, _paid_field in ALLOCATION_COMPONENTS
-        }
-        discount_allocation, net_balances = allocate_discounts(
-            schedule, discounts, balances=balances_after_cash,
-        )
-        discount_total = sum(discount_allocation.values(), ZERO)
+        net_balances = coverage['balances']
+        discount_total = coverage['discount_recorded']
+        discount_applied = coverage['discount_applied']
+        discount_unapplied = coverage['discount_unapplied']
         due = schedule.total_du or ZERO
-        cash = sum(cash_paid.values(), ZERO)
-        balance = sum(net_balances.values(), ZERO)
+        tuition_due = sum((
+            Decimal(str(schedule.tranche_1_due or 0)),
+            Decimal(str(schedule.tranche_2_due or 0)),
+            Decimal(str(schedule.tranche_3_due or 0)),
+        ), ZERO)
+        cash = coverage['cash_applied']
+        balance = coverage['balance']
+        discount_rate = (
+            discount_total / tuition_due * Decimal('100')
+            if tuition_due else ZERO
+        )
         overdue = upcoming = ZERO
         oldest_overdue = None
         for index, (_label, _due_field, _paid_field, date_field) in enumerate(_schedule_components(schedule)):
@@ -534,28 +546,53 @@ def collect_recovery_data(request):
         summary = class_summary[class_name]
         summary['students'] += 1
         summary['due'] += due
+        summary['tuition_due'] += tuition_due
         summary['cash'] += cash
         summary['discount'] += discount_total
+        summary['discount_applied'] += discount_applied
         summary['balance'] += balance
         summary['overdue'] += overdue
         summary['upcoming'] += upcoming
         summary['reminders'] += len(reminders)
 
         total_due += due
+        total_tuition_due += tuition_due
         total_cash += cash
         total_discount += discount_total
+        total_discount_applied += discount_applied
+        total_discount_unapplied += discount_unapplied
         total_balance += balance
         total_overdue += overdue
         total_upcoming += upcoming
         if balance <= 0:
             settled_count += 1
-            recovery_status = 'Soldé'
-        elif cash + discount_total > 0:
+            if discount_total > 0:
+                settled_with_discount_count += 1
+                recovery_status = 'Soldé avec remise'
+            else:
+                recovery_status = 'Soldé'
+        elif cash + discount_applied > 0:
             partial_count += 1
             recovery_status = 'En retard' if overdue > 0 else 'Paiement partiel'
         else:
             unpaid_count += 1
             recovery_status = 'En retard' if overdue > 0 else 'À payer'
+
+        if discount_total > 0:
+            settlement_note = (
+                f"Remise appliquée : {_money(discount_total)} GNF "
+                f"({discount_rate:.1f} % de la scolarité)."
+            )
+            if balance <= 0:
+                settlement_note += " L'élève est soldé grâce au paiement et à la remise."
+            else:
+                settlement_note += f" Solde restant : {_money(balance)} GNF."
+            if discount_unapplied > 0:
+                settlement_note += (
+                    f" {_money(discount_unapplied)} GNF non imputés sont à contrôler."
+                )
+        else:
+            settlement_note = '-'
 
         responsible = schedule.eleve.responsable_principal
         student_rows.append({
@@ -563,14 +600,21 @@ def collect_recovery_data(request):
             'student': schedule.eleve.nom_complet,
             'class': class_name,
             'responsible': responsible.nom_complet if responsible else '-',
-            'phone': responsible.telephone if responsible else '-',
+            'phone': _display_phone(responsible.telephone) if responsible else '-',
             'due': due,
+            'tuition_due': tuition_due,
             'cash': cash,
             'discount': discount_total,
+            'discount_applied': discount_applied,
+            'discount_unapplied': discount_unapplied,
+            'discount_rate': discount_rate,
+            'discount_rate_fraction': discount_rate / Decimal('100'),
+            'coverage': cash + discount_applied,
             'balance': balance,
             'overdue': overdue,
             'upcoming': upcoming,
             'status': recovery_status,
+            'settlement_note': settlement_note,
             'reminder_count': len(reminders),
             'last_reminder': latest.date_creation if latest else None,
             'last_status': latest.get_statut_display() if latest else 'Jamais relancé',
@@ -584,9 +628,12 @@ def collect_recovery_data(request):
                 'student': schedule.eleve.nom_complet,
                 'class': class_name,
                 'responsible': responsible.nom_complet if responsible else '-',
-                'phone': responsible.telephone if responsible else '-',
+                'phone': _display_phone(responsible.telephone) if responsible else '-',
                 'due': due,
-                'coverage': cash + discount_total,
+                'cash': cash,
+                'discount': discount_total,
+                'discount_rate': discount_rate,
+                'coverage': cash + discount_applied,
                 'balance': balance,
                 'overdue': overdue,
                 'days': days,
@@ -613,7 +660,12 @@ def collect_recovery_data(request):
     ]
     period_cash = sum((item.montant or ZERO) for item in validated_period)
     recovery_rate = (
-        (total_cash + total_discount) / total_due * Decimal('100') if total_due else ZERO
+        (total_cash + total_discount_applied) / total_due * Decimal('100')
+        if total_due else ZERO
+    )
+    discount_rate = (
+        total_discount / total_tuition_due * Decimal('100')
+        if total_tuition_due else ZERO
     )
     data.update({
         'period_label': _period_label(data),
@@ -625,14 +677,19 @@ def collect_recovery_data(request):
         'priority_rows': priority_rows,
         'student_rows': student_rows,
         'total_due': total_due,
+        'total_tuition_due': total_tuition_due,
         'total_cash': total_cash,
         'total_discount': total_discount,
-        'total_coverage': total_cash + total_discount,
+        'total_discount_applied': total_discount_applied,
+        'total_discount_unapplied': total_discount_unapplied,
+        'discount_rate': discount_rate,
+        'total_coverage': total_cash + total_discount_applied,
         'total_balance': total_balance,
         'total_overdue': total_overdue,
         'total_upcoming': total_upcoming,
         'recovery_rate': recovery_rate,
         'settled_count': settled_count,
+        'settled_with_discount_count': settled_with_discount_count,
         'partial_count': partial_count,
         'unpaid_count': unpaid_count,
         'overdue_count': overdue_count,
@@ -1011,7 +1068,11 @@ def build_recovery_pdf(data):
         ))
     elements.append(kpis([
         ('Créances totales', f"{_money(data['total_due'])} GNF", BLUE),
-        ('Couverture', f"{_money(data['total_coverage'])} GNF", GREEN),
+        (
+            'Remises appliquées',
+            f"{_money(data['total_discount'])} GNF ({data['discount_rate']:.1f} %)",
+            ORANGE,
+        ),
         ('Solde à recouvrer', f"{_money(data['total_balance'])} GNF", ORANGE),
         ('Retard exigible', f"{_money(data['total_overdue'])} GNF", RED),
         ('Taux de recouvrement', f"{data['recovery_rate']:.1f} %", GREEN),
@@ -1023,9 +1084,15 @@ def build_recovery_pdf(data):
         ['Indicateur', 'Élèves', 'Montant (GNF)', 'Observation'],
         ['Créances brutes', data['schedule_count'], _money(data['total_due']), 'Échéanciers actifs suivis'],
         ['Encaissements cumulés', '-', _money(data['total_cash']), 'Paiements affectés'],
-        ['Remises imputées', '-', _money(data['total_discount']), 'Réductions validées'],
+        [
+            'Remises appliquées', '-', _money(data['total_discount']),
+            f"{data['discount_rate']:.1f} % de la scolarité hors admission",
+        ],
         ['Solde à recouvrer', data['schedule_count'] - data['settled_count'], _money(data['total_balance']), 'Après paiements et remises'],
-        ['Élèves soldés', data['settled_count'], '-', 'Aucun solde restant'],
+        [
+            'Élèves soldés', data['settled_count'], '-',
+            f"Dont {data['settled_with_discount_count']} soldé(s) avec remise",
+        ],
         ['Paiement partiel', data['partial_count'], '-', 'Couverture incomplète'],
         ['Sans paiement', data['unpaid_count'], '-', 'Aucune couverture enregistrée'],
         ['En retard', data['overdue_count'], _money(data['total_overdue']), f"À la date du {data['cutoff'].strftime('%d/%m/%Y')}"] ,
@@ -1034,20 +1101,68 @@ def build_recovery_pdf(data):
     ]
     elements.append(table(portfolio_rows, widths=[6.5*cm, 3*cm, 5.5*cm, 11*cm], numeric_from=1))
 
-    class_rows = [['Classe', 'Élèves', 'Dû', 'Encaissé', 'Remises', 'Solde', 'Retard', 'À 30 jours', 'Taux']]
+    class_rows = [[
+        'Classe', 'Élèves', 'Dû', 'Encaissé', 'Remises', 'Remise %',
+        'Couverture', 'Solde', 'Retard', 'À 30 jours', 'Taux recouvré',
+    ]]
     for label, item in data['class_summary'].items():
-        rate = ((item['cash'] + item['discount']) / item['due'] * 100) if item['due'] else ZERO
+        rate = (
+            (item['cash'] + item['discount_applied']) / item['due'] * 100
+            if item['due'] else ZERO
+        )
+        discount_rate = (
+            item['discount'] / item['tuition_due'] * 100
+            if item['tuition_due'] else ZERO
+        )
         class_rows.append([
             label, item['students'], _money(item['due']), _money(item['cash']), _money(item['discount']),
+            f"{discount_rate:.1f} %", _money(item['cash'] + item['discount_applied']),
             _money(item['balance']), _money(item['overdue']), _money(item['upcoming']), f"{rate:.1f} %",
         ])
     if len(class_rows) == 1:
-        class_rows.append(['Aucun échéancier actif', 0, '0', '0', '0', '0', '0', '0', '0 %'])
+        class_rows.append([
+            'Aucun échéancier actif', 0, '0', '0', '0', '0 %',
+            '0', '0', '0', '0', '0 %',
+        ])
     class_rows.append(['TOTAL', data['schedule_count'], _money(data['total_due']), _money(data['total_cash']),
-                       _money(data['total_discount']), _money(data['total_balance']), _money(data['total_overdue']),
-                       _money(data['total_upcoming']), f"{data['recovery_rate']:.1f} %"])
+                       _money(data['total_discount']), f"{data['discount_rate']:.1f} %",
+                       _money(data['total_coverage']), _money(data['total_balance']),
+                       _money(data['total_overdue']), _money(data['total_upcoming']),
+                       f"{data['recovery_rate']:.1f} %"])
     elements.append(Paragraph('2. PERFORMANCE PAR CLASSE', styles['SectionTitle']))
-    elements.append(table(class_rows, widths=[5*cm, 1.8*cm, 3*cm, 3*cm, 2.6*cm, 3*cm, 3*cm, 3*cm, 2.1*cm], numeric_from=1, total_row=True))
+    elements.append(table(
+        class_rows,
+        widths=[4.2*cm, 1.35*cm, 2.35*cm, 2.35*cm, 2.25*cm, 1.75*cm,
+                2.55*cm, 2.35*cm, 2.35*cm, 2.35*cm, 1.9*cm],
+        numeric_from=1,
+        total_row=True,
+    ))
+
+    if data['student_rows']:
+        elements.append(PageBreak())
+        elements.append(Paragraph(
+            '3. SITUATION DÉTAILLÉE PAR ÉLÈVE ET REMISES',
+            styles['SectionTitle'],
+        ))
+        student_rows = [[
+            'Matricule / Élève', 'Classe', 'Dû', 'Encaissé', 'Remise',
+            'Remise %', 'Couverture', 'Solde', 'Situation / précision',
+        ]]
+        for item in data['student_rows']:
+            student_rows.append([
+                f"{item['matricule']}\n{item['student']}", item['class'],
+                _money(item['due']), _money(item['cash']), _money(item['discount']),
+                f"{item['discount_rate']:.1f} %", _money(item['coverage']),
+                _money(item['balance']),
+                item['status'] if item['settlement_note'] == '-'
+                else f"{item['status']}\n{item['settlement_note']}",
+            ])
+        elements.append(table(
+            student_rows,
+            widths=[4.2*cm, 2.8*cm, 2.6*cm, 2.6*cm, 2.6*cm, 1.8*cm,
+                    2.8*cm, 2.6*cm, 5.7*cm],
+            numeric_columns=(2, 3, 4, 5, 6, 7),
+        ))
 
     aging_rows = [['Ancienneté du retard', 'Échéances', 'Montant en retard (GNF)', 'Part du retard']]
     for label, item in data['aging'].items():
@@ -1057,12 +1172,12 @@ def build_recovery_pdf(data):
         'TOTAL', sum(item['count'] for item in data['aging'].values()),
         _money(data['total_overdue']), '100 %' if data['total_overdue'] else '0 %',
     ])
-    elements.append(Paragraph('3. BALANCE ÂGÉE DES IMPAYÉS', styles['SectionTitle']))
+    elements.append(Paragraph('4. BALANCE ÂGÉE DES IMPAYÉS', styles['SectionTitle']))
     elements.append(table(aging_rows, widths=[8*cm, 3*cm, 6*cm, 4*cm], numeric_from=1, total_row=True))
 
     if data['priority_rows']:
         elements.append(PageBreak())
-        elements.append(Paragraph('4. DOSSIERS PRIORITAIRES DE RECOUVREMENT', styles['SectionTitle']))
+        elements.append(Paragraph('5. DOSSIERS PRIORITAIRES DE RECOUVREMENT', styles['SectionTitle']))
         elements.append(Paragraph(
             f"Situation arrêtée au {data['cutoff'].strftime('%d/%m/%Y')} | Classement par montant en retard décroissant",
             styles['ReportSubTitle'],
@@ -1081,9 +1196,13 @@ def build_recovery_pdf(data):
             numeric_columns=(3, 4, 5, 6),
         ))
     else:
+        elements.append(Paragraph(
+            '5. DOSSIERS PRIORITAIRES DE RECOUVREMENT',
+            styles['SectionTitle'],
+        ))
         elements.append(Paragraph('Aucun dossier en retard à la date d’arrêt.', styles['Note']))
 
-    elements.append(Paragraph('5. PILOTAGE DES RELANCES', styles['SectionTitle']))
+    elements.append(Paragraph('6. PILOTAGE DES RELANCES', styles['SectionTitle']))
     channel_rows = [['Canal', 'Actions', 'Envoyées', 'Échecs', 'Taux de succès']]
     for label, item in data['reminder_by_channel'].items():
         success = item['sent'] / item['count'] * 100 if item['count'] else 0
@@ -1190,6 +1309,12 @@ def _excel_workbook(data, report_kind):
             if isinstance(cell.value, int) and cell.column > 1:
                 cell.number_format = '#,##0'
 
+    def excel_phone(value):
+        value = str(value or '-')
+        # Le marqueur gauche-droite est invisible mais empêche Excel de traiter
+        # un numéro commençant par + comme une formule ou un nombre scientifique.
+        return f"\u200e{value}" if value.startswith('+') else value
+
     if report_kind == 'accounting':
         ws = sheet('Synthèse', 'RAPPORT COMPTABLE DES ENCAISSEMENTS', ['Indicateur', 'Nombre', 'Montant (GNF)'])
         append(ws, ['Paiements validés', data['validated_count'], int(data['total_validated'])])
@@ -1255,9 +1380,15 @@ def _excel_workbook(data, report_kind):
         for label, count, amount, observation in [
             ('Créances brutes', data['schedule_count'], data['total_due'], 'Échéanciers actifs suivis'),
             ('Encaissements cumulés', None, data['total_cash'], 'Paiements affectés'),
-            ('Remises imputées', None, data['total_discount'], 'Réductions validées'),
+            (
+                'Remises appliquées', None, data['total_discount'],
+                f"{data['discount_rate']:.1f} % de la scolarité hors admission",
+            ),
             ('Solde à recouvrer', data['schedule_count'] - data['settled_count'], data['total_balance'], 'Après paiements et remises'),
-            ('Élèves soldés', data['settled_count'], None, 'Aucun solde restant'),
+            (
+                'Élèves soldés', data['settled_count'], None,
+                f"Dont {data['settled_with_discount_count']} soldé(s) avec remise",
+            ),
             ('Paiement partiel', data['partial_count'], None, 'Couverture incomplète'),
             ('Sans paiement', data['unpaid_count'], None, 'Aucune couverture enregistrée'),
             ('Élèves en retard', data['overdue_count'], data['total_overdue'], f"Situation au {data['cutoff'].strftime('%d/%m/%Y')}"),
@@ -1268,27 +1399,62 @@ def _excel_workbook(data, report_kind):
             append(ws, [label, count, int(amount) if amount is not None else None, observation])
         ws = sheet(
             'Portefeuille élèves', 'PORTEFEUILLE DÉTAILLÉ DU RECOUVREMENT',
-            ['Matricule', 'Élève', 'Classe', 'Responsable', 'Téléphone', 'Dû', 'Encaissé', 'Remises', 'Solde', 'Retard', 'À 30 jours', 'Situation', 'Relances', 'Dernière relance', 'Statut relance'],
+            [
+                'Matricule', 'Élève', 'Classe', 'Responsable', 'Téléphone',
+                'Dû', 'Encaissé', 'Remises', 'Remise (%)', 'Couverture',
+                'Solde', 'Retard', 'À 30 jours', 'Situation', 'Précision remise',
+                'Relances', 'Dernière relance', 'Statut relance',
+            ],
         )
         for item in data['student_rows']:
             append(ws, [
                 item['matricule'], item['student'], item['class'], item['responsible'],
-                item['phone'], int(item['due']), int(item['cash']), int(item['discount']),
+                excel_phone(item['phone']), int(item['due']), int(item['cash']), int(item['discount']),
+                float(item['discount_rate_fraction']), int(item['coverage']),
                 int(item['balance']), int(item['overdue']), int(item['upcoming']),
-                item['status'], item['reminder_count'],
+                item['status'], item['settlement_note'], item['reminder_count'],
                 timezone.localtime(item['last_reminder']).replace(tzinfo=None)
                 if item['last_reminder'] else None,
                 item['last_status'],
             ])
-        ws = sheet('Classes', 'PERFORMANCE PAR CLASSE', ['Classe', 'Élèves', 'Dû', 'Encaissé', 'Remises', 'Solde', 'Retard', 'À 30 jours', 'Taux (%)'])
+            ws.cell(ws.max_row, 5).number_format = '@'
+            ws.row_dimensions[ws.max_row].height = 44
+        for row in range(6, ws.max_row + 1):
+            ws.cell(row, 9).number_format = '0.0%'
+
+        ws = sheet(
+            'Classes', 'PERFORMANCE PAR CLASSE',
+            [
+                'Classe', 'Élèves', 'Dû', 'Encaissé', 'Remises', 'Remise (%)',
+                'Couverture', 'Solde', 'Retard', 'À 30 jours',
+                'Taux de recouvrement',
+            ],
+        )
         for label, item in data['class_summary'].items():
-            rate = (item['cash'] + item['discount']) / item['due'] * 100 if item['due'] else ZERO
-            append(ws, [label, item['students'], int(item['due']), int(item['cash']), int(item['discount']), int(item['balance']), int(item['overdue']), int(item['upcoming']), float(round(rate, 1))])
+            rate = (
+                (item['cash'] + item['discount_applied']) / item['due']
+                if item['due'] else ZERO
+            )
+            discount_rate = (
+                item['discount'] / item['tuition_due']
+                if item['tuition_due'] else ZERO
+            )
+            append(ws, [
+                label, item['students'], int(item['due']), int(item['cash']),
+                int(item['discount']), float(discount_rate),
+                int(item['cash'] + item['discount_applied']), int(item['balance']),
+                int(item['overdue']), int(item['upcoming']), float(rate),
+            ])
         append(ws, [
             'TOTAL', data['schedule_count'], int(data['total_due']), int(data['total_cash']),
-            int(data['total_discount']), int(data['total_balance']), int(data['total_overdue']),
-            int(data['total_upcoming']), float(round(data['recovery_rate'], 1)),
+            int(data['total_discount']), float(data['discount_rate'] / Decimal('100')),
+            int(data['total_coverage']), int(data['total_balance']),
+            int(data['total_overdue']), int(data['total_upcoming']),
+            float(data['recovery_rate'] / Decimal('100')),
         ], total=True)
+        for row in range(6, ws.max_row + 1):
+            ws.cell(row, 6).number_format = '0.0%'
+            ws.cell(row, 11).number_format = '0.0%'
         ws = sheet('Balance âgée', 'BALANCE ÂGÉE DES IMPAYÉS', ['Ancienneté', 'Échéances', 'Montant (GNF)'])
         for label, item in data['aging'].items():
             append(ws, [label, item['count'], int(item['amount'])])
@@ -1300,7 +1466,7 @@ def _excel_workbook(data, report_kind):
         for item in data['priority_rows']:
             append(ws, [
                 item['matricule'], item['student'], item['class'], item['responsible'],
-                item['phone'], int(item['balance']), int(item['overdue']), item['days'],
+                excel_phone(item['phone']), int(item['balance']), int(item['overdue']), item['days'],
                 item['reminder_count'],
                 timezone.localtime(item['last_reminder']).replace(tzinfo=None)
                 if item['last_reminder'] else None,
