@@ -4,11 +4,14 @@ from django.db.models import Prefetch
 from django.utils import timezone
 from datetime import date, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 import unicodedata
+from xml.sax.saxutils import escape
 
 from eleves.models import Classe, GrilleTarifaire
 from eleves.utils_annee import get_annee_active
-from paiements.models import Paiement
+from paiements.allocation import allocate_cash_and_discounts
+from paiements.models import Paiement, PaiementRemise
 from utilisateurs.utils import user_is_admin, user_school
 from rapports.utils import _draw_header_and_watermark
 
@@ -77,9 +80,70 @@ def _est_reinscription(echeancier, paiements, grille):
     return False
 
 
+def _remises_des_paiements(paiements):
+    """Retourne les remises validées préchargées avec les paiements exportés."""
+    remises = []
+    for paiement in paiements:
+        prechargees = getattr(paiement, '_remises_export', None)
+        if prechargees is None:
+            prechargees = paiement.remises.select_related('remise').all()
+        remises.extend(prechargees)
+    return remises
+
+
+def _precision_remise(total_du, tuition_due, cash, discount, discount_applied, balance):
+    discount_rate = (
+        discount / tuition_due * Decimal('100') if tuition_due else Decimal('0')
+    )
+    coverage = min(
+        max(total_du, Decimal('0')),
+        max(cash, Decimal('0')) + max(discount_applied, Decimal('0')),
+    )
+    if total_du <= 0:
+        status = 'À contrôler'
+    elif balance <= 0:
+        status = 'Soldé avec remise' if discount > 0 else 'Soldé'
+    elif cash + discount_applied > 0:
+        status = 'Paiement partiel'
+    else:
+        status = 'À payer'
+
+    if discount > 0:
+        precision = (
+            f"Remise appliquée : {discount:,.0f} GNF "
+            f"({discount_rate:.1f} % de la scolarité)."
+        ).replace(',', ' ')
+        if total_du > 0 and balance <= 0:
+            precision += " Élève soldé grâce au paiement et à la remise."
+        elif total_du > 0:
+            precision += f" Solde restant : {balance:,.0f} GNF.".replace(',', ' ')
+        discount_unapplied = max(discount - discount_applied, Decimal('0'))
+        if discount_unapplied > 0:
+            precision += (
+                f" {discount_unapplied:,.0f} GNF non imputés à contrôler."
+            ).replace(',', ' ')
+    else:
+        precision = status
+
+    return {
+        'remise': discount,
+        'remise_imputee': discount_applied,
+        'remise_pct': discount_rate,
+        'couverture': coverage,
+        'reste': max(balance, Decimal('0')),
+        'situation': status,
+        'precision': precision,
+    }
+
+
 def _ventiler_sans_echeancier(paiements, grille):
     """Reconstitue la répartition en reproduisant l'ordre du moteur d'allocation."""
     total_paye = sum((Decimal(p.montant or 0) for p in paiements), Decimal('0'))
+    remises = _remises_des_paiements(paiements)
+    total_remise = sum(
+        (Decimal(remise.montant_remise or 0) for remise in remises),
+        Decimal('0'),
+    )
     types = [
         _normaliser_type_paiement(p.type_paiement.nom)
         for p in paiements
@@ -92,8 +156,12 @@ def _ventiler_sans_echeancier(paiements, grille):
         return {
             'inscription': Decimal('0'), 'reinscription': Decimal('0'),
             't1': Decimal('0'), 't2': Decimal('0'), 't3': Decimal('0'),
-            'total_du': Decimal('0'), 'total_paye': total_paye,
-            'reste': Decimal('0'),
+            'total_du': Decimal('0'), 'tuition_due': Decimal('0'),
+            'total_paye': total_paye,
+            **_precision_remise(
+                Decimal('0'), Decimal('0'), total_paye, total_remise,
+                Decimal('0'), Decimal('0'),
+            ),
         }
 
     admission_due = Decimal((
@@ -106,20 +174,40 @@ def _ventiler_sans_echeancier(paiements, grille):
         Decimal(grille.tranche_2 or 0),
         Decimal(grille.tranche_3 or 0),
     ]
-    restant = total_paye
-    payes = []
-    for montant_du in dus:
-        affecte = min(max(restant, Decimal('0')), max(montant_du, Decimal('0')))
-        payes.append(affecte)
-        restant -= affecte
+    proxy = SimpleNamespace(
+        frais_inscription_du=dus[0], frais_inscription_paye=Decimal('0'),
+        tranche_1_due=dus[1], tranche_1_payee=Decimal('0'),
+        tranche_2_due=dus[2], tranche_2_payee=Decimal('0'),
+        tranche_3_due=dus[3], tranche_3_payee=Decimal('0'),
+    )
+    coverage = allocate_cash_and_discounts(proxy, total_paye, remises)
+    cash_allocation = coverage['cash_allocation']
+    total_du = sum(dus, Decimal('0'))
+    tuition_due = sum(dus[1:], Decimal('0'))
 
     return {
-        'inscription': Decimal('0') if est_reinscription else payes[0],
-        'reinscription': payes[0] if est_reinscription else Decimal('0'),
-        't1': payes[1], 't2': payes[2], 't3': payes[3],
-        'total_du': sum(dus, Decimal('0')),
+        'inscription': (
+            Decimal('0') if est_reinscription
+            else cash_allocation['inscription']
+        ),
+        'reinscription': (
+            cash_allocation['inscription'] if est_reinscription
+            else Decimal('0')
+        ),
+        't1': cash_allocation['tranche_1'],
+        't2': cash_allocation['tranche_2'],
+        't3': cash_allocation['tranche_3'],
+        'total_du': total_du,
+        'tuition_due': tuition_due,
         'total_paye': total_paye,
-        'reste': max(sum(dus, Decimal('0')) - total_paye, Decimal('0')),
+        **_precision_remise(
+            total_du,
+            tuition_due,
+            coverage['cash_applied'],
+            coverage['discount_recorded'],
+            coverage['discount_applied'],
+            coverage['balance'],
+        ),
     }
 
 
@@ -130,9 +218,17 @@ def _lignes_classe(classe, annee_scolaire):
         niveau=classe.niveau,
         annee_scolaire=annee_scolaire or classe.annee_scolaire,
     ).first()
-    paiements_valides = Paiement.objects.filter(statut='VALIDE').select_related(
-        'type_paiement'
-    ).order_by('date_paiement', 'id')
+    paiements_valides = (
+        Paiement.objects
+        .filter(statut='VALIDE')
+        .select_related('type_paiement')
+        .prefetch_related(Prefetch(
+            'remises',
+            queryset=PaiementRemise.objects.select_related('remise'),
+            to_attr='_remises_export',
+        ))
+        .order_by('date_paiement', 'id')
+    )
     eleves = classe.eleves.select_related('echeancier').prefetch_related(
         Prefetch(
             'paiements', queryset=paiements_valides,
@@ -150,7 +246,16 @@ def _lignes_classe(classe, annee_scolaire):
         if echeancier is not None and (
             not annee_scolaire or echeancier.annee_scolaire == annee_scolaire
         ):
-            admission_paye = Decimal(echeancier.frais_inscription_paye or 0)
+            remises = _remises_des_paiements(paiements)
+            cash_source = max(
+                Decimal(echeancier.total_paye or 0),
+                sum((Decimal(p.montant or 0) for p in paiements), Decimal('0')),
+            )
+            coverage = allocate_cash_and_discounts(
+                echeancier, cash_source, remises,
+            )
+            cash_allocation = coverage['cash_allocation']
+            admission_paye = cash_allocation['inscription']
             reinscription = _est_reinscription(
                 echeancier, paiements, grille,
             )
@@ -160,18 +265,30 @@ def _lignes_classe(classe, annee_scolaire):
             reinscription_payee = (
                 admission_paye if reinscription else Decimal('0')
             )
-            t1 = Decimal(echeancier.tranche_1_payee or 0)
-            t2 = Decimal(echeancier.tranche_2_payee or 0)
-            t3 = Decimal(echeancier.tranche_3_payee or 0)
+            t1 = cash_allocation['tranche_1']
+            t2 = cash_allocation['tranche_2']
+            t3 = cash_allocation['tranche_3']
             total_du = Decimal(echeancier.total_du or 0)
-            total_paye = admission_paye + t1 + t2 + t3
+            tuition_due = sum((
+                Decimal(echeancier.tranche_1_due or 0),
+                Decimal(echeancier.tranche_2_due or 0),
+                Decimal(echeancier.tranche_3_due or 0),
+            ), Decimal('0'))
             valeurs = {
                 'inscription': inscription_payee,
                 'reinscription': reinscription_payee,
                 't1': t1, 't2': t2, 't3': t3,
                 'total_du': total_du,
-                'total_paye': total_paye,
-                'reste': max(total_du - total_paye, Decimal('0')),
+                'tuition_due': tuition_due,
+                'total_paye': cash_source,
+                **_precision_remise(
+                    total_du,
+                    tuition_due,
+                    coverage['cash_applied'],
+                    coverage['discount_recorded'],
+                    coverage['discount_applied'],
+                    coverage['balance'],
+                ),
             }
         else:
             valeurs = _ventiler_sans_echeancier(paiements, grille)
@@ -261,6 +378,10 @@ def export_tranches_par_classe_pdf(request):
     elements = []
     styles = getSampleStyleSheet()
     cell = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=8, leading=9)
+    header_cell = ParagraphStyle(
+        'HeaderCell', parent=cell, fontName='Helvetica-Bold',
+        textColor=colors.white, fontSize=6.4, leading=7.2,
+    )
 
     titre = 'Tranches par classe'
     if annee_scolaire:
@@ -271,11 +392,16 @@ def export_tranches_par_classe_pdf(request):
     header = [
         'Élève', 'Inscription payée', 'Réinscription payée',
         'Tranche 1 payée', 'Tranche 2 payée', 'Tranche 3 payée',
-        'Total dû', 'Total payé', 'Reste'
+        'Total dû', 'Total encaissé', 'Remise', 'Remise %',
+        'Couverture', 'Reste', 'Situation / précision',
     ]
 
     def P(x):
-        return Paragraph(str(x or ''), cell)
+        safe_value = escape(str(x or '')).replace('\n', '<br/>')
+        return Paragraph(safe_value, cell)
+
+    def H(x):
+        return Paragraph(escape(str(x or '')), header_cell)
 
     # Parcours des classes
     for classe in classes:
@@ -284,9 +410,10 @@ def export_tranches_par_classe_pdf(request):
         elements.append(Paragraph(titre_classe, styles['Heading2']))
         elements.append(Spacer(1, 0.2*cm))
 
-        data = [header]
+        data = [[H(label) for label in header]]
+        lignes = list(_lignes_classe(classe, annee_scolaire))
 
-        for ligne in _lignes_classe(classe, annee_scolaire):
+        for ligne in lignes:
             data.append([
                 P(ligne['eleve']),
                 f"{ligne['inscription']:,}".replace(',', ' '),
@@ -296,26 +423,61 @@ def export_tranches_par_classe_pdf(request):
                 f"{ligne['t3']:,}".replace(',', ' '),
                 f"{ligne['total_du']:,}".replace(',', ' '),
                 f"{ligne['total_paye']:,}".replace(',', ' '),
+                f"{ligne['remise']:,}".replace(',', ' '),
+                f"{ligne['remise_pct']:.1f} %",
+                f"{ligne['couverture']:,}".replace(',', ' '),
                 f"{ligne['reste']:,}".replace(',', ' '),
+                P(
+                    ligne['situation']
+                    if ligne['precision'] == ligne['situation']
+                    else f"{ligne['situation']}\n{ligne['precision']}"
+                ),
+            ])
+
+        if lignes:
+            total_tuition = sum(
+                (ligne['tuition_due'] for ligne in lignes), Decimal('0'),
+            )
+            total_remise = sum((ligne['remise'] for ligne in lignes), Decimal('0'))
+            remise_pct = (
+                total_remise / total_tuition * Decimal('100')
+                if total_tuition > 0 else Decimal('0')
+            )
+            data.append([
+                P('TOTAL CLASSE'), '', '', '', '', '',
+                f"{sum((ligne['total_du'] for ligne in lignes), Decimal('0')):,}".replace(',', ' '),
+                f"{sum((ligne['total_paye'] for ligne in lignes), Decimal('0')):,}".replace(',', ' '),
+                f"{total_remise:,}".replace(',', ' '), f"{remise_pct:.1f} %",
+                f"{sum((ligne['couverture'] for ligne in lignes), Decimal('0')):,}".replace(',', ' '),
+                f"{sum((ligne['reste'] for ligne in lignes), Decimal('0')):,}".replace(',', ' '),
+                P(f"{sum(1 for ligne in lignes if ligne['situation'].startswith('Soldé'))} élève(s) soldé(s)"),
             ])
 
         # Construire la table pour la classe
-        col_widths = [4.5*cm] + [2.75*cm] * 8
+        col_widths = [3.6*cm] + [1.75*cm] * 5 + [2.05*cm] * 3 + [1.55*cm] + [2.15*cm] * 2 + [3.6*cm]
         table = Table(data, repeatRows=1, colWidths=col_widths)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+        table_commands = [
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#174A6E')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
             ('FONTSIZE', (0,0), (-1,0), 8),
+            ('FONTSIZE', (0,1), (-1,-1), 6.5),
             ('ALIGN', (1,1), (-1,-1), 'RIGHT'),
             ('ALIGN', (0,0), (0,-1), 'LEFT'),
+            ('ALIGN', (-1,1), (-1,-1), 'LEFT'),
             ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
             ('LEFTPADDING', (0,0), (-1,-1), 2),
             ('RIGHTPADDING', (0,0), (-1,-1), 2),
             ('TOPPADDING', (0,0), (-1,-1), 1),
             ('BOTTOMPADDING', (0,0), (-1,-1), 1),
-        ]))
+        ]
+        if lignes:
+            table_commands.extend([
+                ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#DCEAF3')),
+                ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+            ])
+        table.setStyle(TableStyle(table_commands))
         elements.append(table)
         elements.append(Spacer(1, 0.6*cm))
 
@@ -344,6 +506,7 @@ def export_tranches_par_classe_excel(request):
     # Import openpyxl
     try:
         from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
         from openpyxl.utils import get_column_letter
     except Exception:
         return HttpResponse("OpenPyXL n'est pas installé. Veuillez exécuter: pip install openpyxl", status=500)
@@ -380,13 +543,29 @@ def export_tranches_par_classe_excel(request):
     wb = Workbook()
     ws_index = wb.active
     ws_index.title = 'Index'
-    ws_index.append(['Tranches par classe', f"Année: {annee_scolaire}" if annee_scolaire else ''])
-    ws_index.append(['Écoles / Classes listées:'])
+    index_title = 'Tranches par classe'
+    if annee_scolaire:
+        index_title += f" - Année {annee_scolaire}"
+    ws_index.append([index_title, None, None])
+    ws_index.merge_cells('A1:C1')
+    ws_index.cell(1, 1).font = Font(bold=True, size=14, color='174A6E')
+    ws_index.cell(1, 1).alignment = Alignment(horizontal='center')
+    ws_index.append(['École', 'Classe', 'Feuille'])
+    for cell in ws_index[2]:
+        cell.fill = PatternFill('solid', fgColor='174A6E')
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.alignment = Alignment(horizontal='center')
+    ws_index.column_dimensions['A'].width = 44
+    ws_index.column_dimensions['B'].width = 26
+    ws_index.column_dimensions['C'].width = 28
+    ws_index.freeze_panes = 'A3'
+    ws_index.sheet_view.showGridLines = False
 
     headers = [
         'Élève', 'Inscription payée', 'Réinscription payée',
         'Tranche 1 payée', 'Tranche 2 payée', 'Tranche 3 payée',
-        'Total dû', 'Total payé', 'Reste',
+        'Total dû', 'Total encaissé', 'Remise', 'Remise (%)',
+        'Couverture', 'Reste', 'Situation', 'Précision remise',
     ]
 
     for idx, classe in enumerate(classes, start=1):
@@ -395,18 +574,67 @@ def export_tranches_par_classe_excel(request):
         ws.append([f"Classe: {classe.nom} – {getattr(classe.ecole, 'nom', '')}"])
         ws.append(headers)
 
-        for ligne in _lignes_classe(classe, annee_scolaire):
+        lignes = list(_lignes_classe(classe, annee_scolaire))
+        for ligne in lignes:
             ws.append([
                 ligne['eleve'],
                 int(ligne['inscription']), int(ligne['reinscription']),
                 int(ligne['t1']), int(ligne['t2']), int(ligne['t3']),
                 int(ligne['total_du']), int(ligne['total_paye']),
-                int(ligne['reste']),
+                int(ligne['remise']), float(ligne['remise_pct'] / Decimal('100')),
+                int(ligne['couverture']), int(ligne['reste']),
+                ligne['situation'], ligne['precision'],
             ])
 
+        if lignes:
+            total_tuition = sum(
+                (ligne['tuition_due'] for ligne in lignes), Decimal('0'),
+            )
+            total_remise = sum((ligne['remise'] for ligne in lignes), Decimal('0'))
+            ws.append([
+                'TOTAL CLASSE', None, None, None, None, None,
+                int(sum((ligne['total_du'] for ligne in lignes), Decimal('0'))),
+                int(sum((ligne['total_paye'] for ligne in lignes), Decimal('0'))),
+                int(total_remise),
+                float(total_remise / total_tuition) if total_tuition > 0 else 0,
+                int(sum((ligne['couverture'] for ligne in lignes), Decimal('0'))),
+                int(sum((ligne['reste'] for ligne in lignes), Decimal('0'))),
+                f"{sum(1 for ligne in lignes if ligne['situation'].startswith('Soldé'))} élève(s) soldé(s)",
+                'Les remises sont incluses dans la couverture et le calcul du reste.',
+            ])
+
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=14)
+        ws.cell(1, 1).font = Font(bold=True, size=14, color='174A6E')
+        ws.cell(1, 1).alignment = Alignment(horizontal='center')
+        for cell in ws[2]:
+            cell.fill = PatternFill('solid', fgColor='174A6E')
+            cell.font = Font(bold=True, color='FFFFFF')
+            cell.alignment = Alignment(
+                horizontal='center', vertical='center', wrap_text=True,
+            )
+        ws.row_dimensions[2].height = 34
+        if lignes:
+            for cell in ws[ws.max_row]:
+                cell.fill = PatternFill('solid', fgColor='DCEAF3')
+                cell.font = Font(bold=True)
+
         # Ajuster largeur colonnes simple
-        for col in range(1, 10):
-            ws.column_dimensions[get_column_letter(col)].width = 22 if col == 1 else 16
+        for col in range(1, 15):
+            if col == 1:
+                width = 25
+            elif col in (13, 14):
+                width = 26 if col == 13 else 52
+            else:
+                width = 16
+            ws.column_dimensions[get_column_letter(col)].width = width
+        ws.freeze_panes = 'A3'
+        ws.auto_filter.ref = f"A2:N{max(ws.max_row - 1, 2)}"
+        for row in range(3, ws.max_row + 1):
+            ws.cell(row, 10).number_format = '0.0%'
+            ws.cell(row, 14).alignment = Alignment(wrap_text=True, vertical='top')
+            for col in (2, 3, 4, 5, 6, 7, 8, 9, 11, 12):
+                ws.cell(row, col).number_format = '#,##0'
+        ws.sheet_view.showGridLines = False
 
         # Index line
         ws_index.append([getattr(classe.ecole, 'nom', ''), classe.nom, sheet_name])
@@ -414,6 +642,8 @@ def export_tranches_par_classe_excel(request):
     # Supprimer la feuille par défaut si vide
     if ws_index.max_row == 2:
         ws_index.append(['Aucune classe'])
+    else:
+        ws_index.auto_filter.ref = f"A2:C{ws_index.max_row}"
 
     from io import BytesIO
     stream = BytesIO()
