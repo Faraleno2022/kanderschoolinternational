@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Encaissements par mode - myschool{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Paiements</a></li>
+<li class="breadcrumb-item"><a href="{% url 'paiements:liste_paiements' %}">Liste</a></li>
+<li class="breadcrumb-item active">Modes d'encaissement</li>
+{% endblock %}
+
+{% block page_actions %}
+<div class="d-flex flex-wrap gap-2">
+    <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Retour aux paiements
+    </a>
+    <a id="exportModesPdf" href="{% url 'paiements:export_modes_encaissement_pdf' %}" class="btn btn-danger">
+        <i class="fas fa-file-pdf me-1"></i>Exporter PDF
+    </a>
+    <a id="exportModesExcel" href="{% url 'paiements:export_modes_encaissement_excel' %}" class="btn btn-success">
+        <i class="fas fa-file-excel me-1"></i>Exporter Excel
+    </a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .mode-filter-card,
+    .mode-panel {
+        border: 0;
+        border-radius: 14px;
+        box-shadow: 0 4px 18px rgba(29, 63, 89, .08);
+    }
+    .mode-filter-card { border-left: 5px solid #174a6e; }
+    .mode-kpi {
+        height: 100%;
+        padding: 1rem;
+        border: 1px solid #d7e2e9;
+        border-radius: 12px;
+        background: linear-gradient(145deg, #fff, #f5f9fb);
+    }
+    .mode-kpi .value { color: #174a6e; font-size: 1.45rem; font-weight: 700; }
+    .mode-kpi .label { color: #667985; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+    .mode-table thead th {
+        background: #174a6e;
+        color: #fff;
+        border: 0;
+        font-size: .78rem;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .mode-table tbody tr:hover { background: #f2f7fa; }
+    .mode-loading { opacity: .55; pointer-events: none; transition: opacity .15s; }
+    .mode-badge { background: #dceaf3; color: #174a6e; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card mode-filter-card mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+            <div>
+                <h4 class="mb-1"><i class="fas fa-cash-register text-success me-2"></i>Soldes par mode d'encaissement</h4>
+                <p class="text-muted mb-0">Montants validés, élèves concernés et contrôle des références.</p>
+            </div>
+            <span class="badge bg-light text-dark border">{{ data.school_year|default:"Toutes les années" }}</span>
+        </div>
+
+        <form id="modesFilters" class="row g-3" autocomplete="off">
+            {% if data.school_year %}
+            <input type="hidden" name="annee_scolaire" value="{{ data.school_year }}">
+            {% endif %}
+            <div class="col-lg-4 col-md-6">
+                <label for="modeSearch" class="form-label">Élève, matricule, reçu ou référence</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input id="modeSearch" name="q" type="search" class="form-control"
+                           value="{{ data.search }}" placeholder="Rechercher...">
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <label for="modeClasse" class="form-label">Classe</label>
+                <select id="modeClasse" name="classe_id" class="form-select">
+                    <option value="">Toutes les classes</option>
+                    {% for classe in data.available_classes %}
+                    <option value="{{ classe.id }}" {% if data.selected_class_id == classe.id %}selected{% endif %}>
+                        {{ classe.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-lg-2 col-md-6">
+                <label for="modeEncaissement" class="form-label">Mode</label>
+                <select id="modeEncaissement" name="mode_id" class="form-select">
+                    <option value="">Tous les modes</option>
+                    {% for mode in data.mode_options %}
+                    <option value="{{ mode.id }}" {% if data.selected_mode_id == mode.id %}selected{% endif %}>{{ mode.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-lg-1 col-md-3 col-6">
+                <label for="modeDu" class="form-label">Du</label>
+                <input id="modeDu" name="du" type="date" class="form-control" value="{{ request.GET.du }}">
+            </div>
+            <div class="col-lg-1 col-md-3 col-6">
+                <label for="modeAu" class="form-label">Au</label>
+                <input id="modeAu" name="au" type="date" class="form-control" value="{{ request.GET.au }}">
+            </div>
+            <div class="col-lg-1 col-md-6 d-flex align-items-end">
+                <a href="{% url 'paiements:rapport_modes_encaissement' %}" class="btn btn-outline-secondary w-100" title="Réinitialiser">
+                    <i class="fas fa-undo"></i>
+                </a>
+            </div>
+        </form>
+        <div id="modesFilterStatus" class="small text-muted mt-2" aria-live="polite">
+            Les filtres s'appliquent automatiquement.
+        </div>
+    </div>
+</div>
+
+<div id="modesResults">
+    {% include 'paiements/_modes_encaissement_resultats.html' %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('modesFilters');
+    const results = document.getElementById('modesResults');
+    const status = document.getElementById('modesFilterStatus');
+    const search = document.getElementById('modeSearch');
+    const pdfBase = '{% url "paiements:export_modes_encaissement_pdf" %}';
+    const excelBase = '{% url "paiements:export_modes_encaissement_excel" %}';
+    let timer = null;
+    let controller = null;
+
+    function currentParams(page = null) {
+        const params = new URLSearchParams(new FormData(form));
+        for (const [key, value] of [...params.entries()]) {
+            if (!String(value).trim()) params.delete(key);
+        }
+        if (page && page > 1) params.set('page', page);
+        else params.delete('page');
+        return params;
+    }
+
+    function updateExportLinks(params) {
+        const query = params.toString();
+        document.getElementById('exportModesPdf').href = pdfBase + (query ? `?${query}` : '');
+        document.getElementById('exportModesExcel').href = excelBase + (query ? `?${query}` : '');
+    }
+
+    async function loadResults(page = null) {
+        const params = currentParams(page);
+        if (controller) controller.abort();
+        controller = new AbortController();
+        results.classList.add('mode-loading');
+        status.innerHTML = '<i class="fas fa-circle-notch fa-spin me-1"></i>Mise à jour...';
+        try {
+            const response = await fetch(`${window.location.pathname}?${params.toString()}`, {
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                signal: controller.signal,
+            });
+            if (!response.ok) throw new Error(await response.text());
+            results.innerHTML = await response.text();
+            const query = params.toString();
+            history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
+            updateExportLinks(params);
+            status.textContent = 'Filtres appliqués automatiquement.';
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                status.textContent = error.message || "Impossible d'actualiser le tableau.";
+            }
+        } finally {
+            results.classList.remove('mode-loading');
+        }
+    }
+
+    form.addEventListener('submit', event => {
+        event.preventDefault();
+        loadResults();
+    });
+    form.querySelectorAll('select, input[type="date"]').forEach(element => {
+        element.addEventListener('change', () => loadResults());
+    });
+    search.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => loadResults(), 350);
+    });
+    results.addEventListener('click', event => {
+        const link = event.target.closest('[data-mode-page]');
+        if (!link) return;
+        event.preventDefault();
+        loadResults(Number(link.dataset.modePage));
+    });
+
+    updateExportLinks(currentParams());
+});
+</script>
+{% endblock %}

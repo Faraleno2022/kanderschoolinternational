@@ -15,6 +15,7 @@ from .rapports_professionnels import (
     export_comptabilite_pdf,
     export_modes_encaissement_excel,
     export_modes_encaissement_pdf,
+    rapport_modes_encaissement,
     export_recouvrement_excel,
     export_recouvrement_pdf,
 )
@@ -66,6 +67,7 @@ urlpatterns = [
     # Rapports
     path('rapport/retards/', views.rapport_retards, name='rapport_retards'),
     path('rapport/encaissements/', views.rapport_encaissements, name='rapport_encaissements'),
+    path('rapport/modes-encaissement/', rapport_modes_encaissement, name='rapport_modes_encaissement'),
     path('rapport/comptabilite/', rapport_comptable, name='rapport_comptable'),
     path('rapport/comptabilite/pdf/', export_rapport_comptable_pdf, name='export_rapport_comptable_pdf'),
     path('rapport/comptabilite/excel/', export_rapport_comptable_excel, name='export_rapport_comptable_excel'),
