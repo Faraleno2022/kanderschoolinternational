@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from .views_tranches import export_tranches_par_classe_pdf, export_tranches_par_classe_excel
+from .views_exports_pdf import export_liste_paiements_pdf
 from . import views_rappels
 from .whatsapp_recu import apercu_message_whatsapp_recu, apercu_message_whatsapp_note_rappel
 from .recu_public import recu_public_pdf, note_rappel_public_pdf
@@ -47,6 +48,7 @@ urlpatterns = [
     path('notes-rappel/tous/pdf/', views.generer_toutes_notes_rappel_pdf, name='generer_toutes_notes_rappel_pdf'),
     path('export/tranches-par-classe/pdf/', export_tranches_par_classe_pdf, name='export_tranches_par_classe_pdf'),
     path('export/tranches-par-classe/excel/', export_tranches_par_classe_excel, name='export_tranches_par_classe_excel'),
+    path('export/liste/pdf/', export_liste_paiements_pdf, name='export_liste_paiements_pdf'),
     path('export/liste/excel/', views.export_liste_paiements_excel, name='export_liste_paiements_excel'),
     path('export/recap-par-classe/excel/', views.export_recap_par_classe_excel, name='export_recap_par_classe_excel'),
     path('export/comptabilite/pdf/', export_comptabilite_pdf, name='export_comptabilite_pdf'),

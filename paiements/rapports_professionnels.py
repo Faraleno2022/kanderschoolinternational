@@ -702,6 +702,37 @@ def collect_recovery_data(request):
     return data
 
 
+def _draw_school_watermark(canvas, logo_path, page_width, page_height):
+    """Dessine un logo d'ecole discret au centre de la page."""
+    if not logo_path:
+        return
+
+    canvas.saveState()
+    try:
+        try:
+            canvas.setFillAlpha(0.04)
+        except (AttributeError, ValueError):
+            # Les anciens moteurs PDF peuvent ne pas gerer la transparence.
+            pass
+
+        watermark_width = page_width * 0.62
+        watermark_height = page_height * 0.62
+        canvas.drawImage(
+            logo_path,
+            (page_width - watermark_width) / 2,
+            (page_height - watermark_height) / 2,
+            width=watermark_width,
+            height=watermark_height,
+            preserveAspectRatio=True,
+            mask='auto',
+        )
+    except Exception:
+        # Un logo illisible ne doit jamais empecher l'export du rapport.
+        pass
+    finally:
+        canvas.restoreState()
+
+
 def _pdf_primitives(data, title):
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
@@ -804,9 +835,12 @@ def _pdf_primitives(data, title):
         return outer
 
     page_width, page_height = landscape(A4)
-    logo_path = _get_logo_path(data['school']) if data.get('school') else ''
+    # Toujours demander un logo : logo propre à l'école quand le périmètre
+    # n'en contient qu'une, logo institutionnel de secours sinon.
+    logo_path = _get_logo_path(data.get('school'))
 
     def draw_page_chrome(canvas, page_number, page_count):
+        _draw_school_watermark(canvas, logo_path, page_width, page_height)
         canvas.saveState()
         canvas.setTitle(title)
         canvas.setAuthor(data['generated_by'])

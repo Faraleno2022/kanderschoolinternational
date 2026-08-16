@@ -4,6 +4,7 @@ from django.db.models import Prefetch
 from django.utils import timezone
 from datetime import date, datetime
 from decimal import Decimal
+from functools import partial
 from types import SimpleNamespace
 import unicodedata
 from xml.sax.saxutils import escape
@@ -13,7 +14,7 @@ from eleves.utils_annee import get_annee_active
 from paiements.allocation import allocate_cash_and_discounts
 from paiements.models import Paiement, PaiementRemise
 from utilisateurs.utils import user_is_admin, user_school
-from rapports.utils import _draw_header_and_watermark
+from rapports.utils import _draw_header_and_watermark, _get_logo_path
 
 # ReportLab
 # ReportLab: fera l'objet d'un import différé dans la vue PDF
@@ -353,7 +354,16 @@ def export_tranches_par_classe_pdf(request):
         classes = classes.filter(annee_scolaire=annee_scolaire)
 
     # Anti-abus: limiter le nombre de classes exportées en une requête
-    classes = classes.order_by('ecole__nom', 'niveau', 'nom')[:200]
+    classes = list(classes.order_by('ecole__nom', 'niveau', 'nom')[:200])
+    ecoles_exportees = {
+        classe.ecole_id: classe.ecole
+        for classe in classes
+        if getattr(classe, 'ecole_id', None)
+    }
+    ecole_entete = (
+        next(iter(ecoles_exportees.values()))
+        if len(ecoles_exportees) == 1 else None
+    )
 
     # Préparer réponse PDF
     response = HttpResponse(content_type='application/pdf')
@@ -363,7 +373,7 @@ def export_tranches_par_classe_pdf(request):
     # Import différé de ReportLab pour éviter les erreurs si non installé
     try:
         from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.platypus import Image, SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
         from reportlab.lib import colors
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import cm
@@ -405,6 +415,32 @@ def export_tranches_par_classe_pdf(request):
 
     # Parcours des classes
     for classe in classes:
+        # Pour un export multi-écoles, chaque section porte explicitement le
+        # logo de son établissement. Pour une seule école, le logo est répété
+        # dans l'en-tête de chaque page par le callback ci-dessous.
+        if len(ecoles_exportees) > 1:
+            logo_path = _get_logo_path(classe.ecole)
+            titre_ecole = Paragraph(
+                escape(getattr(classe.ecole, 'nom', '') or 'Établissement'),
+                styles['Heading2'],
+            )
+            if logo_path:
+                logo = Image(logo_path, width=1.8*cm, height=1.1*cm)
+                marque = Table(
+                    [[logo, titre_ecole]],
+                    colWidths=[2.2*cm, 23.5*cm],
+                    style=TableStyle([
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+                        ('TOPPADDING', (0, 0), (-1, -1), 0),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                    ]),
+                )
+                elements.append(marque)
+            else:
+                elements.append(titre_ecole)
+
         # Titre de la classe
         titre_classe = f"Classe: {classe.nom} – {getattr(classe.ecole, 'nom', '')}"
         elements.append(Paragraph(titre_classe, styles['Heading2']))
@@ -481,8 +517,18 @@ def export_tranches_par_classe_pdf(request):
         elements.append(table)
         elements.append(Spacer(1, 0.6*cm))
 
-    # Construire le document avec en-tête + filigrane logo
-    doc.build(elements, onFirstPage=_draw_header_and_watermark, onLaterPages=_draw_header_and_watermark)
+    # Construire le document avec l'en-tête et le logo de l'école sélectionnée.
+    # `partial` évite de perdre l'école quand ReportLab appelle le callback.
+    dessiner_entete = partial(
+        _draw_header_and_watermark,
+        ecole=ecole_entete,
+        titre_override='Tranches par classe',
+    )
+    doc.build(
+        elements,
+        onFirstPage=dessiner_entete,
+        onLaterPages=dessiner_entete,
+    )
     return response
 
 @login_required
