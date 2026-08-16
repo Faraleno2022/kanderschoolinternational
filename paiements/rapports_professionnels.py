@@ -1075,6 +1075,138 @@ def build_accounting_pdf(data):
     return buffer
 
 
+def build_payment_modes_pdf(data):
+    """Construit le rapport autonome des encaissements validés par mode."""
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+    title = 'ENCAISSEMENTS PAR MODE DE PAIEMENT'
+    styles, _p, table, kpis, on_page, numbered_canvas = _pdf_primitives(data, title)
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        topMargin=1.65 * cm,
+        bottomMargin=1.05 * cm,
+        leftMargin=0.8 * cm,
+        rightMargin=0.8 * cm,
+        title=title,
+        author=data['generated_by'],
+    )
+    elements = _title_elements(data, styles, title, data['period_label'])
+
+    mode_count = len(data['by_mode'])
+    average = (
+        data['total_validated'] / data['validated_count']
+        if data['validated_count'] else ZERO
+    )
+    elements.append(kpis([
+        ('Total encaissé', f"{_money(data['total_validated'])} GNF", GREEN),
+        ('Modes utilisés', str(mode_count), BLUE),
+        ('Opérations validées', str(data['validated_count']), BLUE),
+        ('Encaissement moyen', f"{_money(average)} GNF", BLUE),
+        ('Références manquantes', str(data['reference_missing_count']), ORANGE),
+        ('Montant à justifier', f"{_money(data['reference_missing_amount'])} GNF", RED),
+    ]))
+
+    elements.append(Paragraph('1. SYNTHÈSE PAR MODE', styles['SectionTitle']))
+    summary_rows = [[
+        'Mode d’encaissement', 'Opérations', 'Montant (GNF)', 'Part',
+        'Montant moyen', 'Réf. attendues', 'Réf. manquantes',
+        'Montant à justifier',
+    ]]
+    for label, item in data['by_mode'].items():
+        percentage = (
+            item['amount'] / data['total_validated'] * 100
+            if data['total_validated'] else ZERO
+        )
+        mode_average = item['amount'] / item['count'] if item['count'] else ZERO
+        summary_rows.append([
+            label,
+            item['count'],
+            _money(item['amount']),
+            f"{percentage:.1f} %",
+            _money(mode_average),
+            item['reference_required'],
+            item['reference_missing'],
+            _money(item['reference_missing_amount']),
+        ])
+    if not data['by_mode']:
+        summary_rows.append([
+            'Aucun encaissement validé', 0, '0', '0 %', '0', 0, 0, '0',
+        ])
+    summary_rows.append([
+        'TOTAL',
+        data['validated_count'],
+        _money(data['total_validated']),
+        '100 %' if data['validated_count'] else '0 %',
+        _money(average),
+        sum(item['reference_required'] for item in data['by_mode'].values()),
+        data['reference_missing_count'],
+        _money(data['reference_missing_amount']),
+    ])
+    elements.append(table(
+        summary_rows,
+        widths=[4.5*cm, 2.2*cm, 3.4*cm, 1.8*cm, 3.2*cm, 2.6*cm, 2.8*cm, 3.6*cm],
+        numeric_from=1,
+        total_row=True,
+    ))
+
+    elements.append(Paragraph('2. DÉTAIL DES ENCAISSEMENTS VALIDÉS', styles['SectionTitle']))
+    detail_rows = [[
+        'Mode', 'Date', 'Reçu', 'Élève', 'Classe', 'Type', 'Montant',
+        'Référence', 'Contrôle', 'Caissier',
+    ]]
+    for item in sorted(
+        data['payment_rows'],
+        key=lambda row: (row['mode'].casefold(), row['date'], row['receipt'] or ''),
+    ):
+        detail_rows.append([
+            item['mode'],
+            item['date'].strftime('%d/%m/%Y'),
+            item['receipt'],
+            f"{item['matricule']}\n{item['student']}",
+            item['class'],
+            item['type'],
+            _money(item['amount']),
+            item['reference'],
+            item['reference_status'],
+            item['cashier'],
+        ])
+    if not data['payment_rows']:
+        detail_rows.append([
+            'Aucune opération', '-', '-', '-', '-', '-', '0', '-', '-', '-',
+        ])
+    elements.append(table(
+        detail_rows,
+        widths=[2.5*cm, 1.7*cm, 2.1*cm, 3.5*cm, 2.5*cm, 3.0*cm, 2.5*cm, 2.8*cm, 2.7*cm, 2.7*cm],
+        numeric_columns=(6,),
+    ))
+    elements.extend([
+        Spacer(1, 0.35 * cm),
+        Paragraph(
+            "Contrôle recommandé : rapprocher chaque total avec le journal de caisse, "
+            "les relevés Mobile Money, les bordereaux bancaires et les chèques.",
+            styles['Note'],
+        ),
+        Spacer(1, 0.35 * cm),
+        table(
+            [['Établi par', 'Contrôlé par', 'Validé par'],
+             [data['generated_by'], 'Nom / Signature', 'Direction / Signature']],
+            widths=[8.8*cm, 8.8*cm, 8.8*cm],
+        ),
+    ])
+    doc.build(
+        elements,
+        onFirstPage=on_page,
+        onLaterPages=on_page,
+        canvasmaker=numbered_canvas,
+    )
+    buffer.seek(0)
+    return buffer
+
+
 def build_recovery_pdf(data):
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.units import cm
@@ -1537,6 +1669,176 @@ def _excel_workbook(data, report_kind):
     return wb
 
 
+def _payment_modes_excel_workbook(data):
+    """Crée un classeur de synthèse et de détail par mode d'encaissement."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    workbook = openpyxl.Workbook()
+    workbook.remove(workbook.active)
+    dark_fill = PatternFill('solid', fgColor=BLUE.replace('#', ''))
+    light_fill = PatternFill('solid', fgColor=BLUE_LIGHT.replace('#', ''))
+    white_font = Font(color='FFFFFF', bold=True)
+    bold_font = Font(bold=True)
+    border_side = Side(style='thin', color='B7C4CC')
+    border = Border(
+        left=border_side,
+        right=border_side,
+        top=border_side,
+        bottom=border_side,
+    )
+
+    def prepare_sheet(name, title, headers):
+        sheet = workbook.create_sheet(name)
+        last_column = len(headers)
+        sheet.merge_cells(
+            start_row=1, start_column=1, end_row=1, end_column=last_column,
+        )
+        title_cell = sheet.cell(1, 1, f"{data['school_name']} - {title}")
+        title_cell.font = Font(bold=True, size=14, color=BLUE.replace('#', ''))
+        title_cell.alignment = Alignment(horizontal='center', vertical='center')
+        sheet.merge_cells(
+            start_row=2, start_column=1, end_row=2, end_column=last_column,
+        )
+        sheet.cell(
+            2,
+            1,
+            f"{data['scope_label']} | Année {data.get('school_year') or '-'} | "
+            f"{data['period_label']}",
+        ).alignment = Alignment(horizontal='center', vertical='center')
+        sheet.merge_cells(
+            start_row=3, start_column=1, end_row=3, end_column=last_column,
+        )
+        sheet.cell(
+            3,
+            1,
+            f"Réf. {data['report_reference']} | Généré par {data['generated_by']} "
+            f"le {data['generated_at'].strftime('%d/%m/%Y à %H:%M')}",
+        ).alignment = Alignment(horizontal='center', vertical='center')
+        sheet.row_dimensions[1].height = 32
+        sheet.row_dimensions[2].height = 24
+        sheet.row_dimensions[3].height = 22
+        for column, label in enumerate(headers, 1):
+            cell = sheet.cell(5, column, label)
+            cell.fill = dark_fill
+            cell.font = white_font
+            cell.border = border
+            cell.alignment = Alignment(
+                horizontal='center', vertical='center', wrap_text=True,
+            )
+        sheet.freeze_panes = 'A6'
+        sheet.sheet_view.showGridLines = False
+        sheet.page_setup.orientation = 'landscape'
+        sheet.page_setup.fitToWidth = 1
+        sheet.sheet_properties.pageSetUpPr.fitToPage = True
+        sheet.print_title_rows = '1:5'
+        return sheet
+
+    def style_row(sheet, row, total=False):
+        for cell in sheet[row]:
+            cell.border = border
+            cell.alignment = Alignment(vertical='top', wrap_text=True)
+            if total:
+                cell.fill = light_fill
+                cell.font = bold_font
+
+    summary = prepare_sheet(
+        'Synthèse par mode',
+        'ENCAISSEMENTS PAR MODE DE PAIEMENT',
+        [
+            'Mode d’encaissement', 'Opérations', 'Montant encaissé (GNF)',
+            'Part du total', 'Montant moyen (GNF)', 'Références attendues',
+            'Références présentes', 'Références manquantes',
+            'Montant à justifier (GNF)',
+        ],
+    )
+    for label, item in data['by_mode'].items():
+        percentage = (
+            item['amount'] / data['total_validated']
+            if data['total_validated'] else ZERO
+        )
+        average = item['amount'] / item['count'] if item['count'] else ZERO
+        summary.append([
+            label,
+            item['count'],
+            int(item['amount']),
+            float(percentage),
+            int(average),
+            item['reference_required'],
+            item['reference_present'],
+            item['reference_missing'],
+            int(item['reference_missing_amount']),
+        ])
+        style_row(summary, summary.max_row)
+    if not data['by_mode']:
+        summary.append(['Aucun encaissement validé', 0, 0, 0, 0, 0, 0, 0, 0])
+        style_row(summary, summary.max_row)
+
+    overall_average = (
+        data['total_validated'] / data['validated_count']
+        if data['validated_count'] else ZERO
+    )
+    summary.append([
+        'TOTAL',
+        data['validated_count'],
+        int(data['total_validated']),
+        1 if data['validated_count'] else 0,
+        int(overall_average),
+        sum(item['reference_required'] for item in data['by_mode'].values()),
+        sum(item['reference_present'] for item in data['by_mode'].values()),
+        data['reference_missing_count'],
+        int(data['reference_missing_amount']),
+    ])
+    style_row(summary, summary.max_row, total=True)
+    summary.auto_filter.ref = f"A5:I{max(summary.max_row - 1, 5)}"
+    for row in range(6, summary.max_row + 1):
+        summary.cell(row, 3).number_format = '#,##0'
+        summary.cell(row, 4).number_format = '0.0%'
+        summary.cell(row, 5).number_format = '#,##0'
+        summary.cell(row, 9).number_format = '#,##0'
+    for column, width in enumerate([28, 13, 22, 15, 21, 19, 19, 20, 24], 1):
+        summary.column_dimensions[openpyxl.utils.get_column_letter(column)].width = width
+
+    detail = prepare_sheet(
+        'Détail des encaissements',
+        'JOURNAL DES ENCAISSEMENTS VALIDÉS PAR MODE',
+        [
+            'Mode', 'Date', 'N° reçu', 'Matricule', 'Élève', 'Classe', 'Type',
+            'Montant (GNF)', 'Référence externe', 'Contrôle référence',
+            'Caissier', 'Validateur',
+        ],
+    )
+    for item in sorted(
+        data['payment_rows'],
+        key=lambda row: (row['mode'].casefold(), row['date'], row['receipt'] or ''),
+    ):
+        detail.append([
+            item['mode'],
+            item['date'],
+            item['receipt'],
+            item['matricule'],
+            item['student'],
+            item['class'],
+            item['type'],
+            int(item['amount']),
+            item['reference'],
+            item['reference_status'],
+            item['cashier'],
+            item['validator'],
+        ])
+        style_row(detail, detail.max_row)
+        detail.cell(detail.max_row, 2).number_format = 'dd/mm/yyyy'
+        detail.cell(detail.max_row, 8).number_format = '#,##0'
+    if not data['payment_rows']:
+        detail.append(['Aucune opération validée', None, None, None, None, None, None, 0, None, None, None, None])
+        style_row(detail, detail.max_row)
+    detail.auto_filter.ref = f"A5:L{max(detail.max_row, 5)}"
+    for column, width in enumerate([22, 13, 18, 16, 28, 20, 28, 18, 22, 20, 20, 20], 1):
+        detail.column_dimensions[openpyxl.utils.get_column_letter(column)].width = width
+
+    return workbook
+
+
 def _bad_request(exc):
     return HttpResponse(str(exc), status=400, content_type='text/plain; charset=utf-8')
 
@@ -1573,6 +1875,34 @@ def export_comptabilite_excel(request):
     except ValueError as exc:
         return _bad_request(exc)
     return _excel_response(_excel_workbook(data, 'accounting'), 'rapport_comptable', data)
+
+
+def _collect_payment_modes_data(request):
+    data = collect_accounting_data(request)
+    data['report_reference'] = _make_report_reference('ME', data['generated_at'])
+    return data
+
+
+@can_view_reports
+def export_modes_encaissement_pdf(request):
+    try:
+        data = _collect_payment_modes_data(request)
+    except ValueError as exc:
+        return _bad_request(exc)
+    return _pdf_response(
+        build_payment_modes_pdf(data), 'encaissements_par_mode', data,
+    )
+
+
+@can_view_reports
+def export_modes_encaissement_excel(request):
+    try:
+        data = _collect_payment_modes_data(request)
+    except ValueError as exc:
+        return _bad_request(exc)
+    return _excel_response(
+        _payment_modes_excel_workbook(data), 'encaissements_par_mode', data,
+    )
 
 
 @can_view_reports

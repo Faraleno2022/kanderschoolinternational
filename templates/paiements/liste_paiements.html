@@ -66,6 +66,9 @@
             <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#rapportComptableModal">
                 <i class="fas fa-file-invoice-dollar me-1"></i>Rapport comptable
             </button>
+            <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#modesEncaissementModal">
+                <i class="fas fa-cash-register me-1"></i>Modes d'encaissement
+            </button>
             <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rapportRecouvrementModal">
                 <i class="fas fa-hand-holding-usd me-1"></i>Recouvrement
             </button>
@@ -121,6 +124,53 @@
                         <i class="fas fa-file-pdf me-1"></i>PDF
                     </button>
                     <button type="button" class="btn btn-success" onclick="ouvrirRapportComptable('excel')">
+                        <i class="fas fa-file-excel me-1"></i>Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modesEncaissementModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-cash-register me-2"></i>Encaissements par mode de paiement
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Synthèse des montants réellement encaissés, parts du total, montants moyens,
+                        références manquantes et journal détaillé. Seuls les paiements validés sont inclus.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label" for="meClasse">Classe</label>
+                        <select id="meClasse" class="form-select">
+                            <option value="">— Tout l'établissement —</option>
+                            {% for classe in classes_rapport %}
+                            <option value="{{ classe.id }}">{{ classe.nom }} ({{ classe.annee_scolaire }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label" for="meDu">Du</label>
+                            <input type="date" id="meDu" class="form-control">
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label" for="meAu">Au</label>
+                            <input type="date" id="meAu" class="form-control">
+                        </div>
+                    </div>
+                    <input type="hidden" id="meAnnee" value="{{ annee_active }}">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" onclick="ouvrirRapportModesEncaissement('pdf')">
+                        <i class="fas fa-file-pdf me-1"></i>PDF
+                    </button>
+                    <button type="button" class="btn btn-success" onclick="ouvrirRapportModesEncaissement('excel')">
                         <i class="fas fa-file-excel me-1"></i>Excel
                     </button>
                 </div>
@@ -498,6 +548,22 @@ function exportListePdf() {
     if (q) out.searchParams.set('q', q);
     if (statut) out.searchParams.set('statut', statut);
     if (annee) out.searchParams.set('annee', annee);
+    window.open(out.toString(), '_blank');
+}
+
+function ouvrirRapportModesEncaissement(format) {
+    const base = format === 'pdf'
+        ? '{% url "paiements:export_modes_encaissement_pdf" %}'
+        : '{% url "paiements:export_modes_encaissement_excel" %}';
+    const out = new URL(base, window.location.origin);
+    const classe = document.getElementById('meClasse').value;
+    const du = document.getElementById('meDu').value;
+    const au = document.getElementById('meAu').value;
+    const annee = document.getElementById('meAnnee').value;
+    if (classe) out.searchParams.set('classe_id', classe);
+    if (!classe && annee) out.searchParams.set('annee_scolaire', annee);
+    if (du) out.searchParams.set('du', du);
+    if (au) out.searchParams.set('au', au);
     window.open(out.toString(), '_blank');
 }
 

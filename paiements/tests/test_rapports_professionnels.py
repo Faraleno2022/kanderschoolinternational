@@ -329,6 +329,63 @@ class ProfessionalReportsTests(TestCase):
         self.assertEqual(workbook['Portefeuille élèves'].max_row, 8)
         self.assertEqual(workbook['Journal relances'].max_row, 6)
 
+    def test_exports_modes_encaissement_regroupent_les_paiements_valides(self):
+        mode_especes = ModePaiement.objects.create(nom='Espèces rapport')
+        paiement_especes = self._payment(
+            self.students[1], 'RAP-REC-ESPECES', '50000', 'VALIDE',
+            date(2026, 1, 24),
+        )
+        paiement_especes.mode_paiement = mode_especes
+        paiement_especes.reference_externe = ''
+        paiement_especes.save(update_fields=['mode_paiement', 'reference_externe'])
+        paiement_attente = self._payment(
+            self.students[1], 'RAP-REC-ATTENTE', '90000', 'EN_ATTENTE',
+            date(2026, 1, 25),
+        )
+        paiement_attente.mode_paiement = mode_especes
+        paiement_attente.save(update_fields=['mode_paiement'])
+
+        params = {'classe_id': self.classe.pk, 'au': self.cutoff.isoformat()}
+        response = self.client.get(
+            reverse('paiements:export_modes_encaissement_excel'), params,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content.startswith(b'PK'))
+        workbook = load_workbook(BytesIO(response.content), data_only=True)
+        self.assertEqual(
+            workbook.sheetnames,
+            ['Synthèse par mode', 'Détail des encaissements'],
+        )
+        summary_rows = list(
+            workbook['Synthèse par mode'].iter_rows(min_row=6, values_only=True)
+        )
+        summary = {row[0]: row for row in summary_rows}
+        self.assertEqual(summary['Espèces rapport'][1], 1)
+        self.assertEqual(summary['Espèces rapport'][2], 50000)
+        self.assertEqual(summary['Mobile Money rapport'][1], 2)
+        self.assertEqual(summary['Mobile Money rapport'][2], 400000)
+        self.assertAlmostEqual(summary['Mobile Money rapport'][3], 400000 / 450000)
+        self.assertEqual(summary['TOTAL'][1], 3)
+        self.assertEqual(summary['TOTAL'][2], 450000)
+
+        receipts = {
+            row[2]
+            for row in workbook['Détail des encaissements'].iter_rows(
+                min_row=6, values_only=True,
+            )
+        }
+        self.assertIn('RAP-REC-ESPECES', receipts)
+        self.assertNotIn('RAP-REC-ATTENTE', receipts)
+
+        pdf_response = self.client.get(
+            reverse('paiements:export_modes_encaissement_pdf'), params,
+        )
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
+        self.assertTrue(pdf_response.content.startswith(b'%PDF'))
+        self.assertGreater(len(pdf_response.content), 5000)
+
     def test_filtres_invalides_retournent_une_erreur_400(self):
         response = self.client.get(
             reverse('paiements:export_recouvrement_pdf'),
@@ -347,6 +404,11 @@ class ProfessionalReportsTests(TestCase):
         simple_user.profil.save(update_fields=['peut_consulter_rapports'])
         self.client.force_login(simple_user)
 
-        response = self.client.get(reverse('paiements:export_recouvrement_pdf'))
-
-        self.assertEqual(response.status_code, 403)
+        for route in (
+            'export_recouvrement_pdf',
+            'export_modes_encaissement_pdf',
+            'export_modes_encaissement_excel',
+        ):
+            with self.subTest(route=route):
+                response = self.client.get(reverse(f'paiements:{route}'))
+                self.assertEqual(response.status_code, 403)
