@@ -13,6 +13,8 @@ from .views_rapport_comptable import (
 from .rapports_professionnels import (
     export_comptabilite_excel,
     export_comptabilite_pdf,
+    export_modes_encaissement_excel,
+    export_modes_encaissement_pdf,
     export_recouvrement_excel,
     export_recouvrement_pdf,
 )
@@ -53,6 +55,8 @@ urlpatterns = [
     path('export/recap-par-classe/excel/', views.export_recap_par_classe_excel, name='export_recap_par_classe_excel'),
     path('export/comptabilite/pdf/', export_comptabilite_pdf, name='export_comptabilite_pdf'),
     path('export/comptabilite/excel/', export_comptabilite_excel, name='export_comptabilite_excel'),
+    path('export/modes-encaissement/pdf/', export_modes_encaissement_pdf, name='export_modes_encaissement_pdf'),
+    path('export/modes-encaissement/excel/', export_modes_encaissement_excel, name='export_modes_encaissement_excel'),
     path('export/recouvrement/pdf/', export_recouvrement_pdf, name='export_recouvrement_pdf'),
     path('export/recouvrement/excel/', export_recouvrement_excel, name='export_recouvrement_excel'),
     # Export par période (Excel)
