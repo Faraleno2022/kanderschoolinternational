@@ -456,7 +456,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedType = typeEnseignantSelect.value;
         
         if (selectedType === 'SECONDAIRE') {
-            // Enseignant du secondaire : taux horaire + heures mensuelles
+            // Enseignant du secondaire : taux horaire obligatoire, heures
+            // mensuelles globales optionnelles.
             salaireFixeField.classList.remove('show');
             tauxHoraireField.classList.add('show');
             heuresMensuellesField.classList.add('show');
@@ -464,11 +465,6 @@ document.addEventListener('DOMContentLoaded', function() {
             // Vider le champ salaire fixe
             document.getElementById('{{ form.salaire_fixe.id_for_label }}').value = '';
             
-            // Mettre une valeur par défaut pour les heures mensuelles si vide
-            const heuresMensuellesInput = document.getElementById('{{ form.heures_mensuelles.id_for_label }}');
-            if (!heuresMensuellesInput.value) {
-                heuresMensuellesInput.value = '120'; // 120 heures par mois par défaut
-            }
         } else if (selectedType) {
             // Autres types : salaire fixe + heures mensuelles optionnelles
             tauxHoraireField.classList.remove('show');

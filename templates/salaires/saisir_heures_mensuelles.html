@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Heures mensuelles - {{ periode.nom_periode }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-clock text-primary me-2"></i>Heures mensuelles</h2>
+            <p class="text-muted mb-0">
+                {{ periode.nom_periode }} · {{ periode.ecole.nom }}
+            </p>
+        </div>
+        <a href="{% url 'salaires:gestion_periodes' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Retour aux périodes
+        </a>
+    </div>
+
+    <div class="alert alert-info">
+        <strong>Deux modes de calcul sont disponibles.</strong>
+        Le mode « Pointages » additionne automatiquement les heures d'arrivée et de départ du mois.
+        Le mode « Total mensuel » utilise le nombre d'heures saisi ici et remplace le cumul des
+        pointages uniquement pour cette période. Les salaires fixes du primaire et des cadres ne
+        sont jamais modifiés par cette page.
+    </div>
+
+    <form method="post" id="heures-mensuelles-form">
+        {% csrf_token %}
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Enseignants payés au taux horaire</h5>
+                <span class="badge bg-primary">{{ lignes|length }} enseignant(s)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Enseignant</th>
+                            <th class="text-end">Taux horaire</th>
+                            <th class="text-end">Cumul pointé</th>
+                            <th style="min-width: 210px;">Mode de calcul</th>
+                            <th style="min-width: 150px;">Total mensuel</th>
+                            <th class="text-end">Salaire calculé</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ligne in lignes %}
+                        <tr class="salary-row"
+                            data-rate="{{ ligne.enseignant.taux_horaire|default:0 }}"
+                            data-pointage="{{ ligne.heures_pointage|default:0 }}">
+                            <td>
+                                <strong>{{ ligne.enseignant.nom_complet }}</strong>
+                                <div class="small text-muted">
+                                    {% if ligne.etat and ligne.etat.valide %}
+                                    <span class="badge bg-success">Salaire validé</span>
+                                    {% else %}
+                                    {{ ligne.enseignant.get_type_enseignant_display }}
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="text-end fw-semibold">
+                                {{ ligne.enseignant.taux_horaire|floatformat:0|intcomma }} GNF/h
+                            </td>
+                            <td class="text-end">
+                                <span class="badge bg-info text-dark">{{ ligne.heures_pointage|floatformat:2 }} h</span>
+                            </td>
+                            <td>
+                                <select name="source_{{ ligne.enseignant.id }}"
+                                        class="form-select source-heures"
+                                        {% if ligne.etat and ligne.etat.valide %}disabled{% endif %}>
+                                    <option value="{{ source_pointage }}"
+                                            {% if ligne.source == source_pointage %}selected{% endif %}>
+                                        Pointages arrivée / départ
+                                    </option>
+                                    <option value="{{ source_mensuel }}"
+                                            {% if ligne.source == source_mensuel %}selected{% endif %}>
+                                        Total mensuel saisi
+                                    </option>
+                                </select>
+                                {% if ligne.etat and ligne.etat.valide %}
+                                <input type="hidden" name="source_{{ ligne.enseignant.id }}" value="{{ ligne.source }}">
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="input-group">
+                                    <input type="number"
+                                           name="heures_{{ ligne.enseignant.id }}"
+                                           class="form-control heures-globales"
+                                           min="0" max="744" step="0.25"
+                                           value="{{ ligne.heures_proposees }}"
+                                           placeholder="Ex. 120"
+                                           {% if ligne.etat and ligne.etat.valide %}disabled{% endif %}>
+                                    <span class="input-group-text">h</span>
+                                </div>
+                            </td>
+                            <td class="text-end fw-bold text-primary salaire-estime">
+                                {{ ligne.salaire_estime|floatformat:0|intcomma }} GNF
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-5">
+                                Aucun enseignant actif payé au taux horaire pour cette période.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if lignes %}
+                    <tfoot class="table-light">
+                        <tr>
+                            <th colspan="5" class="text-end">Total estimé</th>
+                            <th class="text-end text-primary" id="total-estime">
+                                {{ total_estime|floatformat:0|intcomma }} GNF
+                            </th>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+
+        {% if lignes %}
+        <div class="d-flex justify-content-end gap-2 mt-4">
+            <a href="{% url 'salaires:gestion_periodes' %}" class="btn btn-outline-secondary">
+                Annuler
+            </a>
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="fas fa-calculator me-1"></i>
+                Enregistrer et recalculer les salaires
+            </button>
+        </div>
+        {% endif %}
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const rows = document.querySelectorAll('.salary-row');
+    const pointageValue = '{{ source_pointage }}';
+
+    function numberValue(value) {
+        const parsed = Number(String(value || '0').replace(',', '.'));
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function formatMoney(value) {
+        return Math.round(value).toLocaleString('fr-FR') + ' GNF';
+    }
+
+    function updateRow(row) {
+        const source = row.querySelector('.source-heures');
+        const hoursInput = row.querySelector('.heures-globales');
+        const salaryCell = row.querySelector('.salaire-estime');
+        if (!source || !hoursInput || !salaryCell) return 0;
+
+        const usesPointage = source.value === pointageValue;
+        hoursInput.disabled = usesPointage || source.disabled;
+        const hours = usesPointage
+            ? numberValue(row.dataset.pointage)
+            : numberValue(hoursInput.value);
+        const salary = hours * numberValue(row.dataset.rate);
+        salaryCell.textContent = formatMoney(salary);
+        return salary;
+    }
+
+    function updateTotal() {
+        let total = 0;
+        rows.forEach(row => { total += updateRow(row); });
+        const totalCell = document.getElementById('total-estime');
+        if (totalCell) totalCell.textContent = formatMoney(total);
+    }
+
+    rows.forEach(row => {
+        row.querySelector('.source-heures')?.addEventListener('change', updateTotal);
+        row.querySelector('.heures-globales')?.addEventListener('input', updateTotal);
+    });
+    updateTotal();
+});
+</script>
+{% endblock %}

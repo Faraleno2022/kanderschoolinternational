@@ -14,6 +14,7 @@ class TypeEnseignant(models.TextChoices):
     MATERNELLE = 'MATERNELLE', 'Maternelle'
     PRIMAIRE = 'PRIMAIRE', 'Primaire'
     SECONDAIRE = 'SECONDAIRE', 'Secondaire (taux horaire)'
+    CADRE = 'CADRE', 'Cadre / personnel administratif'
     ADMINISTRATEUR = 'ADMINISTRATEUR', 'Administrateur'
 
 
@@ -23,6 +24,13 @@ class StatutEnseignant(models.TextChoices):
     CONGE = 'CONGE', 'En congé'
     SUSPENDU = 'SUSPENDU', 'Suspendu'
     DEMISSIONNAIRE = 'DEMISSIONNAIRE', 'Démissionnaire'
+
+
+class SourceHeuresSalaire(models.TextChoices):
+    """Origine des heures retenues pour calculer un état de salaire."""
+    POINTAGE = 'POINTAGE', 'Pointages arrivée / départ'
+    MENSUEL = 'MENSUEL', 'Saisie globale des heures mensuelles'
+    FIXE = 'FIXE', 'Salaire fixe négocié'
 
 
 class Enseignant(SyncTrackedModel):
@@ -118,6 +126,7 @@ class Enseignant(SyncTrackedModel):
             TypeEnseignant.GARDERIE,
             TypeEnseignant.MATERNELLE,
             TypeEnseignant.PRIMAIRE,
+            TypeEnseignant.CADRE,
             TypeEnseignant.ADMINISTRATEUR
         ]
     
@@ -349,6 +358,13 @@ class EtatSalaire(SyncTrackedModel):
         verbose_name="Taux horaire appliqué",
         help_text="Taux conservé au moment du calcul pour l'historique",
         validators=[MinValueValidator(Decimal('0'))],
+    )
+    source_heures = models.CharField(
+        max_length=20,
+        choices=SourceHeuresSalaire.choices,
+        default=SourceHeuresSalaire.POINTAGE,
+        verbose_name="Source des heures",
+        help_text="Indique si le salaire vient des pointages ou d'une saisie mensuelle globale",
     )
     
     # Montants
@@ -664,7 +680,6 @@ class DetailHeuresClasse(SyncTrackedModel):
         verbose_name="Taux horaire appliqué",
         validators=[MinValueValidator(Decimal('0'))],
     )
-    
     montant = models.DecimalField(
         max_digits=10, 
         decimal_places=2,
