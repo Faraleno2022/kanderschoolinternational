@@ -320,6 +320,10 @@
                         <span class="fw-bold">{{ etat.total_heures }} h</span>
                     </div>
                     <div class="breakdown-item calculation-detail">
+                        <span><i class="fas fa-database me-1"></i>Source des heures:</span>
+                        <span class="fw-bold">{{ etat.get_source_heures_display }}</span>
+                    </div>
+                    <div class="breakdown-item calculation-detail">
                         <span><i class="fas fa-calculator me-1"></i>Taux horaire:</span>
                         <span class="fw-bold">{{ etat.taux_horaire_applique|intcomma }} GNF/h</span>
                     </div>

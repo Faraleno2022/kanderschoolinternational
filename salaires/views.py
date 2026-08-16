@@ -2,6 +2,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, Http404
+from django.urls import reverse
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Sum, Count, Avg
@@ -22,7 +23,8 @@ from reportlab.lib.units import cm
 
 from .models import (
     Enseignant, AffectationClasse, PeriodeSalaire, 
-    EtatSalaire, DetailHeuresClasse, TypeEnseignant, PresenceEnseignant
+    EtatSalaire, DetailHeuresClasse, TypeEnseignant, PresenceEnseignant,
+    SourceHeuresSalaire,
 )
 from .forms import (
     AffectationClasseForm,
@@ -30,7 +32,12 @@ from .forms import (
     EtatSalaireAjustementForm,
     PresenceForm,
 )
-from .services import calculer_etat_salaire, enseignants_eligibles
+from .services import (
+    arrondir_montant,
+    calculer_etat_salaire,
+    enseignants_eligibles,
+    heures_reellement_travaillees,
+)
 from eleves.models import Ecole, Classe
 from utilisateurs.utils import user_is_admin, user_school
 from utilisateurs.permissions import can_add_teachers
@@ -997,6 +1004,159 @@ def valider_etat_salaire(request, etat_id):
 
 
 @login_required
+@require_school_object(model=PeriodeSalaire, pk_kwarg='periode_id', field_path='ecole')
+def saisir_heures_mensuelles(request, periode_id):
+    """Saisir en lot les heures mensuelles des enseignants au taux horaire."""
+    periode = get_object_or_404(
+        PeriodeSalaire.objects.select_related('ecole'),
+        id=periode_id,
+    )
+    if periode.cloturee:
+        messages.error(
+            request,
+            "Les heures d'une période clôturée ne peuvent plus être modifiées.",
+        )
+        return redirect('salaires:gestion_periodes')
+
+    enseignants = list(
+        enseignants_eligibles(periode)
+        .filter(type_enseignant=TypeEnseignant.SECONDAIRE)
+    )
+    etats = {
+        etat.enseignant_id: etat
+        for etat in EtatSalaire.objects.filter(
+            periode=periode,
+            enseignant_id__in=[enseignant.id for enseignant in enseignants],
+        )
+    }
+
+    if request.method == 'POST':
+        saisies = []
+        erreurs = []
+        for enseignant in enseignants:
+            if etats.get(enseignant.id) and etats[enseignant.id].valide:
+                continue
+            source = request.POST.get(
+                f'source_{enseignant.id}',
+                SourceHeuresSalaire.POINTAGE,
+            )
+            if source not in {
+                SourceHeuresSalaire.POINTAGE,
+                SourceHeuresSalaire.MENSUEL,
+            }:
+                erreurs.append(
+                    f"Mode de calcul invalide pour {enseignant.nom_complet}."
+                )
+                continue
+
+            heures = None
+            if source == SourceHeuresSalaire.MENSUEL:
+                valeur = (request.POST.get(f'heures_{enseignant.id}') or '').strip()
+                try:
+                    heures = Decimal(valeur)
+                except (InvalidOperation, TypeError):
+                    erreurs.append(
+                        f"Renseignez des heures valides pour {enseignant.nom_complet}."
+                    )
+                    continue
+                if heures < 0 or heures > Decimal('744'):
+                    erreurs.append(
+                        f"Les heures de {enseignant.nom_complet} doivent être comprises entre 0 et 744."
+                    )
+                    continue
+
+            saisies.append((enseignant, source, heures))
+
+        if not erreurs:
+            calculs = 0
+            ignores = 0
+            with transaction.atomic():
+                periode = PeriodeSalaire.objects.select_for_update().get(pk=periode.pk)
+                if periode.cloturee:
+                    messages.error(
+                        request,
+                        "Cette période vient d'être clôturée et ne peut plus être modifiée.",
+                    )
+                    return redirect('salaires:gestion_periodes')
+
+                for enseignant, source, heures in saisies:
+                    etat, modifie = calculer_etat_salaire(
+                        enseignant,
+                        periode,
+                        request.user,
+                        source_heures=source,
+                        heures_mensuelles=heures,
+                    )
+                    calculs += int(modifie)
+                    ignores += int(not modifie and etat.valide)
+
+            messages.success(
+                request,
+                f"Heures enregistrées et {calculs} salaire(s) recalculé(s) immédiatement."
+            )
+            if ignores:
+                messages.warning(
+                    request,
+                    f"{ignores} salaire(s) déjà validé(s) n'ont pas été modifiés."
+                )
+            return redirect(
+                f"{reverse('salaires:etats_salaire')}?periode={periode.id}"
+            )
+
+        for erreur in erreurs[:10]:
+            messages.error(request, erreur)
+
+    lignes = []
+    total_estime = Decimal('0')
+    for enseignant in enseignants:
+        etat = etats.get(enseignant.id)
+        heures_pointage = heures_reellement_travaillees(enseignant, periode)
+        source = (
+            request.POST.get(f'source_{enseignant.id}')
+            if request.method == 'POST'
+            else getattr(etat, 'source_heures', SourceHeuresSalaire.POINTAGE)
+        ) or SourceHeuresSalaire.POINTAGE
+        if source == SourceHeuresSalaire.MENSUEL:
+            heures_proposees = (
+                request.POST.get(f'heures_{enseignant.id}')
+                if request.method == 'POST'
+                else (
+                    etat.total_heures
+                    if etat and etat.total_heures is not None
+                    else enseignant.heures_mensuelles
+                )
+            )
+            try:
+                heures_calcul = Decimal(str(heures_proposees or 0))
+            except InvalidOperation:
+                heures_calcul = Decimal('0')
+        else:
+            heures_proposees = enseignant.heures_mensuelles or ''
+            heures_calcul = heures_pointage
+
+        salaire_estime = arrondir_montant(
+            heures_calcul * (enseignant.taux_horaire or Decimal('0'))
+        )
+        total_estime += salaire_estime
+        lignes.append({
+            'enseignant': enseignant,
+            'etat': etat,
+            'source': source,
+            'heures_pointage': heures_pointage,
+            'heures_proposees': heures_proposees,
+            'salaire_estime': salaire_estime,
+        })
+
+    return render(request, 'salaires/saisir_heures_mensuelles.html', {
+        'periode': periode,
+        'lignes': lignes,
+        'source_pointage': SourceHeuresSalaire.POINTAGE,
+        'source_mensuel': SourceHeuresSalaire.MENSUEL,
+        'total_estime': total_estime,
+    })
+
+
+@login_required
 @require_POST
 @require_school_object(model=EtatSalaire, pk_kwarg='etat_id', field_path='periode__ecole')
 def marquer_paye(request, etat_id):
@@ -1144,8 +1304,9 @@ def fiche_paie_pdf(request, etat_id):
         ['Salaire de base', f"{etat.salaire_base:,.0f}".replace(',', ' ')],
     ]
     
-    if etat.total_heures:
+    if etat.total_heures is not None:
         data.append(['Heures travaillées', f"{etat.total_heures}h"])
+        data.append(['Source des heures', etat.get_source_heures_display()])
         data.append(['Taux horaire', f"{etat.taux_horaire_applique or 0:,.0f}".replace(',', ' ')])
     
     if etat.primes:

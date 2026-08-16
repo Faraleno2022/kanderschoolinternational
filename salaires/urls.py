@@ -26,6 +26,11 @@ urlpatterns = [
     path('etats/export/pdf/', views.export_etats_salaire_pdf, name='export_etats_salaire_pdf'),
     path('etats/<int:etat_id>/fiche-paie/', views.fiche_paie_pdf, name='fiche_paie_pdf'),
     path('calculer/<int:periode_id>/', views.calculer_salaires, name='calculer_salaires'),
+    path(
+        'periodes/<int:periode_id>/heures-mensuelles/',
+        views.saisir_heures_mensuelles,
+        name='saisir_heures_mensuelles',
+    ),
     path('etats/<int:etat_id>/ajuster/', views.ajuster_etat_salaire, name='ajuster_etat_salaire'),
     path('valider/<int:etat_id>/', views.valider_etat_salaire, name='valider_etat_salaire'),
     path('marquer-paye/<int:etat_id>/', views.marquer_paye, name='marquer_paye'),

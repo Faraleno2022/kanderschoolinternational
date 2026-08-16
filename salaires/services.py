@@ -12,7 +12,13 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.db import transaction
 from django.db.models import Q, Sum
 
-from .models import DetailHeuresClasse, Enseignant, EtatSalaire
+from .models import (
+    DetailHeuresClasse,
+    Enseignant,
+    EtatSalaire,
+    PeriodeSalaire,
+    SourceHeuresSalaire,
+)
 
 
 HEURE = Decimal('0.01')
@@ -136,15 +142,32 @@ def salaire_fixe_proratise(enseignant, periode):
 
 
 @transaction.atomic
-def calculer_etat_salaire(enseignant, periode, utilisateur):
-    """Crée ou recalcule un état non validé et retourne ``(etat, modifie)``."""
-    etat, _ = EtatSalaire.objects.select_for_update().get_or_create(
+def calculer_etat_salaire(
+    enseignant,
+    periode,
+    utilisateur,
+    *,
+    source_heures=None,
+    heures_mensuelles=None,
+):
+    """Crée ou recalcule un état non validé et retourne ``(etat, modifie)``.
+
+    Pour un enseignant au taux horaire, une saisie mensuelle explicite est
+    conservée lors des recalculs généraux. Le passage explicite de
+    ``source_heures=POINTAGE`` permet de revenir au cumul des pointages.
+    """
+    etat, cree = EtatSalaire.objects.select_for_update().get_or_create(
         enseignant=enseignant,
         periode=periode,
         defaults={
             'calcule_par': utilisateur,
             'salaire_base': Decimal('0'),
             'salaire_net': Decimal('0'),
+            'source_heures': (
+                SourceHeuresSalaire.POINTAGE
+                if enseignant.est_taux_horaire
+                else SourceHeuresSalaire.FIXE
+            ),
         },
     )
 
@@ -154,10 +177,32 @@ def calculer_etat_salaire(enseignant, periode, utilisateur):
     etat.details_heures.all().delete()
 
     if enseignant.est_taux_horaire:
-        total_heures = heures_reellement_travaillees(enseignant, periode)
+        source = source_heures
+        if source is None:
+            source = (
+                etat.source_heures
+                if not cree and etat.source_heures == SourceHeuresSalaire.MENSUEL
+                else SourceHeuresSalaire.POINTAGE
+            )
+
+        if source == SourceHeuresSalaire.MENSUEL:
+            if heures_mensuelles is None:
+                heures_mensuelles = (
+                    etat.total_heures
+                    if not cree
+                    and etat.source_heures == SourceHeuresSalaire.MENSUEL
+                    and etat.total_heures is not None
+                    else enseignant.heures_mensuelles
+                )
+            total_heures = arrondir_heures(heures_mensuelles)
+        else:
+            source = SourceHeuresSalaire.POINTAGE
+            total_heures = heures_reellement_travaillees(enseignant, periode)
+
         taux_horaire = enseignant.taux_horaire or Decimal('0')
         etat.total_heures = total_heures
         etat.taux_horaire_applique = taux_horaire
+        etat.source_heures = source
         etat.salaire_base = arrondir_montant(total_heures * taux_horaire)
         etat.calcule_par = utilisateur
         etat.save()
@@ -176,8 +221,44 @@ def calculer_etat_salaire(enseignant, periode, utilisateur):
     else:
         etat.total_heures = None
         etat.taux_horaire_applique = None
+        etat.source_heures = SourceHeuresSalaire.FIXE
         etat.salaire_base = salaire_fixe_proratise(enseignant, periode)
         etat.calcule_par = utilisateur
         etat.save()
 
     return etat, True
+
+
+def recalculer_etat_salaire_pour_date(enseignant, jour, utilisateur):
+    """Synchronise immédiatement un pointage avec la paie du mois ouvert.
+
+    Une saisie mensuelle globale déjà choisie reste prioritaire et un état
+    validé n'est jamais modifié.
+    """
+    if not enseignant.est_taux_horaire:
+        return None, False
+
+    periode = PeriodeSalaire.objects.filter(
+        ecole=enseignant.ecole,
+        mois=jour.month,
+        annee=jour.year,
+        cloturee=False,
+    ).first()
+    if periode is None:
+        return None, False
+
+    etat = EtatSalaire.objects.filter(
+        enseignant=enseignant,
+        periode=periode,
+    ).first()
+    if etat and (
+        etat.valide or etat.source_heures == SourceHeuresSalaire.MENSUEL
+    ):
+        return etat, False
+
+    return calculer_etat_salaire(
+        enseignant,
+        periode,
+        utilisateur,
+        source_heures=SourceHeuresSalaire.POINTAGE,
+    )

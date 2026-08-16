@@ -60,7 +60,7 @@ class EnseignantForm(forms.ModelForm):
             }),
             'heures_mensuelles': forms.NumberInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'Nombre d\'heures par mois',
+                'placeholder': 'Optionnel, ex. 120 heures',
                 'step': '0.25',
                 'min': '0'
             }),
@@ -84,8 +84,11 @@ class EnseignantForm(forms.ModelForm):
         }
         help_texts = {
             'taux_horaire': 'Pour les enseignants du secondaire uniquement',
-            'salaire_fixe': 'Pour garderie, maternelle, primaire et administrateurs',
-            'heures_mensuelles': 'Nombre d\'heures de travail prévues par mois (pour calcul précis du salaire)',
+            'salaire_fixe': 'Pour garderie, maternelle, primaire, cadres et administrateurs',
+            'heures_mensuelles': (
+                "Optionnel : valeur proposée pour la saisie globale mensuelle. "
+                "Les pointages arrivée/départ peuvent être utilisés à la place."
+            ),
             'date_embauche': 'Date d\'entrée en fonction',
         }
 
@@ -125,10 +128,6 @@ class EnseignantForm(forms.ModelForm):
             if not taux_horaire:
                 raise ValidationError({
                     'taux_horaire': 'Le taux horaire est obligatoire pour les enseignants du secondaire.'
-                })
-            if not heures_mensuelles:
-                raise ValidationError({
-                    'heures_mensuelles': 'Le nombre d\'heures mensuelles est obligatoire pour les enseignants du secondaire.'
                 })
             if salaire_fixe:
                 cleaned_data['salaire_fixe'] = None  # Effacer le salaire fixe
