@@ -8,8 +8,10 @@ from datetime import date, timedelta
 from decimal import Decimal
 from xml.sax.saxutils import escape
 
-from django.db.models import Sum
+from django.core.paginator import Paginator
+from django.db.models import Q, Sum
 from django.http import HttpResponse
+from django.shortcuts import render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
@@ -25,7 +27,9 @@ from .allocation import (
     allocate_cash_and_discounts,
     registration_kind_for_type,
 )
-from .models import EcheancierPaiement, Paiement, PaiementRemise, Relance
+from .models import (
+    EcheancierPaiement, ModePaiement, Paiement, PaiementRemise, Relance,
+)
 
 
 ZERO = Decimal('0')
@@ -106,17 +110,19 @@ def _parse_filters(request):
         raise ValueError("La date de début doit précéder la date de fin.")
 
     classe_id = (request.GET.get('classe_id') or '').strip()
-    classes = filter_by_user_school(
+    mode_id = (request.GET.get('mode_id') or '').strip()
+    search = (request.GET.get('q') or '').strip()[:120]
+    authorized_classes = list(filter_by_user_school(
         Classe.objects.select_related('ecole').order_by('ecole__nom', 'niveau', 'nom'),
         request.user,
         'ecole',
-    )
+    ))
+    classes = authorized_classes
     if classe_id:
         if not classe_id.isdigit():
             raise ValueError("La classe sélectionnée est invalide.")
-        classes = classes.filter(pk=int(classe_id))
+        classes = [item for item in classes if item.pk == int(classe_id)]
 
-    classes = list(classes)
     if classe_id and not classes:
         raise ValueError("La classe sélectionnée est introuvable ou non autorisée.")
     school = classes[0].ecole if classes else user_school(request.user)
@@ -134,8 +140,40 @@ def _parse_filters(request):
 
     if school_year:
         classes = [item for item in classes if item.annee_scolaire == school_year]
+        available_classes = [
+            item for item in authorized_classes
+            if item.annee_scolaire == school_year
+        ]
+    else:
+        available_classes = authorized_classes
+    if classe_id and not classes:
+        raise ValueError(
+            "La classe sélectionnée n'appartient pas à l'année scolaire demandée."
+        )
 
     class_ids = [item.pk for item in classes]
+    available_class_ids = [item.pk for item in available_classes]
+    mode_ids = (
+        Paiement.objects
+        .filter(
+            eleve__classe_id__in=available_class_ids,
+            statut='VALIDE',
+            mode_paiement_id__isnull=False,
+        )
+        .values_list('mode_paiement_id', flat=True)
+        .distinct()
+    )
+    mode_options = list(
+        ModePaiement.objects.filter(pk__in=mode_ids).order_by('nom')
+    )
+    if mode_id:
+        if not mode_id.isdigit():
+            raise ValueError("Le mode d'encaissement sélectionné est invalide.")
+        if not any(item.pk == int(mode_id) for item in mode_options):
+            raise ValueError(
+                "Le mode d'encaissement sélectionné est introuvable ou non autorisé."
+            )
+
     school_ids = sorted({item.ecole_id for item in classes})
     if len(classes) == 1:
         scope_label = f"Classe : {classes[0].nom}"
@@ -156,7 +194,12 @@ def _parse_filters(request):
     generated_at = timezone.localtime()
     return {
         'classes': classes,
+        'available_classes': available_classes,
         'class_ids': class_ids,
+        'selected_class_id': int(classe_id) if classe_id else None,
+        'mode_options': mode_options,
+        'selected_mode_id': int(mode_id) if mode_id else None,
+        'search': search,
         'school': school if len(school_ids) <= 1 else None,
         'school_name': (
             school.nom if school and len(school_ids) <= 1 else 'ÉTABLISSEMENTS AUTORISÉS'
@@ -202,6 +245,20 @@ def _payments_queryset(scope):
         queryset = queryset.filter(date_paiement__gte=scope['start'])
     if scope['end']:
         queryset = queryset.filter(date_paiement__lte=scope['end'])
+    if scope.get('selected_mode_id'):
+        queryset = queryset.filter(mode_paiement_id=scope['selected_mode_id'])
+    if scope.get('search'):
+        search = scope['search']
+        queryset = queryset.filter(
+            Q(numero_recu__icontains=search)
+            | Q(reference_externe__icontains=search)
+            | Q(eleve__nom__icontains=search)
+            | Q(eleve__prenom__icontains=search)
+            | Q(eleve__matricule__icontains=search)
+            | Q(eleve__classe__nom__icontains=search)
+            | Q(type_paiement__nom__icontains=search)
+            | Q(mode_paiement__nom__icontains=search)
+        )
     return queryset
 
 
@@ -346,6 +403,7 @@ def collect_accounting_data(request):
         payment_rows.append({
             'date': payment.date_paiement,
             'receipt': payment.numero_recu,
+            'student_id': payment.eleve_id,
             'student': payment.eleve.nom_complet,
             'matricule': payment.eleve.matricule,
             'class': class_name,
@@ -1881,6 +1939,96 @@ def _collect_payment_modes_data(request):
     data = collect_accounting_data(request)
     data['report_reference'] = _make_report_reference('ME', data['generated_at'])
     return data
+
+
+def _payment_mode_student_rows(data):
+    """Agrège les encaissements par mode et par élève pour la vue écran."""
+    grouped = {}
+    students_by_mode = defaultdict(set)
+    for payment in data['payment_rows']:
+        key = (payment['mode'], payment['matricule'])
+        row = grouped.setdefault(key, {
+            'mode': payment['mode'],
+            'student_id': payment['student_id'],
+            'matricule': payment['matricule'],
+            'student': payment['student'],
+            'class': payment['class'],
+            'count': 0,
+            'amount': ZERO,
+            'first_date': payment['date'],
+            'last_date': payment['date'],
+            'last_receipt': payment['receipt'],
+            'reference_missing': 0,
+        })
+        row['count'] += 1
+        row['amount'] += payment['amount']
+        row['first_date'] = min(row['first_date'], payment['date'])
+        if payment['date'] >= row['last_date']:
+            row['last_date'] = payment['date']
+            row['last_receipt'] = payment['receipt']
+        if payment['reference_status'] == 'À compléter':
+            row['reference_missing'] += 1
+        students_by_mode[payment['mode']].add(payment['matricule'])
+
+    rows = sorted(
+        grouped.values(),
+        key=lambda item: (
+            item['mode'].casefold(), item['class'].casefold(),
+            item['student'].casefold(), item['matricule'],
+        ),
+    )
+    for row in rows:
+        row['average'] = row['amount'] / row['count'] if row['count'] else ZERO
+
+    mode_rows = []
+    for label, item in data['by_mode'].items():
+        mode_rows.append({
+            'label': label,
+            'count': item['count'],
+            'student_count': len(students_by_mode[label]),
+            'amount': item['amount'],
+            'percentage': (
+                item['amount'] / data['total_validated'] * 100
+                if data['total_validated'] else ZERO
+            ),
+            'average': item['amount'] / item['count'] if item['count'] else ZERO,
+            'reference_missing': item['reference_missing'],
+            'reference_missing_amount': item['reference_missing_amount'],
+        })
+    return rows, mode_rows
+
+
+@can_view_reports
+def rapport_modes_encaissement(request):
+    """Affiche les soldes encaissés et les élèves, avec filtres dynamiques."""
+    try:
+        data = _collect_payment_modes_data(request)
+    except ValueError as exc:
+        return _bad_request(exc)
+
+    student_rows, mode_rows = _payment_mode_student_rows(data)
+    paginator = Paginator(student_rows, 50)
+    page_obj = paginator.get_page(request.GET.get('page') or 1)
+    context = {
+        'titre_page': "Encaissements par mode de paiement",
+        'data': data,
+        'mode_rows': mode_rows,
+        'student_rows': page_obj.object_list,
+        'page_obj': page_obj,
+        'student_count': len({item['matricule'] for item in student_rows}),
+        'mode_count': len(mode_rows),
+        'average_payment': (
+            data['total_validated'] / data['validated_count']
+            if data['validated_count'] else ZERO
+        ),
+    }
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return render(
+            request,
+            'paiements/_modes_encaissement_resultats.html',
+            context,
+        )
+    return render(request, 'paiements/rapport_modes_encaissement.html', context)
 
 
 @can_view_reports

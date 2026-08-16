@@ -66,9 +66,15 @@
             <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#rapportComptableModal">
                 <i class="fas fa-file-invoice-dollar me-1"></i>Rapport comptable
             </button>
-            <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#modesEncaissementModal">
-                <i class="fas fa-cash-register me-1"></i>Modes d'encaissement
-            </button>
+            <div class="btn-group">
+                <a href="{% url 'paiements:rapport_modes_encaissement' %}" class="btn btn-outline-success">
+                    <i class="fas fa-cash-register me-1"></i>Modes d'encaissement
+                </a>
+                <button type="button" class="btn btn-outline-success" data-bs-toggle="modal"
+                        data-bs-target="#modesEncaissementModal" title="Exporter par mode">
+                    <i class="fas fa-download"></i>
+                </button>
+            </div>
             <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rapportRecouvrementModal">
                 <i class="fas fa-hand-holding-usd me-1"></i>Recouvrement
             </button>
@@ -167,6 +173,9 @@
                     <input type="hidden" id="meAnnee" value="{{ annee_active }}">
                 </div>
                 <div class="modal-footer">
+                    <a href="{% url 'paiements:rapport_modes_encaissement' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-table me-1"></i>Afficher le tableau
+                    </a>
                     <button type="button" class="btn btn-danger" onclick="ouvrirRapportModesEncaissement('pdf')">
                         <i class="fas fa-file-pdf me-1"></i>PDF
                     </button>

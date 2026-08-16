@@ -386,6 +386,61 @@ class ProfessionalReportsTests(TestCase):
         self.assertTrue(pdf_response.content.startswith(b'%PDF'))
         self.assertGreater(len(pdf_response.content), 5000)
 
+    def test_tableau_modes_affiche_soldes_eleves_et_filtres_dynamiques(self):
+        mode_especes = ModePaiement.objects.create(nom='Espèces tableau')
+        paiement_especes = self._payment(
+            self.students[1], 'RAP-TABLEAU-001', '50000', 'VALIDE',
+            date(2026, 1, 24),
+        )
+        paiement_especes.mode_paiement = mode_especes
+        paiement_especes.reference_externe = ''
+        paiement_especes.save(update_fields=['mode_paiement', 'reference_externe'])
+        params = {'classe_id': self.classe.pk, 'au': self.cutoff.isoformat()}
+
+        response = self.client.get(
+            reverse('paiements:rapport_modes_encaissement'), params,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['data']['total_validated'], Decimal('450000'))
+        self.assertEqual(response.context['student_count'], 3)
+        self.assertEqual(response.context['mode_count'], 2)
+        self.assertContains(response, 'RAP-TABLEAU-001')
+        self.assertContains(response, 'Espèces tableau')
+
+        filtered = self.client.get(
+            reverse('paiements:rapport_modes_encaissement'),
+            {**params, 'mode_id': mode_especes.pk},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(filtered.status_code, 200)
+        self.assertTemplateUsed(
+            filtered, 'paiements/_modes_encaissement_resultats.html',
+        )
+        self.assertEqual(filtered.context['data']['total_validated'], Decimal('50000'))
+        self.assertEqual(filtered.context['student_count'], 1)
+        self.assertContains(filtered, 'RAP-TABLEAU-001')
+        self.assertNotContains(filtered, 'RAP-REC-001')
+
+        searched = self.client.get(
+            reverse('paiements:rapport_modes_encaissement'),
+            {**params, 'q': 'Aminata'},
+        )
+        self.assertEqual(searched.context['data']['total_validated'], Decimal('80000'))
+        self.assertEqual(searched.context['student_count'], 1)
+
+        excel = self.client.get(
+            reverse('paiements:export_modes_encaissement_excel'),
+            {**params, 'mode_id': mode_especes.pk},
+        )
+        workbook = load_workbook(BytesIO(excel.content), data_only=True)
+        summary_rows = list(
+            workbook['Synthèse par mode'].iter_rows(min_row=6, values_only=True)
+        )
+        summary = {row[0]: row for row in summary_rows}
+        self.assertEqual(summary['Espèces tableau'][2], 50000)
+        self.assertNotIn('Mobile Money rapport', summary)
+
     def test_filtres_invalides_retournent_une_erreur_400(self):
         response = self.client.get(
             reverse('paiements:export_recouvrement_pdf'),
@@ -406,6 +461,7 @@ class ProfessionalReportsTests(TestCase):
 
         for route in (
             'export_recouvrement_pdf',
+            'rapport_modes_encaissement',
             'export_modes_encaissement_pdf',
             'export_modes_encaissement_excel',
         ):

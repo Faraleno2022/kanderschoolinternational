@@ -1,0 +1,175 @@
+{% load humanize %}
+
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-sm-6">
+        <div class="mode-kpi">
+            <div class="label">Solde total encaissé</div>
+            <div class="value">{{ data.total_validated|floatformat:0|intcomma }} GNF</div>
+            <small class="text-muted">Paiements validés uniquement</small>
+        </div>
+    </div>
+    <div class="col-xl-3 col-sm-6">
+        <div class="mode-kpi">
+            <div class="label">Élèves concernés</div>
+            <div class="value">{{ student_count|intcomma }}</div>
+            <small class="text-muted">Après application des filtres</small>
+        </div>
+    </div>
+    <div class="col-xl-3 col-sm-6">
+        <div class="mode-kpi">
+            <div class="label">Opérations / modes</div>
+            <div class="value">{{ data.validated_count|intcomma }} / {{ mode_count|intcomma }}</div>
+            <small class="text-muted">Encaissement moyen : {{ average_payment|floatformat:0|intcomma }} GNF</small>
+        </div>
+    </div>
+    <div class="col-xl-3 col-sm-6">
+        <div class="mode-kpi">
+            <div class="label">Montant à justifier</div>
+            <div class="value {% if data.reference_missing_amount %}text-danger{% endif %}">
+                {{ data.reference_missing_amount|floatformat:0|intcomma }} GNF
+            </div>
+            <small class="text-muted">{{ data.reference_missing_count }} référence(s) manquante(s)</small>
+        </div>
+    </div>
+</div>
+
+{% if data.period_adjusted %}
+<div class="alert alert-warning py-2">
+    La date future demandée a été ramenée au {{ data.end|date:'d/m/Y' }}.
+</div>
+{% endif %}
+
+<div class="card mode-panel mb-4">
+    <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+        <h5 class="mb-0"><i class="fas fa-balance-scale text-primary me-2"></i>Soldes par mode</h5>
+        <span class="text-muted small">{{ data.period_label }}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table mode-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Mode d'encaissement</th>
+                    <th class="text-end">Opérations</th>
+                    <th class="text-end">Élèves</th>
+                    <th class="text-end">Solde encaissé</th>
+                    <th class="text-end">Part</th>
+                    <th class="text-end">Montant moyen</th>
+                    <th class="text-end">Réf. manquantes</th>
+                    <th class="text-end">À justifier</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in mode_rows %}
+                <tr>
+                    <td><span class="badge mode-badge">{{ row.label }}</span></td>
+                    <td class="text-end">{{ row.count|intcomma }}</td>
+                    <td class="text-end">{{ row.student_count|intcomma }}</td>
+                    <td class="text-end fw-bold">{{ row.amount|floatformat:0|intcomma }} GNF</td>
+                    <td class="text-end">{{ row.percentage|floatformat:1 }} %</td>
+                    <td class="text-end">{{ row.average|floatformat:0|intcomma }} GNF</td>
+                    <td class="text-end {% if row.reference_missing %}text-danger fw-bold{% endif %}">{{ row.reference_missing }}</td>
+                    <td class="text-end {% if row.reference_missing_amount %}text-danger fw-bold{% endif %}">
+                        {{ row.reference_missing_amount|floatformat:0|intcomma }} GNF
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8" class="text-center text-muted py-4">Aucun encaissement validé pour ces filtres.</td></tr>
+                {% endfor %}
+            </tbody>
+            {% if mode_rows %}
+            <tfoot class="table-light fw-bold">
+                <tr>
+                    <td>TOTAL</td>
+                    <td class="text-end">{{ data.validated_count|intcomma }}</td>
+                    <td class="text-end">{{ student_count|intcomma }}</td>
+                    <td class="text-end">{{ data.total_validated|floatformat:0|intcomma }} GNF</td>
+                    <td class="text-end">100 %</td>
+                    <td class="text-end">{{ average_payment|floatformat:0|intcomma }} GNF</td>
+                    <td class="text-end">{{ data.reference_missing_count }}</td>
+                    <td class="text-end">{{ data.reference_missing_amount|floatformat:0|intcomma }} GNF</td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    </div>
+</div>
+
+<div class="card mode-panel">
+    <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+        <div>
+            <h5 class="mb-1"><i class="fas fa-user-graduate text-success me-2"></i>Élèves par mode d'encaissement</h5>
+            <small class="text-muted">Une ligne par élève et par mode utilisé.</small>
+        </div>
+        <span class="badge bg-secondary">{{ page_obj.paginator.count|intcomma }} ligne(s)</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table mode-table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Mode</th>
+                    <th>Élève</th>
+                    <th>Classe</th>
+                    <th class="text-end">Opérations</th>
+                    <th class="text-end">Solde encaissé</th>
+                    <th class="text-end">Moyenne</th>
+                    <th>Premier paiement</th>
+                    <th>Dernier paiement</th>
+                    <th>Dernier reçu</th>
+                    <th class="text-center">Réf. manquantes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in student_rows %}
+                <tr>
+                    <td><span class="badge mode-badge">{{ row.mode }}</span></td>
+                    <td>
+                        <a href="{% url 'paiements:echeancier_eleve' row.student_id %}" class="fw-semibold text-decoration-none">
+                            {{ row.student }}
+                        </a>
+                        <div class="small text-muted">{{ row.matricule }}</div>
+                    </td>
+                    <td>{{ row.class }}</td>
+                    <td class="text-end">{{ row.count|intcomma }}</td>
+                    <td class="text-end fw-bold">{{ row.amount|floatformat:0|intcomma }} GNF</td>
+                    <td class="text-end">{{ row.average|floatformat:0|intcomma }} GNF</td>
+                    <td>{{ row.first_date|date:'d/m/Y' }}</td>
+                    <td>{{ row.last_date|date:'d/m/Y' }}</td>
+                    <td>{{ row.last_receipt|default:'-' }}</td>
+                    <td class="text-center">
+                        {% if row.reference_missing %}
+                        <span class="badge bg-danger">{{ row.reference_missing }}</span>
+                        {% else %}
+                        <span class="badge bg-success"><i class="fas fa-check"></i></span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="10" class="text-center text-muted py-5">Aucun élève ne correspond aux filtres sélectionnés.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <small class="text-muted">Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }}</small>
+        <nav aria-label="Pagination des élèves">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+                    <a class="page-link" href="#" data-mode-page="{% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}">Précédent</a>
+                </li>
+                {% for number in page_obj.paginator.page_range %}
+                    {% if number >= page_obj.number|add:'-2' and number <= page_obj.number|add:'2' %}
+                    <li class="page-item {% if number == page_obj.number %}active{% endif %}">
+                        <a class="page-link" href="#" data-mode-page="{{ number }}">{{ number }}</a>
+                    </li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="#" data-mode-page="{% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %}">Suivant</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
