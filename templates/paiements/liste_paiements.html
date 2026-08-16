@@ -32,7 +32,11 @@
                         <i class="fas fa-file-excel me-2"></i>Excel (récap par classe)
                     </a>
                 </li>
-                <li><a class="dropdown-item" href="?export=pdf"><i class="fas fa-file-pdf me-2"></i>PDF</a></li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="exportListePdf(); return false;">
+                        <i class="fas fa-file-pdf me-2"></i>PDF (liste affichée)
+                    </a>
+                </li>
                 <li><hr class="dropdown-divider"></li>
                 <li>
                     <a class="dropdown-item" href="#" onclick="exportTranchesParClassePdf(); return false;">
@@ -480,6 +484,20 @@ function exportListeExcel() {
     const statut = u.searchParams.get('statut');
     if (q) out.searchParams.set('q', q);
     if (statut) out.searchParams.set('statut', statut);
+    window.open(out.toString(), '_blank');
+}
+
+// Export PDF de la liste courante avec le logo de l'école.
+function exportListePdf() {
+    const u = new URL(window.location.href);
+    const base = '{% url "paiements:export_liste_paiements_pdf" %}';
+    const out = new URL(base, window.location.origin);
+    const q = u.searchParams.get('q') || (document.getElementById('q')?.value || '').trim();
+    const statut = u.searchParams.get('statut');
+    const annee = u.searchParams.get('annee') || u.searchParams.get('annee_scolaire');
+    if (q) out.searchParams.set('q', q);
+    if (statut) out.searchParams.set('statut', statut);
+    if (annee) out.searchParams.set('annee', annee);
     window.open(out.toString(), '_blank');
 }
 

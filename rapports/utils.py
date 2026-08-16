@@ -75,7 +75,14 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
     - Filigrane: logo agrandi (~500% largeur) centré, faible opacité si disponible
     - Entête: logo à gauche + nom de l'établissement
     """
-    width, height = A4
+    # Utiliser le format réel du document. L'ancienne valeur A4 portrait
+    # plaçait l'en-tête hors de la page pour les exports en paysage, ce qui
+    # rendait notamment le logo invisible dans « Tranches par classe ».
+    page_size = getattr(doc, 'pagesize', None) or getattr(c, '_pagesize', None)
+    try:
+        width, height = page_size or A4
+    except (TypeError, ValueError):
+        width, height = A4
     logo_path = _get_logo_path(ecole)
 
     c.saveState()
