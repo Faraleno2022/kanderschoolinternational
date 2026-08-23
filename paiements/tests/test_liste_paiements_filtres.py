@@ -93,6 +93,44 @@ class ListePaiementsFiltresTests(TestCase):
             paiement.id for paiement in response.context['page_obj'].object_list
         }
 
+    @staticmethod
+    def _zone_recherche(response):
+        """Isole la zone de recherche, où les filtres doivent être visibles."""
+        html = response.content.decode('utf-8')
+        debut = html.index('<div class="search-card">')
+        return html[debut:html.index('id="paiements-results"', debut)]
+
+    def test_la_zone_de_recherche_expose_les_quatre_filtres(self):
+        response = self.client.get(self.url)
+        zone = self._zone_recherche(response)
+
+        for identifiant, libelle, defaut in (
+            ('filtreClasseRapide', 'Classe', 'Toutes les classes'),
+            ('filtreNiveauRapide', 'Niveau de paiement', 'Tous'),
+            ('filtreModeRapide', 'Type de paiement (mode)', 'Tous les modes'),
+            ('filtreNatureRapide', 'Nature (type)', 'Toutes les natures'),
+        ):
+            self.assertIn(f'id="{identifiant}"', zone)
+            self.assertIn(libelle, zone)
+            self.assertIn(f'>{defaut}</option>', zone)
+
+    def test_les_filtres_de_la_zone_de_recherche_gardent_la_selection(self):
+        response = self.client.get(self.url, {
+            'classe': self.classe_1.id,
+            'niveau': 'RESTE',
+            'mode': self.cheque.id,
+            'nature': self.tranche.id,
+        })
+        zone = self._zone_recherche(response)
+
+        # Sans cela, appliquer un filtre puis en changer un autre effacerait
+        # silencieusement le premier.
+        self.assertIn(f'value="{self.classe_1.id}" selected', zone)
+        self.assertIn('value="RESTE" selected', zone)
+        self.assertIn(f'value="{self.cheque.id}" selected', zone)
+        self.assertIn(f'value="{self.tranche.id}" selected', zone)
+        self.assertNotIn('type="hidden" name="classe"', zone)
+
     def test_modal_affiche_les_cinq_filtres_et_distingue_les_classes(self):
         response = self.client.get(self.url)
 

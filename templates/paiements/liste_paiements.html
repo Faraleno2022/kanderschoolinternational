@@ -479,10 +479,6 @@
     <!-- Recherche (une seule zone multi-critères) -->
     <div class="search-card">
         <form method="get" class="row g-3 align-items-end">
-            {% if classe_filtre %}<input type="hidden" name="classe" value="{{ classe_filtre }}">{% endif %}
-            {% if niveau_paiement %}<input type="hidden" name="niveau" value="{{ niveau_paiement }}">{% endif %}
-            {% if mode_filtre %}<input type="hidden" name="mode" value="{{ mode_filtre }}">{% endif %}
-            {% if nature_filtre %}<input type="hidden" name="nature" value="{{ nature_filtre }}">{% endif %}
             {% if statut %}<input type="hidden" name="statut" value="{{ statut }}">{% endif %}
             {% if annee_filtre %}<input type="hidden" name="annee" value="{{ annee_filtre }}">{% endif %}
             <div class="col-md-9">
@@ -495,6 +491,54 @@
                 <button type="submit" class="btn btn-primary w-100">
                     <i class="fas fa-search me-1"></i>Rechercher
                 </button>
+            </div>
+
+            <!-- Filtres rapides : mêmes critères que la fenêtre « Filtres », mais
+                 disponibles sans quitter la zone de recherche. -->
+            <div class="col-12">
+                <div class="row g-3">
+                    <div class="col-lg-3 col-md-6">
+                        <label for="filtreClasseRapide" class="form-label">Classe</label>
+                        <select class="form-select" id="filtreClasseRapide" name="classe" data-filtre-liste>
+                            <option value="">Toutes les classes</option>
+                            {% for classe in classes_filtre %}
+                            <option value="{{ classe.id }}" {% if classe.id == classe_filtre %}selected{% endif %}>
+                                {{ classe.ecole.nom }} — {{ classe.nom }} ({{ classe.annee_scolaire }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-lg-3 col-md-6">
+                        <label for="filtreNiveauRapide" class="form-label">Niveau de paiement</label>
+                        <select class="form-select" id="filtreNiveauRapide" name="niveau" data-filtre-liste>
+                            <option value="">Tous</option>
+                            <option value="RETARD" {% if niveau_paiement == 'RETARD' %}selected{% endif %}>En retard</option>
+                            <option value="RESTE" {% if niveau_paiement == 'RESTE' %}selected{% endif %}>Reste à payer</option>
+                            <option value="SOLDE" {% if niveau_paiement == 'SOLDE' %}selected{% endif %}>Soldé (à jour)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-lg-3 col-md-6">
+                        <label for="filtreModeRapide" class="form-label">Type de paiement (mode)</label>
+                        <select class="form-select" id="filtreModeRapide" name="mode" data-filtre-liste>
+                            <option value="">Tous les modes</option>
+                            {% for mode in modes_paiement %}
+                            <option value="{{ mode.id }}" {% if mode.id == mode_filtre %}selected{% endif %}>{{ mode.nom }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-lg-3 col-md-6">
+                        <label for="filtreNatureRapide" class="form-label">Nature (type)</label>
+                        <select class="form-select" id="filtreNatureRapide" name="nature" data-filtre-liste>
+                            <option value="">Toutes les natures</option>
+                            {% for nature in natures_paiement %}
+                            <option value="{{ nature.id }}" {% if nature.id == nature_filtre %}selected{% endif %}>{{ nature.nom }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
             </div>
         </form>
 
@@ -566,6 +610,22 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+
+    // Les filtres rapides rechargent la page entière : les badges « Filtres
+    // actifs » vivent hors du fragment AJAX et resteraient sinon périmés.
+    document.querySelectorAll('[data-filtre-liste]').forEach(select => {
+        select.addEventListener('change', function() {
+            const url = new URL(window.location.href);
+            const q = searchInput ? searchInput.value.trim() : '';
+            if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+            document.querySelectorAll('[data-filtre-liste]').forEach(autre => {
+                if (autre.value) url.searchParams.set(autre.name, autre.value);
+                else url.searchParams.delete(autre.name);
+            });
+            url.searchParams.delete('page');
+            window.location.assign(url.toString());
+        });
+    });
 
     if (searchInput && form) {
         // Empêcher le submit classique
