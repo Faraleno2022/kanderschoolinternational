@@ -167,7 +167,7 @@
                                 {% endif %}
                                 <div>
                                     <div class="fw-bold">{{ paiement.eleve.nom }} {{ paiement.eleve.prenom }}</div>
-                                    <small class="text-muted">{{ paiement.eleve.classe.nom }} - {{ paiement.eleve.classe.ecole.nom }}</small>
+                                    <small class="text-muted">{{ paiement.classe_historique.nom|default:"Classe historique non identifiée" }} - {{ paiement.ecole_historique.nom }}</small>
                                 </div>
                             </div>
                         </td>
@@ -283,12 +283,12 @@
         <ul class="pagination justify-content-center mb-0">
             {% if page_obj.has_previous %}
                 <li class="page-item">
-                    <a class="page-link" href="?page=1{% if q %}&q={{ q|urlencode }}{% endif %}">
+                    <a class="page-link" href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page=1">
                         <i class="fas fa-angle-double-left"></i>
                     </a>
                 </li>
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+                    <a class="page-link" href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">
                         <i class="fas fa-angle-left"></i>
                     </a>
                 </li>
@@ -301,19 +301,19 @@
                     </li>
                 {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
                     <li class="page-item">
-                        <a class="page-link" href="?page={{ num }}{% if q %}&q={{ q|urlencode }}{% endif %}">{{ num }}</a>
+                        <a class="page-link" href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ num }}">{{ num }}</a>
                     </li>
                 {% endif %}
             {% endfor %}
             
             {% if page_obj.has_next %}
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+                    <a class="page-link" href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">
                         <i class="fas fa-angle-right"></i>
                     </a>
                 </li>
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+                    <a class="page-link" href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.paginator.num_pages }}">
                         <i class="fas fa-angle-double-right"></i>
                     </a>
                 </li>

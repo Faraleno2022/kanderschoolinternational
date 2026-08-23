@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.core.validators import RegexValidator
 from decimal import Decimal
@@ -515,6 +515,20 @@ class Eleve(SyncTrackedModel):
     @property
     def nom_complet(self):
         return f"{self.prenom} {self.nom}"
+
+    @property
+    def echeancier(self):
+        """Échéancier du contexte scolaire actuel, compatible avec l'ancien OneToOne."""
+        if not self.pk:
+            return None
+        classe = getattr(self, 'classe', None)
+        queryset = self.echeanciers.all()
+        if classe is not None:
+            return queryset.filter(
+                annee_scolaire=classe.annee_scolaire,
+                ecole_reference_id=classe.ecole_id,
+            ).first()
+        return queryset.order_by('-annee_scolaire', '-date_creation').first()
     
     @property
     def age(self):
@@ -559,6 +573,7 @@ class Eleve(SyncTrackedModel):
     def _reaffecter_matricules_ancienne_classe(self, ancienne_classe, ancien_matricule):
         """Désactivée pour éviter les conflits UNIQUE"""
         pass
+    @transaction.atomic
     def save(self, *args, **kwargs):
         """Génère automatiquement le matricule au format CODE-### si absent.
         - CODE déterminé par la classe via `_code_classe_from_nom_ou_niveau`
@@ -690,6 +705,19 @@ class Eleve(SyncTrackedModel):
             if matricule_final:
                 self.matricule = matricule_final
                 super().save(update_fields=['matricule'])
+
+        # La classe est aussi le contexte tarifaire de l'élève. Toute mutation
+        # doit donc réconcilier l'échéancier dans la même transaction que la
+        # fiche, afin d'éviter une classe transférée avec une dette obsolète.
+        if changement_classe_info and ancienne_classe:
+            from paiements.services import reconcilier_transfert_classe
+
+            self._financial_transfer_info = reconcilier_transfert_classe(
+                self,
+                ancienne_classe,
+                self.classe,
+                cree_par=getattr(self, '_current_user', None),
+            )
         
         # Créer l'historique du changement de classe après la sauvegarde
         if changement_classe_info:
@@ -705,6 +733,18 @@ class Eleve(SyncTrackedModel):
                 description += f". {notes_transferees} note(s) transférée(s) vers la nouvelle classe."
             if notes_ignorees > 0:
                 description += f" {notes_ignorees} note(s) non transférée(s) (matières sans équivalent)."
+
+            finance = getattr(self, '_financial_transfer_info', {}) or {}
+            if finance.get('grille_manquante'):
+                description += ". Grille tarifaire cible absente : échéancier non recalculé."
+            elif finance.get('echeancier_mis_a_jour'):
+                description += (
+                    f". Scolarité recalculée : {finance['nouveau_total_du']} GNF dus, "
+                    f"{finance['encaissements_conserves']} GNF réaffectés, "
+                    f"solde {finance['solde_restant']} GNF."
+                )
+                if finance.get('changement_ecole'):
+                    description += " Les encaissements de l'école d'origine restent dans son historique."
 
             HistoriqueEleve.objects.create(
                 eleve=self,

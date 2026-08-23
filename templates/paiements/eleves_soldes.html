@@ -162,8 +162,8 @@
                 <td>
                   <span class="badge bg-light text-dark border">{{ ech.eleve.matricule }}</span>
                 </td>
-                <td>{{ ech.eleve.classe.nom }}</td>
-                <td>{{ ech.eleve.classe.ecole.nom }}</td>
+                <td>{{ ech.classe_reference.nom|default:ech.eleve.classe.nom }}</td>
+                <td>{{ ech.ecole_reference.nom|default:ech.eleve.classe.ecole.nom }}</td>
                 <td>
                   <span class="fw-bold text-primary">{{ ech.total_du_calc|floatformat:0 }} GNF</span>
                 </td>

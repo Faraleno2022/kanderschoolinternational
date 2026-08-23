@@ -153,13 +153,18 @@ def _parse_filters(request):
 
     class_ids = [item.pk for item in classes]
     available_class_ids = [item.pk for item in available_classes]
-    mode_ids = (
-        Paiement.objects
-        .filter(
-            eleve__classe_id__in=available_class_ids,
-            statut='VALIDE',
-            mode_paiement_id__isnull=False,
+    available_school_ids = sorted({item.ecole_id for item in available_classes})
+    mode_payment_scope = Paiement.objects.filter(
+        ecole_encaissement_id__in=available_school_ids,
+        statut='VALIDE',
+        mode_paiement_id__isnull=False,
+    )
+    if classe_id:
+        mode_payment_scope = mode_payment_scope.filter(
+            classe_encaissement_id__in=available_class_ids,
         )
+    mode_ids = (
+        mode_payment_scope
         .values_list('mode_paiement_id', flat=True)
         .distinct()
     )
@@ -196,6 +201,7 @@ def _parse_filters(request):
         'classes': classes,
         'available_classes': available_classes,
         'class_ids': class_ids,
+        'school_ids': school_ids,
         'selected_class_id': int(classe_id) if classe_id else None,
         'mode_options': mode_options,
         'selected_mode_id': int(mode_id) if mode_id else None,
@@ -230,16 +236,21 @@ def _period_label(data):
 def _payments_queryset(scope):
     queryset = (
         Paiement.objects
-        .filter(eleve__classe_id__in=scope['class_ids'])
+        .filter(ecole_encaissement_id__in=scope['school_ids'])
         .select_related(
-            'eleve', 'eleve__classe', 'type_paiement', 'mode_paiement',
+            'eleve', 'eleve__classe', 'classe_encaissement',
+            'ecole_encaissement', 'type_paiement', 'mode_paiement',
             'cree_par', 'valide_par',
         )
         .order_by('date_paiement', 'numero_recu')
     )
+    if scope.get('selected_class_id'):
+        queryset = queryset.filter(
+            classe_encaissement_id=scope['selected_class_id'],
+        )
     if scope['school_year']:
         queryset = queryset.filter(
-            eleve__classe__annee_scolaire=scope['school_year']
+            annee_scolaire=scope['school_year']
         )
     if scope['start']:
         queryset = queryset.filter(date_paiement__gte=scope['start'])
@@ -255,7 +266,7 @@ def _payments_queryset(scope):
             | Q(eleve__nom__icontains=search)
             | Q(eleve__prenom__icontains=search)
             | Q(eleve__matricule__icontains=search)
-            | Q(eleve__classe__nom__icontains=search)
+            | Q(classe_encaissement__nom__icontains=search)
             | Q(type_paiement__nom__icontains=search)
             | Q(mode_paiement__nom__icontains=search)
         )
@@ -277,7 +288,10 @@ def _validated_payment_allocations(scope, selected_payments):
     schedules = EcheancierPaiement.objects.filter(eleve_id__in=student_ids)
     if scope['school_year']:
         schedules = schedules.filter(annee_scolaire=scope['school_year'])
-    schedules_by_key = {item.eleve_id: item for item in schedules}
+    schedules_by_key = {
+        (item.eleve_id, item.ecole_reference_id): item
+        for item in schedules.select_related('ecole_reference')
+    }
 
     history = (
         Paiement.objects
@@ -293,13 +307,16 @@ def _validated_payment_allocations(scope, selected_payments):
     )
     if scope['school_year']:
         history = history.filter(
-            eleve__classe__annee_scolaire=scope['school_year']
+            annee_scolaire=scope['school_year']
         )
+    history = history.filter(
+        ecole_encaissement_id__in={item.ecole_id for item in scope['classes']},
+    )
 
     running_paid = {}
     results = {}
     for payment in history:
-        key = payment.eleve_id
+        key = (payment.eleve_id, payment.ecole_encaissement_id)
         schedule = schedules_by_key.get(key)
         allocation = _empty_accounting_allocation()
         if schedule is None:
@@ -376,7 +393,9 @@ def collect_accounting_data(request):
         discount = discount_by_payment[payment.pk]
         mode = payment.mode_paiement.nom if payment.mode_paiement_id else 'Non précisé'
         payment_type = payment.type_paiement.nom if payment.type_paiement_id else 'Non précisé'
-        class_name = payment.eleve.classe.nom
+        class_name = getattr(
+            payment.classe_historique, 'nom', 'Classe historique non identifiée',
+        )
         by_mode[mode]['count'] += 1
         by_mode[mode]['amount'] += amount
         requires_reference = _requires_external_reference(mode)
@@ -464,46 +483,58 @@ def collect_recovery_data(request):
     data = _parse_filters(request)
     schedules_qs = (
         EcheancierPaiement.objects
-        .filter(eleve__classe_id__in=data['class_ids'], eleve__statut='ACTIF')
+        .filter(classe_reference_id__in=data['class_ids'], eleve__statut='ACTIF')
         .select_related(
             'eleve', 'eleve__classe', 'eleve__responsable_principal',
-            'eleve__classe__ecole',
+            'eleve__classe__ecole', 'classe_reference', 'ecole_reference',
         )
-        .order_by('eleve__classe__nom', 'eleve__nom', 'eleve__prenom')
+        .order_by('classe_reference__nom', 'eleve__nom', 'eleve__prenom')
     )
     if data['school_year']:
         schedules_qs = schedules_qs.filter(annee_scolaire=data['school_year'])
     schedules = list(schedules_qs)
     schedule_students = [item.eleve_id for item in schedules]
 
+    cash_filters = {
+        'eleve_id__in': schedule_students,
+        'ecole_encaissement_id__in': {item.ecole_id for item in data['classes']},
+        'statut': 'VALIDE',
+        'date_paiement__lte': data['cutoff'],
+    }
+    if data['school_year']:
+        cash_filters['annee_scolaire'] = data['school_year']
     cash_rows = (
         Paiement.objects
-        .filter(
-            eleve_id__in=schedule_students,
-            statut='VALIDE',
-            date_paiement__lte=data['cutoff'],
-        )
-        .values('eleve_id')
+        .filter(**cash_filters)
+        .values('eleve_id', 'ecole_encaissement_id')
         .annotate(total=Sum('montant'))
     )
     cash_by_schedule = {
-        item['eleve_id']: item['total'] or ZERO
+        (item['eleve_id'], item['ecole_encaissement_id']): item['total'] or ZERO
         for item in cash_rows
     }
 
+    discount_filters = {
+        'paiement__eleve_id__in': schedule_students,
+        'paiement__ecole_encaissement_id__in': {
+            item.ecole_id for item in data['classes']
+        },
+        'paiement__statut': 'VALIDE',
+        'paiement__date_paiement__lte': data['cutoff'],
+    }
+    if data['school_year']:
+        discount_filters['paiement__annee_scolaire'] = data['school_year']
     validated_discounts = list(
         PaiementRemise.objects
-        .filter(
-            paiement__eleve_id__in=schedule_students,
-            paiement__statut='VALIDE',
-            paiement__date_paiement__lte=data['cutoff'],
-        )
+        .filter(**discount_filters)
         .select_related('paiement')
         .order_by('paiement__date_paiement', 'paiement_id', 'id')
     )
     discounts_by_schedule = defaultdict(list)
     for item in validated_discounts:
-        discounts_by_schedule[item.paiement.eleve_id].append(item)
+        discounts_by_schedule[
+            (item.paiement.eleve_id, item.paiement.ecole_encaissement_id)
+        ].append(item)
 
     relances_qs = (
         Relance.objects
@@ -545,9 +576,10 @@ def collect_recovery_data(request):
     total_balance = total_overdue = total_upcoming = ZERO
 
     for schedule in schedules:
-        discounts = discounts_by_schedule[schedule.eleve_id]
+        schedule_key = (schedule.eleve_id, schedule.ecole_reference_id)
+        discounts = discounts_by_schedule[schedule_key]
         recorded_cash = schedule.total_paye or ZERO
-        payment_cash = cash_by_schedule.get(schedule.eleve_id, ZERO)
+        payment_cash = cash_by_schedule.get(schedule_key, ZERO)
         cash_source = (
             max(recorded_cash, payment_cash)
             if data['cutoff'] >= timezone.localdate()
@@ -600,7 +632,7 @@ def collect_recovery_data(request):
 
         reminders = relances_by_student[schedule.eleve_id]
         latest = reminders[0] if reminders else None
-        class_name = schedule.eleve.classe.nom
+        class_name = (schedule.classe_reference or schedule.eleve.classe).nom
         summary = class_summary[class_name]
         summary['students'] += 1
         summary['due'] += due

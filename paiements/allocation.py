@@ -4,7 +4,7 @@ from decimal import Decimal
 import re
 import unicodedata
 
-from .models import Paiement
+from .models import EcheancierPaiement, Paiement
 
 
 ALLOCATION_COMPONENTS = (
@@ -30,9 +30,10 @@ def normalize_payment_type(value):
 def registration_kind_for_type(value):
     """Retourne le tarif d'inscription explicitement demandé par le type."""
     normalized = normalize_payment_type(value)
-    if "reinscription" in normalized:
+    compact = re.sub(r"[\s_-]+", "", normalized)
+    if "reinscription" in compact:
         return "reinscription"
-    if "inscription" in normalized:
+    if "inscription" in compact:
         return "inscription"
     return None
 
@@ -137,9 +138,12 @@ def reste_par_tranche_avec_couverture(echeancier, couverture_totale):
 def get_payment_allocation(paiement, echeancier=None):
     """Reconstruit l'affectation exacte d'un paiement validé pour les reçus."""
     if echeancier is None:
-        try:
-            echeancier = paiement.eleve.echeancier
-        except Exception:
+        echeancier = EcheancierPaiement.objects.filter(
+            eleve_id=paiement.eleve_id,
+            annee_scolaire=getattr(paiement, 'annee_scolaire', ''),
+            ecole_reference_id=getattr(paiement, 'ecole_encaissement_id', None),
+        ).first()
+        if echeancier is None:
             return None
 
     running_paid = {key: Decimal("0") for key, _due, _paid in ALLOCATION_COMPONENTS}
@@ -153,6 +157,10 @@ def get_payment_allocation(paiement, echeancier=None):
     # compatible avec les deux schémas évite de mélanger les historiques.
     if hasattr(paiement, "annee_scolaire"):
         validated = validated.filter(annee_scolaire=paiement.annee_scolaire)
+        if getattr(paiement, 'ecole_encaissement_id', None):
+            validated = validated.filter(
+                ecole_encaissement_id=paiement.ecole_encaissement_id,
+            )
     elif getattr(echeancier, "annee_scolaire", None):
         validated = validated.filter(
             eleve__classe__annee_scolaire=echeancier.annee_scolaire,

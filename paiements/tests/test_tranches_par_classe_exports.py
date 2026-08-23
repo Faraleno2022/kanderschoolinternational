@@ -104,7 +104,7 @@ class TranchesParClasseExportsTests(TestCase):
                 'Élève', 'Inscription payée', 'Réinscription payée',
                 'Tranche 1 payée', 'Tranche 2 payée', 'Tranche 3 payée',
                 'Total dû', 'Total encaissé', 'Remise', 'Remise (%)',
-                'Couverture', 'Reste', 'Situation', 'Précision remise',
+                'Reste', 'Situation', 'Précision remise',
             ],
         )
         lignes = list(sheet.iter_rows(min_row=3, values_only=True))
@@ -161,8 +161,8 @@ class TranchesParClasseExportsTests(TestCase):
             date_paiement=date(2026, 2, 10), statut='VALIDE',
         )
         remise = RemiseReduction.objects.create(
-            nom='Remise T3 export', type_remise='MONTANT_FIXE',
-            valeur=Decimal('120000'), motif='SOCIALE',
+            nom='Remise T3 export 100%', type_remise='POURCENTAGE',
+            valeur=Decimal('100'), motif='SOCIALE',
             date_debut=date(2025, 9, 1), date_fin=date(2026, 8, 31),
         )
         PaiementRemise.objects.create(
@@ -183,17 +183,44 @@ class TranchesParClasseExportsTests(TestCase):
         )
         self.assertEqual(ligne[7], 230000)
         self.assertEqual(ligne[8], 120000)
-        self.assertAlmostEqual(ligne[9], 120000 / 330000)
-        self.assertEqual(ligne[10], 350000)
-        self.assertEqual(ligne[11], 0)
-        self.assertEqual(ligne[12], 'Soldé avec remise')
-        self.assertIn('Élève soldé', ligne[13])
+        # Le taux exporté est exactement celui sélectionné (100 %), pas le
+        # rapport artificiel 120 000 / 330 000 = 36,4 %.
+        self.assertEqual(ligne[9], 1)
+        self.assertEqual(ligne[10], 0)
+        self.assertEqual(ligne[11], 'Soldé avec remise')
+        self.assertIn('Élève soldé', ligne[12])
+        self.assertNotIn('120 000', ligne[12])
 
-        pdf_response = self.client.get(
-            reverse('paiements:export_tranches_par_classe_pdf'),
-            self._params(),
-        )
+        from reportlab.platypus import Table as RealTable
+
+        tables = []
+
+        def capturer_table(data, *args, **kwargs):
+            tables.append(data)
+            return RealTable(data, *args, **kwargs)
+
+        with patch('reportlab.platypus.Table', side_effect=capturer_table):
+            pdf_response = self.client.get(
+                reverse('paiements:export_tranches_par_classe_pdf'),
+                self._params(),
+            )
         self.assertEqual(pdf_response.status_code, 200)
         self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
         self.assertTrue(pdf_response.content.startswith(b'%PDF'))
         self.assertGreater(len(pdf_response.content), 1000)
+
+        ligne_pdf = next(
+            row for row in tables[0][1:]
+            if 'EXP-REI' in row[0].getPlainText()
+        )
+        self.assertEqual(ligne_pdf[8], '120 000')
+        self.assertEqual(ligne_pdf[9], '100.0 %')
+        self.assertEqual(ligne_pdf[10], '0')
+        self.assertIn('Remise appliquée', ligne_pdf[11].getPlainText())
+        self.assertNotIn('120 000', ligne_pdf[11].getPlainText())
+        # Le montant de la remise n'est recopié dans aucune autre colonne.
+        self.assertEqual(
+            sum('120 000' in getattr(cell, 'getPlainText', lambda: str(cell))()
+                for cell in ligne_pdf),
+            1,
+        )

@@ -350,7 +350,7 @@
                                                 </a>
                                             </h6>
                                             <p class="mb-1">
-                                                <small class="text-muted">{{ echeancier.eleve.classe.nom }} - {{ echeancier.eleve.classe.ecole.nom }}</small>
+                                                <small class="text-muted">{{ echeancier.classe_reference.nom|default:echeancier.eleve.classe.nom }} - {{ echeancier.ecole_reference.nom|default:echeancier.eleve.classe.ecole.nom }}</small>
                                             </p>
                                             <small class="text-danger">
                                                 <i class="fas fa-clock me-1"></i>Retard: {{ echeancier.retard_db|floatformat:0|intcomma }} GNF

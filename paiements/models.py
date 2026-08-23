@@ -58,6 +58,20 @@ class Paiement(SyncTrackedModel):
     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='paiements')
     type_paiement = models.ForeignKey(TypePaiement, on_delete=models.CASCADE)
     mode_paiement = models.ForeignKey(ModePaiement, on_delete=models.CASCADE)
+    # Contexte historique immuable de l'encaissement. Sans ces instantanés,
+    # un changement de classe/école déplace artificiellement les anciens
+    # paiements dans les rapports de la nouvelle structure.
+    ecole_encaissement = models.ForeignKey(
+        'eleves.Ecole', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='paiements_encaissement', verbose_name="École d'encaissement",
+    )
+    classe_encaissement = models.ForeignKey(
+        'eleves.Classe', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='paiements_encaissement', verbose_name="Classe d'encaissement",
+    )
+    annee_scolaire = models.CharField(
+        max_length=9, blank=True, db_index=True, verbose_name="Année scolaire d'encaissement",
+    )
     
     # Informations du paiement
     numero_recu = models.CharField(max_length=20, unique=True, verbose_name="Numéro de reçu")
@@ -100,6 +114,14 @@ class Paiement(SyncTrackedModel):
             models.Index(fields=['numero_recu']),          # Recherche par numéro de reçu
             models.Index(fields=['date_paiement']),         # Filtrage par date seule
             models.Index(fields=['date_creation']),         # Tri par date de création
+            models.Index(
+                fields=['ecole_encaissement', 'annee_scolaire'],
+                name='paiements_p_ecole_e_annee_idx',
+            ),
+            models.Index(
+                fields=['classe_encaissement', 'annee_scolaire'],
+                name='paiements_p_classe_e_annee_idx',
+            ),
         ]
     
     def __str__(self):
@@ -108,7 +130,8 @@ class Paiement(SyncTrackedModel):
     AUDIT_FIELDS = (
         'eleve_id', 'type_paiement_id', 'mode_paiement_id', 'montant',
         'date_paiement', 'statut', 'reference_externe', 'observations',
-        'valide_par_id', 'date_validation',
+        'valide_par_id', 'date_validation', 'ecole_encaissement_id',
+        'classe_encaissement_id', 'annee_scolaire',
     )
 
     @classmethod
@@ -120,6 +143,23 @@ class Paiement(SyncTrackedModel):
 
     def save(self, *args, **kwargs):
         """Génère le reçu et mémorise chaque modification du paiement."""
+        # Ne jamais recalculer ces valeurs après leur première affectation :
+        # elles décrivent le lieu réel de l'opération, pas la classe actuelle.
+        if self.eleve_id and (
+            not self.ecole_encaissement_id
+            or not self.classe_encaissement_id
+            or not self.annee_scolaire
+        ):
+            eleve = Eleve.objects.select_related('classe').get(pk=self.eleve_id)
+            self.ecole_encaissement_id = self.ecole_encaissement_id or eleve.classe.ecole_id
+            self.classe_encaissement_id = self.classe_encaissement_id or eleve.classe_id
+            self.annee_scolaire = self.annee_scolaire or eleve.classe.annee_scolaire
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None:
+                kwargs['update_fields'] = set(update_fields) | {
+                    'ecole_encaissement', 'classe_encaissement', 'annee_scolaire',
+                }
+
         before = self._audit_snapshot(self.pk) if self.pk else None
 
         if not self.numero_recu:
@@ -190,6 +230,22 @@ class Paiement(SyncTrackedModel):
     def montant_avec_frais(self):
         return self.montant + self.mode_paiement.frais_supplementaires
 
+    @property
+    def ecole_historique(self):
+        return self.ecole_encaissement or self.eleve.classe.ecole
+
+    @property
+    def classe_historique(self):
+        if self.classe_encaissement_id:
+            return self.classe_encaissement
+        classe_actuelle = self.eleve.classe
+        if (
+            not self.ecole_encaissement_id
+            or classe_actuelle.ecole_id == self.ecole_encaissement_id
+        ):
+            return classe_actuelle
+        return None
+
 
 class HistoriqueModificationPaiement(models.Model):
     """Mémoire inaltérable des changements apportés aux paiements."""
@@ -227,6 +283,12 @@ class HistoriqueModificationPaiement(models.Model):
 
 class EcheancierPaiement(SyncTrackedModel):
     """Modèle pour l'échéancier des paiements d'un élève"""
+    NATURE_INSCRIPTION = 'INSCRIPTION'
+    NATURE_REINSCRIPTION = 'REINSCRIPTION'
+    NATURE_CHOICES = [
+        (NATURE_INSCRIPTION, 'Inscription'),
+        (NATURE_REINSCRIPTION, 'Réinscription'),
+    ]
     STATUT_CHOICES = [
         ('A_PAYER', 'À payer'),
         ('PAYE_PARTIEL', 'Payé partiellement'),
@@ -234,8 +296,20 @@ class EcheancierPaiement(SyncTrackedModel):
         ('EN_RETARD', 'En retard'),
     ]
     
-    eleve = models.OneToOneField(Eleve, on_delete=models.CASCADE, related_name='echeancier')
+    eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='echeanciers')
     annee_scolaire = models.CharField(max_length=9, verbose_name="Année scolaire")
+    ecole_reference = models.ForeignKey(
+        'eleves.Ecole', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='echeanciers_paiement', verbose_name="École de l'échéancier",
+    )
+    classe_reference = models.ForeignKey(
+        'eleves.Classe', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='echeanciers_paiement', verbose_name="Classe de l'échéancier",
+    )
+    nature_frais = models.CharField(
+        max_length=20, choices=NATURE_CHOICES, default=NATURE_INSCRIPTION,
+        verbose_name="Nature des frais d'admission",
+    )
     
     # Montants dus
     frais_inscription_du = models.DecimalField(
@@ -294,9 +368,29 @@ class EcheancierPaiement(SyncTrackedModel):
             models.Index(fields=['statut']),                 # Filtrage par statut
             models.Index(fields=['annee_scolaire', 'statut']),  # Combinaison fréquente
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['eleve', 'annee_scolaire', 'ecole_reference'],
+                name='echeancier_unique_eleve_annee_ecole',
+            ),
+        ]
 
     def __str__(self):
         return f"Échéancier {self.eleve.nom_complet} - {self.annee_scolaire}"
+
+    def save(self, *args, **kwargs):
+        if self.eleve_id and (
+            not self.ecole_reference_id or not self.classe_reference_id
+        ):
+            eleve = Eleve.objects.select_related('classe').get(pk=self.eleve_id)
+            self.ecole_reference_id = self.ecole_reference_id or eleve.classe.ecole_id
+            self.classe_reference_id = self.classe_reference_id or eleve.classe_id
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None:
+                kwargs['update_fields'] = set(update_fields) | {
+                    'ecole_reference', 'classe_reference',
+                }
+        super().save(*args, **kwargs)
     
     @property
     def total_du(self):
@@ -316,7 +410,12 @@ class EcheancierPaiement(SyncTrackedModel):
         """
         total = (
             Paiement.objects
-            .filter(eleve_id=self.eleve_id, statut='VALIDE')
+            .filter(
+                eleve_id=self.eleve_id,
+                statut='VALIDE',
+                annee_scolaire=self.annee_scolaire,
+                ecole_encaissement_id=self.ecole_reference_id,
+            )
             .aggregate(total=Sum('remises__montant_remise'))
             .get('total') or 0
         )
