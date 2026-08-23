@@ -5,6 +5,7 @@ ou si les fichiers de l'application ont été modifiés.
 Cache de 5 minutes pour la performance (lecture fichier minimale).
 """
 import time
+from django.conf import settings
 from django.http import HttpResponse
 from django.contrib import messages
 
@@ -167,6 +168,12 @@ class LicenceMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Défense en profondeur : même si ce middleware était ajouté par une
+        # ancienne configuration serveur, aucune vérification de licence ne doit
+        # s'exécuter sur le site web de production.
+        if not getattr(settings, 'LICENCE_ENFORCEMENT_ENABLED', False):
+            return self.get_response(request)
+
         path = request.path
 
         # Ressources statiques et login toujours accessibles
