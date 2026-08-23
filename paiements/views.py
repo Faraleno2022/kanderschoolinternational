@@ -3146,7 +3146,7 @@ def generer_recu_pdf(request, paiement_id:int):
 
     - Ajoute un filigrane via `ecole_moderne/pdf_utils.draw_logo_watermark`
     - Inclut les informations clés du paiement et de l'élève
-    - Liste les remises appliquées et affiche le total des remises
+    - Liste les remises une seule fois, dans le bloc final dédié
     """
     paiement_qs = Paiement.objects.select_related(
         'eleve', 'type_paiement', 'mode_paiement', 'eleve__classe',
@@ -3455,12 +3455,6 @@ def generer_recu_pdf(request, paiement_id:int):
     # Afficher le montant payé
     draw_line(f"Montant payé : {str(f'{paiement.montant:,.0f}').replace(',', ' ')} GNF", bold=True)
 
-    if remises_total and int(remises_total) > 0:
-        draw_line(f"Total remises : -{str(f'{int(remises_total):,}').replace(',', ' ')} GNF")
-    # Montant net (jamais négatif)
-    montant_net = max(0, int(paiement.montant - (remises_total or 0)))
-    draw_line(f"Montant net payé : {str(f'{montant_net:,}').replace(',', ' ')} GNF", bold=True)
-
     # Affectation du paiement courant, identique à la règle utilisée dans
     # les calculs de l'échéancier.
     allocation_detail = _get_payment_allocation_breakdown(paiement)
@@ -3573,8 +3567,10 @@ def generer_recu_pdf(request, paiement_id:int):
         draw_line("Remises appliquées", bold=True)
         for pr in paiement.remises.select_related('remise').all():
             nom = getattr(pr.remise, 'nom', 'Remise')
+            portee = getattr(pr, 'portee_libelle', '')
             montant = str(f"{int(pr.montant_remise):,}").replace(',', ' ')
-            draw_line(f"- {nom} : -{montant} GNF")
+            suffixe_portee = f" ({portee})" if portee else ''
+            draw_line(f"- {nom}{suffixe_portee} : -{montant} GNF")
 
     # Bloc signatures
     top -= 20

@@ -224,3 +224,118 @@ class TranchesParClasseExportsTests(TestCase):
                 for cell in ligne_pdf),
             1,
         )
+
+    def _creer_cas_remise_non_deduite(self):
+        eleve = Eleve.objects.create(
+            matricule='EXP-REM-ND', prenom='Fara', nom='Leno',
+            sexe='M', date_naissance=date(2018, 1, 1),
+            lieu_naissance='Conakry', classe=self.classe,
+            date_inscription=date(2025, 9, 1),
+        )
+        EcheancierPaiement.objects.create(
+            eleve=eleve, annee_scolaire='2025-2026',
+            frais_inscription_du=Decimal('30000'),
+            tranche_1_due=Decimal('100000'),
+            tranche_2_due=Decimal('110000'),
+            tranche_3_due=Decimal('120000'),
+            frais_inscription_paye=Decimal('30000'),
+            tranche_1_payee=Decimal('100000'),
+            date_echeance_inscription=date(2025, 9, 1),
+            date_echeance_tranche_1=date(2026, 1, 15),
+            date_echeance_tranche_2=date(2026, 3, 15),
+            date_echeance_tranche_3=date(2026, 5, 15),
+        )
+        paiement = Paiement.objects.create(
+            eleve=eleve, type_paiement=self.type_inscription,
+            mode_paiement=self.mode, montant=Decimal('130000'),
+            date_paiement=date(2025, 9, 10), statut='VALIDE',
+        )
+        remise = RemiseReduction.objects.create(
+            nom='Remise scolarité 10%', type_remise='POURCENTAGE',
+            valeur=Decimal('10'), motif='SOCIALE',
+            date_debut=date(2025, 9, 1), date_fin=date(2026, 8, 31),
+        )
+        PaiementRemise.objects.create(
+            paiement=paiement, remise=remise,
+            montant_remise=Decimal('10000'), portee_tranches='1',
+            deduite_du_paiement=False,
+        )
+        return paiement
+
+    def test_remise_non_deduite_ne_devient_pas_un_paiement_t2_pdf_excel(self):
+        self._creer_cas_remise_non_deduite()
+
+        excel_response = self.client.get(
+            reverse('paiements:export_tranches_par_classe_excel'),
+            self._params(),
+        )
+        workbook = load_workbook(BytesIO(excel_response.content), data_only=True)
+        sheet = workbook[self.classe.nom]
+        ligne = next(
+            row for row in sheet.iter_rows(min_row=3, values_only=True)
+            if row[7] == 130000 and row[8] == 10000
+        )
+        self.assertEqual(ligne[1:6], (30000, 0, 100000, 0, 0))
+        self.assertEqual(ligne[7], 130000)
+        self.assertEqual(ligne[8], 10000)
+        self.assertEqual(ligne[9], 0.1)
+        self.assertEqual(ligne[10], 220000)
+
+        from reportlab.platypus import Table as RealTable
+        tables = []
+
+        def capturer_table(data, *args, **kwargs):
+            tables.append(data)
+            return RealTable(data, *args, **kwargs)
+
+        with patch('reportlab.platypus.Table', side_effect=capturer_table):
+            pdf_response = self.client.get(
+                reverse('paiements:export_tranches_par_classe_pdf'),
+                self._params(),
+            )
+
+        self.assertEqual(pdf_response.status_code, 200)
+        ligne_pdf = next(
+            row for row in tables[0][1:]
+            if row[7] == '130 000' and row[8] == '10 000'
+        )
+        self.assertEqual(ligne_pdf[1:6], ['30 000', '0', '100 000', '0', '0'])
+        self.assertEqual(ligne_pdf[8], '10 000')
+        self.assertEqual(ligne_pdf[9], '10.0 %')
+        self.assertEqual(ligne_pdf[10], '220 000')
+
+    def test_recu_affiche_la_remise_une_fois_sans_fausse_t2(self):
+        paiement = self._creer_cas_remise_non_deduite()
+        from reportlab.pdfgen.canvas import Canvas as RealCanvas
+
+        textes = []
+
+        def canvas_capture(*args, **kwargs):
+            pdf_canvas = RealCanvas(*args, **kwargs)
+            draw_string = pdf_canvas.drawString
+
+            def capturer_draw_string(x, y, texte, *draw_args, **draw_kwargs):
+                textes.append(str(texte))
+                return draw_string(x, y, texte, *draw_args, **draw_kwargs)
+
+            pdf_canvas.drawString = capturer_draw_string
+            return pdf_canvas
+
+        with patch('paiements.views.canvas.Canvas', side_effect=canvas_capture):
+            response = self.client.get(reverse(
+                'paiements:generer_recu_pdf',
+                kwargs={'paiement_id': paiement.id},
+            ))
+
+        self.assertEqual(response.status_code, 200)
+        debut = textes.index('Affectation du paiement')
+        fin = textes.index("Informations de l'élève")
+        affectation = textes[debut:fin]
+        self.assertIn('Inscription: 30 000 GNF', affectation)
+        self.assertIn('1ère tranche: 100 000 GNF', affectation)
+        self.assertFalse(any('2ème tranche' in texte for texte in affectation))
+        self.assertFalse(any('3ème tranche' in texte for texte in affectation))
+        self.assertFalse(any(texte.startswith('Total remises') for texte in textes))
+        self.assertFalse(any(texte.startswith('Montant net payé') for texte in textes))
+        self.assertIn('Remises appliquées', textes)
+        self.assertIn('- Remise scolarité 10% (T1) : -10 000 GNF', textes)

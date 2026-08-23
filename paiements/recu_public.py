@@ -161,7 +161,6 @@ def recu_public_pdf(request, paiement_id):
         
         # Calcul total remises
         remises_total = paiement.remises.aggregate(total=Sum('montant_remise')).get('total') or 0
-        montant_net = paiement.montant - remises_total if remises_total > 0 else paiement.montant
 
         # Situation financière globale de l'élève (via échéancier)
         from .models import EcheancierPaiement
@@ -246,14 +245,6 @@ def recu_public_pdf(request, paiement_id):
         c.drawString(left, top, f"Montant: {paiement.montant:,.0f} GNF".replace(",", " "))
         top -= line_h
 
-        if remises_total > 0:
-            c.drawString(left, top, f"Remises: -{remises_total:,.0f} GNF".replace(",", " "))
-            top -= line_h
-            c.setFont('Helvetica-Bold', 11)
-            c.drawString(left, top, f"Net payé: {montant_net:,.0f} GNF".replace(",", " "))
-            c.setFont('Helvetica', 11)
-            top -= line_h
-
         # Afficher la ventilation réelle de ce paiement sur l'échéancier.
         from .views import _get_payment_allocation_breakdown
         allocation = _get_payment_allocation_breakdown(paiement)
@@ -296,6 +287,24 @@ def recu_public_pdf(request, paiement_id):
                 c.drawString(left, top, "Scolarité entièrement payée")
                 c.setFillColorRGB(0, 0, 0)
             top -= line_h
+
+        if remises_total > 0:
+            top -= 10
+            c.setFont('Helvetica-Bold', 11)
+            c.drawString(left, top, "REMISES APPLIQUÉES")
+            top -= line_h
+            c.setFont('Helvetica', 10)
+            for paiement_remise in paiement.remises.select_related('remise').all():
+                nom = getattr(paiement_remise.remise, 'nom', 'Remise')
+                portee = getattr(paiement_remise, 'portee_libelle', '')
+                suffixe_portee = f" ({portee})" if portee else ''
+                montant = Decimal(str(paiement_remise.montant_remise or 0))
+                c.drawString(
+                    left,
+                    top,
+                    f"- {nom}{suffixe_portee} : -{montant:,.0f} GNF".replace(",", " "),
+                )
+                top -= line_h
 
         top -= 10
         c.setFont('Helvetica-Bold', 11)

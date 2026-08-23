@@ -108,6 +108,25 @@ def _pourcentage_remises_selectionne(remises):
     return sum(taux, Decimal('0')) if taux else None
 
 
+def _allocation_encaissement_affichee(echeancier, montant_encaisse, remises):
+    """Ventile uniquement l'argent réellement encaissé dans les colonnes payées.
+
+    Une remise non déduite du reçu augmente la couverture globale, mais ne doit
+    jamais repousser artificiellement une partie du paiement vers la tranche
+    suivante. Seules les remises explicitement déduites du montant du reçu sont
+    pré-affectées avant le paiement net, puisque cet argent n'a pas été encaissé.
+    """
+    remises_deduites = [
+        remise for remise in remises
+        if getattr(remise, 'deduite_du_paiement', False)
+    ]
+    return allocate_cash_and_discounts(
+        echeancier,
+        montant_encaisse,
+        remises_deduites,
+    )['cash_allocation']
+
+
 def _precision_remise(
     total_du, cash, discount, discount_applied, balance, discount_rate=None,
 ):
@@ -190,7 +209,9 @@ def _ventiler_sans_echeancier(paiements, grille):
         tranche_3_due=dus[3], tranche_3_payee=Decimal('0'),
     )
     coverage = allocate_cash_and_discounts(proxy, total_paye, remises)
-    cash_allocation = coverage['cash_allocation']
+    cash_allocation = _allocation_encaissement_affichee(
+        proxy, total_paye, remises,
+    )
     total_du = sum(dus, Decimal('0'))
     tuition_due = sum(dus[1:], Decimal('0'))
 
@@ -256,14 +277,24 @@ def _lignes_classe(classe, annee_scolaire):
             not annee_scolaire or echeancier.annee_scolaire == annee_scolaire
         ):
             remises = _remises_des_paiements(paiements)
-            cash_source = max(
-                Decimal(echeancier.total_paye or 0),
-                sum((Decimal(p.montant or 0) for p in paiements), Decimal('0')),
+            paiement_total = sum(
+                (Decimal(p.montant or 0) for p in paiements),
+                Decimal('0'),
+            )
+            # Les paiements validés sont l'autorité pour le total encaissé.
+            # Les champs *_payee de certains anciens échéanciers peuvent aussi
+            # contenir une remise et ne doivent donc servir qu'en fallback.
+            cash_source = (
+                paiement_total
+                if paiements
+                else Decimal(echeancier.total_paye or 0)
             )
             coverage = allocate_cash_and_discounts(
                 echeancier, cash_source, remises,
             )
-            cash_allocation = coverage['cash_allocation']
+            cash_allocation = _allocation_encaissement_affichee(
+                echeancier, cash_source, remises,
+            )
             admission_paye = cash_allocation['inscription']
             reinscription = _est_reinscription(
                 echeancier, paiements, grille,
