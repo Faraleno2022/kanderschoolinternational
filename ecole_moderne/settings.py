@@ -42,6 +42,12 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'dev-unsafe-key')
 DEBUG_DEFAULT = 'false' if RENDER_EXTERNAL_HOSTNAME else 'true'
 DEBUG = os.environ.get('DJANGO_DEBUG', DEBUG_DEFAULT).lower() == 'true'
 
+# La licence commerciale concerne uniquement l'application Windows hors-ligne.
+# Le site web de production ne doit jamais afficher un rappel d'essai ni être
+# bloqué à cause d'une licence locale, même si OFFLINE_MODE est défini par erreur.
+OFFLINE_MODE = os.environ.get('OFFLINE_MODE', '0').lower() in ('1', 'true', 'yes')
+LICENCE_ENFORCEMENT_ENABLED = DEBUG and OFFLINE_MODE
+
 # =================== Hôtes et CSRF ===================
 if DEBUG:
     ALLOWED_HOSTS = ['*']  # Accepter tous les hôtes en développement
@@ -169,11 +175,17 @@ MIDDLEWARE = [
     # (après MessageMiddleware pour pouvoir afficher le message de redirection)
     'utilisateurs.middleware.MenuAccessMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    # Vérification licence : bloque l'accès web si essai/licence expiré
-    'ecole_moderne.licence_middleware.LicenceMiddleware',
     # Protection anti brute-force
     'axes.middleware.AxesMiddleware',
 ]
+
+# L'essai/licence est contrôlé uniquement dans l'exécutable Windows hors-ligne.
+# En production web (DEBUG=False), ce middleware n'est jamais chargé.
+if LICENCE_ENFORCEMENT_ENABLED:
+    MIDDLEWARE.insert(
+        MIDDLEWARE.index('axes.middleware.AxesMiddleware'),
+        'ecole_moderne.licence_middleware.LicenceMiddleware',
+    )
 
 # Ajouter middlewares d'optimisation images
 if DEBUG:

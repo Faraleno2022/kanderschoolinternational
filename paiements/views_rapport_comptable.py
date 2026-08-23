@@ -83,27 +83,31 @@ def _rapport_data(request):
 
     paiements = filter_by_user_school(
         Paiement.objects.select_related(
-            "eleve", "eleve__classe", "eleve__classe__ecole", "type_paiement", "mode_paiement"
+            "eleve", "eleve__classe", "eleve__classe__ecole",
+            "classe_encaissement", "ecole_encaissement", "type_paiement", "mode_paiement"
         ),
         request.user,
-        "eleve__classe__ecole",
+        "ecole_encaissement",
     ).filter(date_paiement__range=(date_debut, date_fin))
     if statut != "TOUS":
         paiements = paiements.filter(statut=statut)
     if classe_selectionnee:
-        paiements = paiements.filter(eleve__classe=classe_selectionnee)
-    paiements = paiements.order_by("eleve__classe__nom", "-date_paiement", "eleve__nom")
+        paiements = paiements.filter(classe_encaissement=classe_selectionnee)
+    paiements = paiements.order_by("classe_encaissement__nom", "-date_paiement", "eleve__nom")
 
     echeanciers = filter_by_user_school(
-        EcheancierPaiement.objects.select_related("eleve", "eleve__classe", "eleve__classe__ecole"),
+        EcheancierPaiement.objects.select_related(
+            "eleve", "eleve__classe", "eleve__classe__ecole",
+            "classe_reference", "ecole_reference",
+        ),
         request.user,
-        "eleve__classe__ecole",
+        "ecole_reference",
     )
     if classe_selectionnee:
-        echeanciers = echeanciers.filter(eleve__classe=classe_selectionnee)
+        echeanciers = echeanciers.filter(classe_reference=classe_selectionnee)
 
     retards = []
-    for echeancier in echeanciers.order_by("eleve__classe__nom", "eleve__nom", "eleve__prenom"):
+    for echeancier in echeanciers.order_by("classe_reference__nom", "eleve__nom", "eleve__prenom"):
         montant_retard = _retard_echeancier(echeancier, date_fin)
         if montant_retard > 0:
             retards.append({"echeancier": echeancier, "montant_retard": montant_retard})
@@ -137,15 +141,18 @@ def _rapport_data(request):
 
     classes_stats = {}
     for paiement in paiements_list:
-        cle = paiement.eleve.classe_id
+        classe_historique = paiement.classe_historique
+        if classe_historique is None:
+            continue
+        cle = classe_historique.pk
         ligne = classes_stats.setdefault(cle, {
-            "classe": paiement.eleve.classe, "paiements": 0, "montant": Decimal("0"),
+            "classe": classe_historique, "paiements": 0, "montant": Decimal("0"),
             "retards": Decimal("0"), "relances": 0,
         })
         ligne["paiements"] += 1
         ligne["montant"] += paiement.montant or Decimal("0")
     for retard in retards:
-        classe = retard["echeancier"].eleve.classe
+        classe = retard["echeancier"].classe_reference or retard["echeancier"].eleve.classe
         ligne = classes_stats.setdefault(classe.id, {
             "classe": classe, "paiements": 0, "montant": Decimal("0"),
             "retards": Decimal("0"), "relances": 0,
@@ -229,13 +236,15 @@ def export_rapport_comptable_excel(request):
 
     feuilles = (
         ("Paiements", ["Date", "Reçu", "Matricule", "Élève", "Classe", "Type", "Mode", "Montant", "Statut"], [
-            [p.date_paiement, p.numero_recu, p.eleve.matricule, p.eleve.nom_complet, p.eleve.classe.nom,
+            [p.date_paiement, p.numero_recu, p.eleve.matricule, p.eleve.nom_complet,
+             getattr(p.classe_historique, 'nom', 'Non identifiée'),
              p.type_paiement.nom, p.mode_paiement.nom, p.montant, p.get_statut_display()]
             for p in data["paiements"]
         ]),
         ("Retards", ["Matricule", "Élève", "Classe", "Année scolaire", "Retard (GNF)"], [
             [r["echeancier"].eleve.matricule, r["echeancier"].eleve.nom_complet,
-             r["echeancier"].eleve.classe.nom, r["echeancier"].annee_scolaire, r["montant_retard"]]
+             (r["echeancier"].classe_reference or r["echeancier"].eleve.classe).nom,
+             r["echeancier"].annee_scolaire, r["montant_retard"]]
             for r in data["retards"]
         ]),
         ("Relances", ["Date", "Matricule", "Élève", "Classe", "Canal", "Statut", "Solde estimé"], [
@@ -324,12 +333,14 @@ def export_rapport_comptable_pdf(request):
     elements.append(PageBreak())
     tableau("Détail des paiements", ["Date", "Reçu", "Matricule", "Élève", "Classe", "Type", "Mode", "Montant"], [
         [f"{p.date_paiement:%d/%m/%Y}", p.numero_recu, p.eleve.matricule, p.eleve.nom_complet,
-         p.eleve.classe.nom, p.type_paiement.nom, p.mode_paiement.nom, f"{p.montant:,.0f}"]
+         getattr(p.classe_historique, 'nom', 'Non identifiée'),
+         p.type_paiement.nom, p.mode_paiement.nom, f"{p.montant:,.0f}"]
         for p in data["paiements"]
     ])
     tableau("Retards de paiement", ["Matricule", "Élève", "Classe", "Année", "Retard (GNF)"], [
         [r["echeancier"].eleve.matricule, r["echeancier"].eleve.nom_complet,
-         r["echeancier"].eleve.classe.nom, r["echeancier"].annee_scolaire, f"{r['montant_retard']:,.0f}"]
+         (r["echeancier"].classe_reference or r["echeancier"].eleve.classe).nom,
+         r["echeancier"].annee_scolaire, f"{r['montant_retard']:,.0f}"]
         for r in data["retards"]
     ])
     tableau("Relances", ["Date", "Matricule", "Élève", "Classe", "Canal", "Statut", "Solde estimé"], [

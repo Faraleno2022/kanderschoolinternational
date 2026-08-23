@@ -847,8 +847,8 @@ def nouvelle_annee_creer(request):
                             resultats['eleves_conserves'] += 1
 
             # ─── Étape 5 : Recréer les échéanciers pour la nouvelle année ─
-            # Pour chaque élève qui a changé de classe (nouvelle année),
-            # supprimer l'ancien échéancier et en créer un neuf via la grille tarifaire.
+            # Pour chaque élève qui a changé de classe, garantir l'échéancier
+            # cible sans supprimer les échéanciers/paiements des années passées.
             if faire_passer_eleves:
                 from paiements.models import EcheancierPaiement
                 from .models import GrilleTarifaire
@@ -867,9 +867,6 @@ def nouvelle_annee_creer(request):
 
                 for eleve in eleves_nouvelle_annee:
                     try:
-                        # Supprimer l'ancien échéancier (lié à l'ancienne année)
-                        EcheancierPaiement.objects.filter(eleve=eleve).delete()
-
                         # Chercher la grille tarifaire de la nouvelle année
                         niveau = getattr(eleve.classe, 'niveau', None)
                         grille = None
@@ -884,27 +881,27 @@ def nouvelle_annee_creer(request):
                         t2 = Decimal(str(grille.tranche_2 or 0)) if grille else Decimal('0')
                         t3 = Decimal(str(grille.tranche_3 or 0)) if grille else Decimal('0')
 
-                        EcheancierPaiement.objects.create(
+                        _, echeancier_cree = EcheancierPaiement.objects.get_or_create(
                             eleve=eleve,
                             annee_scolaire=annee_nouvelle,
-                            frais_inscription_du=fi,
-                            tranche_1_due=t1,
-                            tranche_2_due=t2,
-                            tranche_3_due=t3,
-                            # Paiements remis à zéro
-                            frais_inscription_paye=Decimal('0'),
-                            tranche_1_payee=Decimal('0'),
-                            tranche_2_payee=Decimal('0'),
-                            tranche_3_payee=Decimal('0'),
-                            # Dates d'échéance par défaut
-                            date_echeance_inscription=_date_type(annee_debut, 10, 1),
-                            date_echeance_tranche_1=_date_type(annee_fin, 1, 15),
-                            date_echeance_tranche_2=_date_type(annee_fin, 3, 15),
-                            date_echeance_tranche_3=_date_type(annee_fin, 5, 15),
-                            statut='A_PAYER',
-                            cree_par=request.user,
+                            ecole_reference=ecole,
+                            defaults={
+                                'classe_reference': eleve.classe,
+                                'nature_frais': EcheancierPaiement.NATURE_REINSCRIPTION,
+                                'frais_inscription_du': fi,
+                                'tranche_1_due': t1,
+                                'tranche_2_due': t2,
+                                'tranche_3_due': t3,
+                                'date_echeance_inscription': _date_type(annee_debut, 10, 1),
+                                'date_echeance_tranche_1': _date_type(annee_fin, 1, 15),
+                                'date_echeance_tranche_2': _date_type(annee_fin, 3, 15),
+                                'date_echeance_tranche_3': _date_type(annee_fin, 5, 15),
+                                'statut': 'A_PAYER',
+                                'cree_par': request.user,
+                            },
                         )
-                        resultats['echeanciers_crees'] += 1
+                        if echeancier_cree:
+                            resultats['echeanciers_crees'] += 1
                     except Exception as exc:
                         logger.warning(f"Échéancier non créé pour {eleve}: {exc}")
                         resultats['erreurs'].append(f"Échéancier {eleve}: {exc}")

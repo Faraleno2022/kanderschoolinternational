@@ -21,12 +21,13 @@ def _paiements_liste_export(request):
         Paiement.objects
         .select_related(
             'eleve', 'eleve__classe', 'eleve__classe__ecole',
+            'classe_encaissement', 'ecole_encaissement',
             'type_paiement', 'mode_paiement',
         )
-        .order_by('eleve__classe__ecole__nom', '-date_paiement', '-pk')
+        .order_by('ecole_encaissement__nom', '-date_paiement', '-pk')
     )
     queryset = filter_by_user_school(
-        queryset, request.user, 'eleve__classe__ecole',
+        queryset, request.user, 'ecole_encaissement',
     )
 
     recherche = (request.GET.get('q') or '').strip()
@@ -41,7 +42,7 @@ def _paiements_liste_export(request):
         annee = get_annee_active(request, ecole) or ''
 
     if annee:
-        queryset = queryset.filter(eleve__classe__annee_scolaire=annee)
+        queryset = queryset.filter(annee_scolaire=annee)
     if statut:
         queryset = queryset.filter(statut=statut)
     if recherche:
@@ -52,8 +53,8 @@ def _paiements_liste_export(request):
             | Q(eleve__nom__icontains=recherche)
             | Q(eleve__prenom__icontains=recherche)
             | Q(eleve__matricule__icontains=recherche)
-            | Q(eleve__classe__nom__icontains=recherche)
-            | Q(eleve__classe__ecole__nom__icontains=recherche)
+            | Q(classe_encaissement__nom__icontains=recherche)
+            | Q(ecole_encaissement__nom__icontains=recherche)
             | Q(type_paiement__nom__icontains=recherche)
             | Q(mode_paiement__nom__icontains=recherche)
         )
@@ -74,7 +75,7 @@ def export_liste_paiements_pdf(request):
     paiements, recherche, statut, annee = _paiements_liste_export(request)
     groupes = OrderedDict()
     for paiement in paiements:
-        ecole = paiement.eleve.classe.ecole
+        ecole = paiement.ecole_historique
         groupes.setdefault(ecole.pk, {'ecole': ecole, 'paiements': []})[
             'paiements'
         ].append(paiement)
@@ -174,7 +175,7 @@ def export_liste_paiements_pdf(request):
                 cellule(paiement.numero_recu or '-'),
                 cellule(paiement.eleve.nom_complet),
                 cellule(paiement.eleve.matricule),
-                cellule(paiement.eleve.classe.nom),
+                cellule(getattr(paiement.classe_historique, 'nom', 'Non identifiée')),
                 cellule(paiement.type_paiement.nom),
                 cellule(paiement.mode_paiement.nom),
                 cellule(f"{montant:,.0f}".replace(',', ' ')),

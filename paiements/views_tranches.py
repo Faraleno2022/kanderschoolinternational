@@ -92,14 +92,25 @@ def _remises_des_paiements(paiements):
     return remises
 
 
-def _precision_remise(total_du, tuition_due, cash, discount, discount_applied, balance):
-    discount_rate = (
-        discount / tuition_due * Decimal('100') if tuition_due else Decimal('0')
-    )
-    coverage = min(
-        max(total_du, Decimal('0')),
-        max(cash, Decimal('0')) + max(discount_applied, Decimal('0')),
-    )
+def _pourcentage_remises_selectionne(remises):
+    """Retourne le taux réellement choisi, jamais un taux recalculé.
+
+    Les remises fixes n'ont pas de pourcentage et produisent donc ``None``.
+    Lorsque plusieurs remises en pourcentage sont liées aux paiements d'un
+    élève, leurs taux sont additionnés comme les montants accordés.
+    """
+    taux = [
+        Decimal(remise.remise.valeur or 0)
+        for remise in remises
+        if getattr(remise, 'remise_id', None)
+        and getattr(remise.remise, 'type_remise', None) == 'POURCENTAGE'
+    ]
+    return sum(taux, Decimal('0')) if taux else None
+
+
+def _precision_remise(
+    total_du, cash, discount, discount_applied, balance, discount_rate=None,
+):
     if total_du <= 0:
         status = 'À contrôler'
     elif balance <= 0:
@@ -110,19 +121,16 @@ def _precision_remise(total_du, tuition_due, cash, discount, discount_applied, b
         status = 'À payer'
 
     if discount > 0:
-        precision = (
-            f"Remise appliquée : {discount:,.0f} GNF "
-            f"({discount_rate:.1f} % de la scolarité)."
-        ).replace(',', ' ')
+        # Le montant et le taux ont chacun leur colonne dédiée. Ne pas les
+        # répéter ici évite qu'une remise soit confondue avec un encaissement.
+        precision = "Remise appliquée."
         if total_du > 0 and balance <= 0:
             precision += " Élève soldé grâce au paiement et à la remise."
         elif total_du > 0:
             precision += f" Solde restant : {balance:,.0f} GNF.".replace(',', ' ')
         discount_unapplied = max(discount - discount_applied, Decimal('0'))
         if discount_unapplied > 0:
-            precision += (
-                f" {discount_unapplied:,.0f} GNF non imputés à contrôler."
-            ).replace(',', ' ')
+            precision += " Une partie de la remise reste non imputée et doit être contrôlée."
     else:
         precision = status
 
@@ -130,7 +138,6 @@ def _precision_remise(total_du, tuition_due, cash, discount, discount_applied, b
         'remise': discount,
         'remise_imputee': discount_applied,
         'remise_pct': discount_rate,
-        'couverture': coverage,
         'reste': max(balance, Decimal('0')),
         'situation': status,
         'precision': precision,
@@ -160,8 +167,9 @@ def _ventiler_sans_echeancier(paiements, grille):
             'total_du': Decimal('0'), 'tuition_due': Decimal('0'),
             'total_paye': total_paye,
             **_precision_remise(
-                Decimal('0'), Decimal('0'), total_paye, total_remise,
+                Decimal('0'), total_paye, total_remise,
                 Decimal('0'), Decimal('0'),
+                _pourcentage_remises_selectionne(remises),
             ),
         }
 
@@ -203,11 +211,11 @@ def _ventiler_sans_echeancier(paiements, grille):
         'total_paye': total_paye,
         **_precision_remise(
             total_du,
-            tuition_due,
             coverage['cash_applied'],
             coverage['discount_recorded'],
             coverage['discount_applied'],
             coverage['balance'],
+            _pourcentage_remises_selectionne(remises),
         ),
     }
 
@@ -230,7 +238,7 @@ def _lignes_classe(classe, annee_scolaire):
         ))
         .order_by('date_paiement', 'id')
     )
-    eleves = classe.eleves.select_related('echeancier').prefetch_related(
+    eleves = classe.eleves.prefetch_related('echeanciers').prefetch_related(
         Prefetch(
             'paiements', queryset=paiements_valides,
             to_attr='_paiements_valides_export',
@@ -284,11 +292,11 @@ def _lignes_classe(classe, annee_scolaire):
                 'total_paye': cash_source,
                 **_precision_remise(
                     total_du,
-                    tuition_due,
                     coverage['cash_applied'],
                     coverage['discount_recorded'],
                     coverage['discount_applied'],
                     coverage['balance'],
+                    _pourcentage_remises_selectionne(remises),
                 ),
             }
         else:
@@ -403,7 +411,7 @@ def export_tranches_par_classe_pdf(request):
         'Élève', 'Inscription payée', 'Réinscription payée',
         'Tranche 1 payée', 'Tranche 2 payée', 'Tranche 3 payée',
         'Total dû', 'Total encaissé', 'Remise', 'Remise %',
-        'Couverture', 'Reste', 'Situation / précision',
+        'Reste', 'Situation / précision',
     ]
 
     def P(x):
@@ -460,8 +468,10 @@ def export_tranches_par_classe_pdf(request):
                 f"{ligne['total_du']:,}".replace(',', ' '),
                 f"{ligne['total_paye']:,}".replace(',', ' '),
                 f"{ligne['remise']:,}".replace(',', ' '),
-                f"{ligne['remise_pct']:.1f} %",
-                f"{ligne['couverture']:,}".replace(',', ' '),
+                (
+                    f"{ligne['remise_pct']:.1f} %"
+                    if ligne['remise_pct'] is not None else '—'
+                ),
                 f"{ligne['reste']:,}".replace(',', ' '),
                 P(
                     ligne['situation']
@@ -471,26 +481,21 @@ def export_tranches_par_classe_pdf(request):
             ])
 
         if lignes:
-            total_tuition = sum(
-                (ligne['tuition_due'] for ligne in lignes), Decimal('0'),
-            )
             total_remise = sum((ligne['remise'] for ligne in lignes), Decimal('0'))
-            remise_pct = (
-                total_remise / total_tuition * Decimal('100')
-                if total_tuition > 0 else Decimal('0')
-            )
             data.append([
                 P('TOTAL CLASSE'), '', '', '', '', '',
                 f"{sum((ligne['total_du'] for ligne in lignes), Decimal('0')):,}".replace(',', ' '),
                 f"{sum((ligne['total_paye'] for ligne in lignes), Decimal('0')):,}".replace(',', ' '),
-                f"{total_remise:,}".replace(',', ' '), f"{remise_pct:.1f} %",
-                f"{sum((ligne['couverture'] for ligne in lignes), Decimal('0')):,}".replace(',', ' '),
+                f"{total_remise:,}".replace(',', ' '), '—',
                 f"{sum((ligne['reste'] for ligne in lignes), Decimal('0')):,}".replace(',', ' '),
                 P(f"{sum(1 for ligne in lignes if ligne['situation'].startswith('Soldé'))} élève(s) soldé(s)"),
             ])
 
         # Construire la table pour la classe
-        col_widths = [3.6*cm] + [1.75*cm] * 5 + [2.05*cm] * 3 + [1.55*cm] + [2.15*cm] * 2 + [3.6*cm]
+        col_widths = (
+            [3.6*cm] + [1.75*cm] * 5 + [2.05*cm] * 3
+            + [1.55*cm, 2.15*cm, 4.1*cm]
+        )
         table = Table(data, repeatRows=1, colWidths=col_widths)
         table_commands = [
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#174A6E')),
@@ -611,7 +616,7 @@ def export_tranches_par_classe_excel(request):
         'Élève', 'Inscription payée', 'Réinscription payée',
         'Tranche 1 payée', 'Tranche 2 payée', 'Tranche 3 payée',
         'Total dû', 'Total encaissé', 'Remise', 'Remise (%)',
-        'Couverture', 'Reste', 'Situation', 'Précision remise',
+        'Reste', 'Situation', 'Précision remise',
     ]
 
     for idx, classe in enumerate(classes, start=1):
@@ -627,29 +632,28 @@ def export_tranches_par_classe_excel(request):
                 int(ligne['inscription']), int(ligne['reinscription']),
                 int(ligne['t1']), int(ligne['t2']), int(ligne['t3']),
                 int(ligne['total_du']), int(ligne['total_paye']),
-                int(ligne['remise']), float(ligne['remise_pct'] / Decimal('100')),
-                int(ligne['couverture']), int(ligne['reste']),
+                int(ligne['remise']),
+                (
+                    float(ligne['remise_pct'] / Decimal('100'))
+                    if ligne['remise_pct'] is not None else None
+                ),
+                int(ligne['reste']),
                 ligne['situation'], ligne['precision'],
             ])
 
         if lignes:
-            total_tuition = sum(
-                (ligne['tuition_due'] for ligne in lignes), Decimal('0'),
-            )
             total_remise = sum((ligne['remise'] for ligne in lignes), Decimal('0'))
             ws.append([
                 'TOTAL CLASSE', None, None, None, None, None,
                 int(sum((ligne['total_du'] for ligne in lignes), Decimal('0'))),
                 int(sum((ligne['total_paye'] for ligne in lignes), Decimal('0'))),
-                int(total_remise),
-                float(total_remise / total_tuition) if total_tuition > 0 else 0,
-                int(sum((ligne['couverture'] for ligne in lignes), Decimal('0'))),
+                int(total_remise), None,
                 int(sum((ligne['reste'] for ligne in lignes), Decimal('0'))),
                 f"{sum(1 for ligne in lignes if ligne['situation'].startswith('Soldé'))} élève(s) soldé(s)",
-                'Les remises sont incluses dans la couverture et le calcul du reste.',
+                'Les remises sont présentées séparément et déduites uniquement du reste.',
             ])
 
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=14)
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=13)
         ws.cell(1, 1).font = Font(bold=True, size=14, color='174A6E')
         ws.cell(1, 1).alignment = Alignment(horizontal='center')
         for cell in ws[2]:
@@ -665,20 +669,20 @@ def export_tranches_par_classe_excel(request):
                 cell.font = Font(bold=True)
 
         # Ajuster largeur colonnes simple
-        for col in range(1, 15):
+        for col in range(1, 14):
             if col == 1:
                 width = 25
-            elif col in (13, 14):
-                width = 26 if col == 13 else 52
+            elif col in (12, 13):
+                width = 26 if col == 12 else 52
             else:
                 width = 16
             ws.column_dimensions[get_column_letter(col)].width = width
         ws.freeze_panes = 'A3'
-        ws.auto_filter.ref = f"A2:N{max(ws.max_row - 1, 2)}"
+        ws.auto_filter.ref = f"A2:M{max(ws.max_row - 1, 2)}"
         for row in range(3, ws.max_row + 1):
             ws.cell(row, 10).number_format = '0.0%'
-            ws.cell(row, 14).alignment = Alignment(wrap_text=True, vertical='top')
-            for col in (2, 3, 4, 5, 6, 7, 8, 9, 11, 12):
+            ws.cell(row, 13).alignment = Alignment(wrap_text=True, vertical='top')
+            for col in (2, 3, 4, 5, 6, 7, 8, 9, 11):
                 ws.cell(row, col).number_format = '#,##0'
         ws.sheet_view.showGridLines = False
 

@@ -925,3 +925,19 @@ class ActiviteCulturelle(models.Model):
 
     def __str__(self):
         return self.titre
+
+    def save(self, *args, **kwargs):
+        """Réduit la photo avant de l'écrire, quel que soit le point d'entrée.
+
+        `_committed` est faux tant que le fichier vient d'être choisi et n'a
+        pas encore été écrit : c'est le seul moment où l'optimisation a lieu,
+        ce qui évite de recompresser à chaque enregistrement.
+        """
+        if self.image and not getattr(self.image, '_committed', True):
+            from .image_optimizer import optimiser_image
+
+            contenu, nom = optimiser_image(self.image)
+            if contenu is not None:
+                self.image.save(nom, contenu, save=False)
+
+        super().save(*args, **kwargs)

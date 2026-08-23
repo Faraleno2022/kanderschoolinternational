@@ -906,6 +906,37 @@ def modifier_eleve(request, eleve_id):
                 elif nb_trans == 0 and nb_ign > 0:
                     messages.warning(request, f"Attention : {nb_ign} note(s) n'ont pas pu etre transferees (matieres sans equivalent dans la nouvelle classe).")
 
+            finance = getattr(eleve, '_financial_transfer_info', None)
+            if finance:
+                if finance.get('grille_manquante'):
+                    messages.warning(
+                        request,
+                        "Transfert effectué, mais aucune grille tarifaire ne correspond "
+                        f"à la nouvelle classe pour {finance.get('nouvelle_annee')}. "
+                        "L'échéancier n'a pas été modifié.",
+                    )
+                elif finance.get('echeancier_mis_a_jour'):
+                    messages.success(
+                        request,
+                        "Scolarité recalculée automatiquement : "
+                        f"{finance['nouveau_total_du']:,.0f} GNF dus, "
+                        f"{finance['encaissements_conserves']:,.0f} GNF réaffectés, "
+                        f"reste {finance['solde_restant']:,.0f} GNF.",
+                    )
+                    if finance.get('changement_ecole'):
+                        messages.info(
+                            request,
+                            "Les anciens paiements restent comptabilisés dans "
+                            f"{finance['ancienne_ecole']} et ne diminuent pas la dette "
+                            f"de {finance['nouvelle_ecole']}.",
+                        )
+                    if finance.get('credit_non_affecte', 0) > 0:
+                        messages.warning(
+                            request,
+                            "Crédit à régulariser après transfert : "
+                            f"{finance['credit_non_affecte']:,.0f} GNF.",
+                        )
+
             # Créer l'historique si des changements ont été effectués
             if changements:
                 try:

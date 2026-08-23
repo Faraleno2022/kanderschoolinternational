@@ -156,6 +156,8 @@ class Command(BaseCommand):
 
         echeancier, e_created = EcheancierPaiement.objects.get_or_create(
             eleve=eleve,
+            annee_scolaire=annee,
+            ecole_reference=classe.ecole,
             defaults=echeancier_values,
         )
         if e_created:

@@ -130,7 +130,7 @@
                                     <strong>{{ item.eleve.nom_complet }}</strong>
                                 </a>
                             </td>
-                            <td>{{ item.eleve.classe.nom }}</td>
+                            <td>{{ item.echeancier.classe_reference.nom|default:item.eleve.classe.nom }}</td>
                             <td>{{ item.montant_total|floatformat:0|intcomma }} GNF</td>
                             <td class="text-success">{{ item.montant_paye|floatformat:0|intcomma }} GNF</td>
                             <td class="text-danger">

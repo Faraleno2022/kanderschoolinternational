@@ -16,6 +16,7 @@
         </a>
         <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#filtresModal">
             <i class="fas fa-filter me-1"></i>Filtres
+            {% if filtres_actifs %}<span class="badge bg-info text-dark ms-1">actifs</span>{% endif %}
         </button>
         <div class="btn-group">
             <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
@@ -87,6 +88,85 @@
             <a href="{% url 'paiements:tableau_bord' %}" class="btn btn-secondary">
                 <i class="fas fa-chart-line me-1"></i>Tableau de bord
             </a>
+        </div>
+    </div>
+
+    <!-- Filtres détaillés de la liste -->
+    <div class="modal fade" id="filtresModal" tabindex="-1" aria-labelledby="filtresModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <form method="get" action="{% url 'paiements:liste_paiements' %}">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="filtresModalLabel">
+                            <i class="fas fa-filter me-2"></i>Filtrer les paiements
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                    </div>
+                    <div class="modal-body">
+                        {% if annee_filtre %}<input type="hidden" name="annee" value="{{ annee_filtre }}">{% endif %}
+                        {% if statut %}<input type="hidden" name="statut" value="{{ statut }}">{% endif %}
+
+                        <div class="mb-3">
+                            <label for="filtreQ" class="form-label fw-semibold">Recherche</label>
+                            <input type="search" class="form-control" id="filtreQ" name="q" value="{{ q }}"
+                                   placeholder="Nom, prénom, matricule, reçu, école ou classe">
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="filtreClasse" class="form-label fw-semibold">Classe</label>
+                                <select class="form-select" id="filtreClasse" name="classe">
+                                    <option value="">Toutes les classes</option>
+                                    {% for classe in classes_filtre %}
+                                    <option value="{{ classe.id }}" {% if classe.id == classe_filtre %}selected{% endif %}>
+                                        {{ classe.ecole.nom }} — {{ classe.nom }} ({{ classe.annee_scolaire }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">L’école et l’année distinguent les classes portant le même nom.</div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="filtreNiveau" class="form-label fw-semibold">Niveau de paiement</label>
+                                <select class="form-select" id="filtreNiveau" name="niveau">
+                                    <option value="">Tous</option>
+                                    <option value="RETARD" {% if niveau_paiement == 'RETARD' %}selected{% endif %}>En retard</option>
+                                    <option value="RESTE" {% if niveau_paiement == 'RESTE' %}selected{% endif %}>Reste à payer (à tout payer)</option>
+                                    <option value="SOLDE" {% if niveau_paiement == 'SOLDE' %}selected{% endif %}>Soldé (à jour)</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="filtreMode" class="form-label fw-semibold">Type de paiement (mode)</label>
+                                <select class="form-select" id="filtreMode" name="mode">
+                                    <option value="">Tous les modes</option>
+                                    {% for mode in modes_paiement %}
+                                    <option value="{{ mode.id }}" {% if mode.id == mode_filtre %}selected{% endif %}>{{ mode.nom }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="filtreNature" class="form-label fw-semibold">Nature (type)</label>
+                                <select class="form-select" id="filtreNature" name="nature">
+                                    <option value="">Toutes les natures</option>
+                                    {% for nature in natures_paiement %}
+                                    <option value="{{ nature.id }}" {% if nature.id == nature_filtre %}selected{% endif %}>{{ nature.nom }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-undo me-1"></i>Réinitialiser
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-check me-1"></i>Appliquer les filtres
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -399,6 +479,12 @@
     <!-- Recherche (une seule zone multi-critères) -->
     <div class="search-card">
         <form method="get" class="row g-3 align-items-end">
+            {% if classe_filtre %}<input type="hidden" name="classe" value="{{ classe_filtre }}">{% endif %}
+            {% if niveau_paiement %}<input type="hidden" name="niveau" value="{{ niveau_paiement }}">{% endif %}
+            {% if mode_filtre %}<input type="hidden" name="mode" value="{{ mode_filtre }}">{% endif %}
+            {% if nature_filtre %}<input type="hidden" name="nature" value="{{ nature_filtre }}">{% endif %}
+            {% if statut %}<input type="hidden" name="statut" value="{{ statut }}">{% endif %}
+            {% if annee_filtre %}<input type="hidden" name="annee" value="{{ annee_filtre }}">{% endif %}
             <div class="col-md-9">
                 <label for="q" class="form-label">Recherche</label>
                 <input type="text" class="form-control search-input" id="q" name="q"
@@ -412,10 +498,18 @@
             </div>
         </form>
 
-        {% if q %}
+        {% if filtres_actifs %}
         <div class="mt-3">
-            <strong>Filtre actif :</strong>
-            <span class="filter-badge">Recherche: "{{ q }}"</span>
+            <strong>Filtres actifs :</strong>
+            {% if q %}<span class="filter-badge">Recherche : « {{ q }} »</span>{% endif %}
+            {% if classe_selectionnee %}
+                <span class="filter-badge">Classe : {{ classe_selectionnee.nom }} — {{ classe_selectionnee.ecole.nom }}</span>
+            {% endif %}
+            {% if niveau_paiement == 'RETARD' %}<span class="filter-badge">Niveau : En retard</span>{% endif %}
+            {% if niveau_paiement == 'RESTE' %}<span class="filter-badge">Niveau : Reste à payer</span>{% endif %}
+            {% if niveau_paiement == 'SOLDE' %}<span class="filter-badge">Niveau : Soldé</span>{% endif %}
+            {% if mode_selectionne %}<span class="filter-badge">Mode : {{ mode_selectionne.nom }}</span>{% endif %}
+            {% if nature_selectionnee %}<span class="filter-badge">Nature : {{ nature_selectionnee.nom }}</span>{% endif %}
             <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-sm btn-outline-secondary ms-2">
                 <i class="fas fa-times me-1"></i>Effacer
             </a>
