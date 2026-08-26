@@ -48,6 +48,12 @@ from .notifications import (
     send_relance_notification,
     send_retard_notification,
 )
+from .allocation import (
+    ALLOCATION_COMPONENTS,
+    allocate_amount_sequentially,
+    payment_type_plan,
+    registration_kind_for_type,
+)
 
 
 def _normalize_payment_type(value) -> str:
@@ -866,10 +872,262 @@ def twilio_status_callback(request):
 # Tableau de bord Paiements – statistiques réelles + listes
 # ---------------------------------------------------------------
 
-def _compute_stats(user):
-    """Calcule les statistiques affichées sur le tableau de bord en respectant l'école de l'utilisateur (sauf admin).
-    Retourne un dict: total_paiements_mois, nombre_paiements_mois, eleves_en_retard, paiements_en_attente.
+_DASHBOARD_PERIODS = ('today', 'week', 'month', 'year')
+
+
+def _dashboard_period_starts(today):
+    """Bornes calendaires utilisées par toutes les cartes d'encaissement."""
+    return {
+        'today': today,
+        'week': today - timedelta(days=today.weekday()),
+        'month': today.replace(day=1),
+        'year': date(today.year, 1, 1),
+    }
+
+
+def _empty_dashboard_periods():
+    return {period: 0 for period in _DASHBOARD_PERIODS}
+
+
+def _dashboard_payment_allocations(payments, today):
+    """Ventile en lot les paiements retenus sans double comptage.
+
+    Les paiements antérieurs de la même année scolaire sont rejoués pour
+    retrouver l'affectation exacte d'un paiement combiné. La somme affectée
+    au poste d'admission est ensuite rangée en inscription ou réinscription.
     """
+    payments = list(payments)
+    if not payments:
+        return {}
+
+    selected_ids = {payment.pk for payment in payments}
+    selected_keys = {
+        (
+            payment.eleve_id,
+            payment.ecole_encaissement_id,
+            payment.annee_scolaire,
+        )
+        for payment in payments
+    }
+    student_ids = {payment.eleve_id for payment in payments}
+    school_years = {payment.annee_scolaire for payment in payments}
+
+    schedules = EcheancierPaiement.objects.filter(
+        eleve_id__in=student_ids,
+        annee_scolaire__in=school_years,
+    )
+    schedules_by_key = {
+        (schedule.eleve_id, schedule.ecole_reference_id, schedule.annee_scolaire): schedule
+        for schedule in schedules
+    }
+
+    history = (
+        Paiement.objects
+        .filter(
+            eleve_id__in=student_ids,
+            annee_scolaire__in=school_years,
+            statut='VALIDE',
+            date_paiement__lte=today,
+        )
+        .select_related('type_paiement')
+        .order_by(
+            'eleve_id', 'ecole_encaissement_id', 'annee_scolaire',
+            'date_paiement', 'date_creation', 'pk',
+        )
+    )
+
+    running_paid = {}
+    results = {}
+    for payment in history.iterator():
+        key = (
+            payment.eleve_id,
+            payment.ecole_encaissement_id,
+            payment.annee_scolaire,
+        )
+        if key not in selected_keys:
+            continue
+
+        schedule = schedules_by_key.get(key)
+        plan = payment_type_plan(payment.type_paiement)
+        if schedule is None:
+            # Cas historique exceptionnel sans échéancier : le libellé reste
+            # la seule information disponible pour classer l'encaissement.
+            registration_kind = plan['registration_kind']
+            result = {
+                'inscription': Decimal('0'),
+                'reinscription': Decimal('0'),
+                'scolarite': Decimal('0'),
+            }
+            if registration_kind and not plan['tranches']:
+                result[registration_kind] = Decimal(str(payment.montant or 0))
+            else:
+                result['scolarite'] = Decimal(str(payment.montant or 0))
+        else:
+            initial_paid = running_paid.setdefault(
+                key,
+                {
+                    component: Decimal('0')
+                    for component, _due_field, _paid_field in ALLOCATION_COMPONENTS
+                },
+            )
+            raw_allocation, paid_after, unapplied = allocate_amount_sequentially(
+                schedule,
+                payment.montant,
+                initial_paid=initial_paid,
+            )
+            running_paid[key] = paid_after
+            registration_kind = registration_kind_for_type(payment.type_paiement)
+            if registration_kind not in {'inscription', 'reinscription'}:
+                registration_kind = (
+                    'reinscription'
+                    if schedule.nature_frais == EcheancierPaiement.NATURE_REINSCRIPTION
+                    else 'inscription'
+                )
+            result = {
+                'inscription': Decimal('0'),
+                'reinscription': Decimal('0'),
+                'scolarite': (
+                    raw_allocation['tranche_1']
+                    + raw_allocation['tranche_2']
+                    + raw_allocation['tranche_3']
+                ),
+            }
+            result[registration_kind] = raw_allocation['inscription']
+            # Un reliquat explicitement destiné à une tranche constitue une
+            # avance de scolarité et reste donc visible dans cette catégorie.
+            if unapplied and (plan['tranches'] or not plan['include_registration']):
+                result['scolarite'] += unapplied
+
+        if payment.pk in selected_ids:
+            results[payment.pk] = result
+
+    return results
+
+
+def _dashboard_subscription_periods(queryset, today):
+    """Somme les abonnements Bus/Cantine d'après leur enregistrement."""
+    starts = _dashboard_period_starts(today)
+    money = DecimalField(max_digits=14, decimal_places=0)
+    aggregates = queryset.aggregate(**{
+        period: Coalesce(
+            Sum(
+                'montant',
+                filter=Q(
+                    created_at__date__gte=start,
+                    created_at__date__lte=today,
+                ),
+            ),
+            Value(0, output_field=money),
+            output_field=money,
+        )
+        for period, start in starts.items()
+    })
+    return {period: int(aggregates.get(period) or 0) for period in _DASHBOARD_PERIODS}
+
+
+def _dashboard_category_stats(user, today):
+    """Montants encaissés par catégorie et par période calendaire."""
+    from bus.models import AbonnementBus, AbonnementCantine
+
+    starts = _dashboard_period_starts(today)
+    categories = {
+        'scolarite': _empty_dashboard_periods(),
+        'inscription': _empty_dashboard_periods(),
+        'reinscription': _empty_dashboard_periods(),
+    }
+
+    payments = Paiement.objects.filter(
+        statut='VALIDE',
+        date_paiement__gte=starts['year'],
+        date_paiement__lte=today,
+    ).select_related('type_paiement')
+    payments = list(filter_by_user_school(
+        payments, user, 'ecole_encaissement',
+    ).order_by('date_paiement', 'date_creation', 'pk'))
+    allocations = _dashboard_payment_allocations(payments, today)
+
+    for payment in payments:
+        allocation = allocations.get(payment.pk)
+        if not allocation:
+            continue
+        for period, start in starts.items():
+            if payment.date_paiement < start:
+                continue
+            for category in ('scolarite', 'inscription', 'reinscription'):
+                categories[category][period] += int(allocation[category] or 0)
+
+    bus_qs = filter_by_user_school(
+        AbonnementBus.objects.all(), user, 'eleve__classe__ecole',
+    )
+    cantine_qs = filter_by_user_school(
+        AbonnementCantine.objects.all(), user, 'eleve__classe__ecole',
+    )
+    categories['bus'] = _dashboard_subscription_periods(bus_qs, today)
+    categories['cantine'] = _dashboard_subscription_periods(cantine_qs, today)
+    return categories
+
+
+def _dashboard_overdue_queryset(user, today):
+    """Retourne les échéanciers réellement en retard à la veille."""
+    money = DecimalField(max_digits=14, decimal_places=0)
+
+    def amount(field_name):
+        return Coalesce(F(field_name), Value(0, output_field=money), output_field=money)
+
+    exigible = (
+        Case(
+            When(date_echeance_inscription__lt=today, then=F('frais_inscription_du')),
+            default=Value(0), output_field=money,
+        )
+        + Case(
+            When(date_echeance_tranche_1__lt=today, then=F('tranche_1_due')),
+            default=Value(0), output_field=money,
+        )
+        + Case(
+            When(date_echeance_tranche_2__lt=today, then=F('tranche_2_due')),
+            default=Value(0), output_field=money,
+        )
+        + Case(
+            When(date_echeance_tranche_3__lt=today, then=F('tranche_3_due')),
+            default=Value(0), output_field=money,
+        )
+    )
+    total_paid = (
+        amount('frais_inscription_paye') + amount('tranche_1_payee')
+        + amount('tranche_2_payee') + amount('tranche_3_payee')
+    )
+    discounts = (
+        PaiementRemise.objects
+        .filter(
+            paiement__eleve_id=OuterRef('eleve_id'),
+            paiement__statut='VALIDE',
+            paiement__annee_scolaire=OuterRef('annee_scolaire'),
+            paiement__ecole_encaissement_id=OuterRef('ecole_reference_id'),
+        )
+        .values('paiement__eleve_id')
+        .annotate(total=Sum('montant_remise'))
+        .values('total')[:1]
+    )
+    queryset = filter_by_user_school(
+        EcheancierPaiement.objects.all(), user, 'ecole_reference',
+    ).annotate(
+        exigible_dashboard=ExpressionWrapper(exigible, output_field=money),
+        paid_dashboard=ExpressionWrapper(total_paid, output_field=money),
+        discounts_dashboard=Coalesce(
+            Subquery(discounts, output_field=money),
+            Value(0, output_field=money), output_field=money,
+        ),
+    ).annotate(
+        retard_db=ExpressionWrapper(
+            F('exigible_dashboard') - F('paid_dashboard')
+            - Least(F('discounts_dashboard'), F('exigible_dashboard')),
+            output_field=money,
+        )
+    )
+    return queryset.filter(retard_db__gt=0)
+
+def _compute_stats(user):
+    """Calcule les KPI et catégories en respectant l'école de l'utilisateur."""
     try:
         from django.utils import timezone as _tz
         today = _tz.localdate() if hasattr(_tz, 'localdate') else date.today()
@@ -900,18 +1158,21 @@ def _compute_stats(user):
     _qs_nb = filter_by_user_school(_qs_nb, user, 'ecole_encaissement')
     nb_paiements_mois = _qs_nb.count()
 
-    # Élèves en retard: calcul simplifié pour éviter les erreurs de colonnes manquantes
-    # Utilise une approche plus robuste qui ne dépend pas des colonnes date_echeance_*
+    # Retards réellement exigibles : une échéance devient en retard le
+    # lendemain, et les remises validées sont prises en compte.
     try:
-        # Méthode simplifiée: comparer total dû vs total payé
-        _qs_retard = EcheancierPaiement.objects.annotate(
-            total_du=F('frais_inscription_du') + F('tranche_1_due') + F('tranche_2_due') + F('tranche_3_due'),
-            total_paye=F('frais_inscription_paye') + F('tranche_1_payee') + F('tranche_2_payee') + F('tranche_3_payee')
-        ).filter(total_du__gt=F('total_paye'))
-        _qs_retard = filter_by_user_school(_qs_retard, user, 'ecole_reference')
-        eleves_retard_count = _qs_retard.count()
+        retard_summary = _dashboard_overdue_queryset(user, today).aggregate(
+            count=Count('pk'),
+            total=Coalesce(
+                Sum('retard_db'),
+                Value(0, output_field=DecimalField(max_digits=14, decimal_places=0)),
+            ),
+        )
+        eleves_retard_count = retard_summary['count'] or 0
+        montant_en_retard = retard_summary['total'] or 0
     except Exception:
         eleves_retard_count = 0
+        montant_en_retard = 0
 
     # Paiements en attente
     _qs_attente = Paiement.objects.filter(statut='EN_ATTENTE')
@@ -922,7 +1183,9 @@ def _compute_stats(user):
         'total_paiements_mois': int(total_mois or 0),
         'nombre_paiements_mois': int(nb_paiements_mois or 0),
         'eleves_en_retard': int(eleves_retard_count or 0),
+        'montant_en_retard': int(montant_en_retard or 0),
         'paiements_en_attente': int(en_attente_count or 0),
+        'categories': _dashboard_category_stats(user, today),
     }
 
 
@@ -963,55 +1226,15 @@ def tableau_bord_paiements(request):
         paiements_recents_qs = filter_by_user_school(paiements_recents_qs, request.user, 'ecole_encaissement')
     paiements_recents = list(paiements_recents_qs[:20])
 
-    # Top élèves en retard (montant de retard décroissant)
-    exigible_expr = (
-        Case(
-            When(date_echeance_inscription__lte=today, then=F('frais_inscription_du')),
-            default=Value(0),
-            output_field=DecimalField(max_digits=10, decimal_places=0),
-        )
-        + Case(
-            When(date_echeance_tranche_1__lte=today, then=F('tranche_1_due')),
-            default=Value(0),
-            output_field=DecimalField(max_digits=10, decimal_places=0),
-        )
-        + Case(
-            When(date_echeance_tranche_2__lte=today, then=F('tranche_2_due')),
-            default=Value(0),
-            output_field=DecimalField(max_digits=10, decimal_places=0),
-        )
-        + Case(
-            When(date_echeance_tranche_3__lte=today, then=F('tranche_3_due')),
-            default=Value(0),
-            output_field=DecimalField(max_digits=10, decimal_places=0),
-        )
-    )
-    remises_expr = Coalesce(
-        Sum('eleve__paiements__remises__montant_remise', filter=Q(
-            eleve__paiements__statut='VALIDE',
-            eleve__paiements__annee_scolaire=F('annee_scolaire'),
-            eleve__paiements__ecole_encaissement_id=F('ecole_reference_id'),
-        )),
-        Value(0),
-        output_field=DecimalField(max_digits=10, decimal_places=0),
-    )
-    # Les remises ne compensent que les montants exigibles au jour J
-    remises_applicables = Least(remises_expr, exigible_expr)
-    paye_effectif_expr = (
-        F('frais_inscription_paye') + F('tranche_1_payee') + F('tranche_2_payee') + F('tranche_3_payee')
-        + remises_applicables
-    )
-    retard_expr = ExpressionWrapper(exigible_expr - paye_effectif_expr, output_field=DecimalField(max_digits=10, decimal_places=0))
+    # Top élèves en retard (même calcul que la carte de synthèse).
     eleves_en_retard = (
-        EcheancierPaiement.objects
+        _dashboard_overdue_queryset(request.user, today)
         .select_related(
             'eleve', 'eleve__classe', 'eleve__classe__ecole',
             'classe_reference', 'ecole_reference',
         )
-        .annotate(retard_db=retard_expr)
-        .filter(retard_db__gt=0)
+        .order_by('-retard_db')[:10]
     )
-    eleves_en_retard = filter_by_user_school(eleves_en_retard, request.user, 'ecole_reference').order_by('-retard_db')[:10]
 
     ecole_for_annee = user_school(request.user) if not user_is_admin(request.user) else None
     annee_active = get_annee_active(request, ecole_for_annee) if ecole_for_annee else None
@@ -1082,12 +1305,13 @@ def tableau_bord_paiements(request):
         total_paye = min(total_du, total_paye_brut)
         reste = max(total_du - total_paye, 0)
 
-        exigible = sum(due for due, _paye, echeance in components if echeance and echeance <= today)
+        # Une échéance du jour n'est en retard qu'à partir du lendemain.
+        exigible = sum(due for due, _paye, echeance in components if echeance and echeance < today)
         retard = max(exigible - total_paye, 0)
         prevision = sum(
             max(due - paye, 0)
             for due, paye, echeance in components
-            if echeance and today < echeance <= date_limite_prevision
+            if echeance and today <= echeance <= date_limite_prevision
         )
 
         finance_direction['eleves_suivis'] += 1
@@ -1167,6 +1391,33 @@ def tableau_bord_paiements(request):
         'finance_direction': finance_direction,
         'classes_a_risque': classes_a_risque,
         'modes_encaissement': modes_encaissement,
+        'category_cards': [
+            {
+                'key': 'scolarite', 'label': 'Scolarité',
+                'subtitle': 'Tranches encaissées', 'icon': 'fa-graduation-cap',
+                'color': 'primary', 'values': stats['categories']['scolarite'],
+            },
+            {
+                'key': 'inscription', 'label': 'Inscription',
+                'subtitle': 'Frais de première inscription', 'icon': 'fa-user-plus',
+                'color': 'success', 'values': stats['categories']['inscription'],
+            },
+            {
+                'key': 'reinscription', 'label': 'Réinscription',
+                'subtitle': 'Frais de renouvellement', 'icon': 'fa-user-check',
+                'color': 'info', 'values': stats['categories']['reinscription'],
+            },
+            {
+                'key': 'bus', 'label': 'Bus scolaire',
+                'subtitle': 'Abonnements enregistrés', 'icon': 'fa-bus',
+                'color': 'warning', 'values': stats['categories']['bus'],
+            },
+            {
+                'key': 'cantine', 'label': 'Cantine',
+                'subtitle': 'Abonnements enregistrés', 'icon': 'fa-utensils',
+                'color': 'secondary', 'values': stats['categories']['cantine'],
+            },
+        ],
     }
     return render(request, 'paiements/tableau_bord.html', context)
 
@@ -4340,17 +4591,21 @@ def ajax_classes_par_ecole(request):
 
 @login_required
 def ajax_statistiques_paiements(request):
-    """Endpoint AJAX minimal pour statistiques paiements.
-    Fourni pour satisfaire le routage; peut être enrichi ultérieurement.
-    """
+    """Actualise toutes les cartes du tableau de bord des paiements."""
     try:
-        base = filter_by_user_school(Paiement.objects.all(), request.user, 'ecole_encaissement')
-        total = base.count()
-        montant_total = int(base.aggregate(total=Sum('montant'))['total'] or 0)
+        stats = _compute_stats(request.user)
+        return JsonResponse({'success': True, 'stats': stats})
     except Exception:
-        total = 0
-        montant_total = 0
-    return JsonResponse({'success': True, 'total': total, 'montant_total': montant_total})
+        logging.getLogger(__name__).exception(
+            "Impossible d'actualiser les statistiques de paiements"
+        )
+        return JsonResponse(
+            {
+                'success': False,
+                'error': 'Statistiques temporairement indisponibles.',
+            },
+            status=500,
+        )
 
 @login_required
 @require_http_methods(["GET", "POST"])
