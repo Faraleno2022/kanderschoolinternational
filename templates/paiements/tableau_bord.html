@@ -117,6 +117,75 @@
     .risk-table th {
         vertical-align: middle;
     }
+    .category-card {
+        --category-color: #0d6efd;
+        background: #fff;
+        border: 1px solid #e5e9ef;
+        border-left: 5px solid var(--category-color);
+        border-radius: 12px;
+        box-shadow: 0 3px 14px rgba(31, 45, 61, .07);
+        height: 100%;
+        overflow: hidden;
+    }
+    .category-card.success { --category-color: #198754; }
+    .category-card.info { --category-color: #0dcaf0; }
+    .category-card.warning { --category-color: #f0a000; }
+    .category-card.secondary { --category-color: #6c757d; }
+    .category-card.danger { --category-color: #dc3545; }
+    .category-card-header {
+        align-items: center;
+        display: flex;
+        gap: 12px;
+        padding: 18px 18px 12px;
+    }
+    .category-icon {
+        align-items: center;
+        background: color-mix(in srgb, var(--category-color) 12%, white);
+        border-radius: 10px;
+        color: var(--category-color);
+        display: flex;
+        flex: 0 0 42px;
+        height: 42px;
+        justify-content: center;
+    }
+    .category-period-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        border-top: 1px solid #eef1f4;
+    }
+    .category-period {
+        min-width: 0;
+        padding: 13px 16px;
+    }
+    .category-period:nth-child(odd) { border-right: 1px solid #eef1f4; }
+    .category-period:nth-child(-n+2) { border-bottom: 1px solid #eef1f4; }
+    .category-period-label {
+        color: #6c757d;
+        display: block;
+        font-size: .74rem;
+        margin-bottom: 3px;
+        text-transform: uppercase;
+    }
+    .category-amount {
+        color: #263238;
+        display: block;
+        font-size: 1.05rem;
+        font-weight: 700;
+        overflow-wrap: anywhere;
+    }
+    .category-currency {
+        color: #6c757d;
+        font-size: .7rem;
+        font-weight: 600;
+    }
+    .overdue-amount {
+        color: #dc3545;
+        font-size: 1.55rem;
+        font-weight: 800;
+    }
+    @supports not (background: color-mix(in srgb, red 10%, white)) {
+        .category-icon { background: #f1f4f8; }
+    }
 </style>
 {% endblock %}
 
@@ -125,30 +194,94 @@
     <div class="row mb-4">
         <div class="col-md-3">
             <div class="stat-card success">
-                <div class="stat-number">{{ stats.total_paiements_mois|floatformat:0|intcomma }}</div>
+                <div class="stat-number" id="stats-total-month">{{ stats.total_paiements_mois|floatformat:0|intcomma }}</div>
                 <div class="stat-label">GNF ce mois</div>
                 <small class="text-muted">Paiements validés</small>
             </div>
         </div>
         <div class="col-md-3">
             <div class="stat-card">
-                <div class="stat-number">{{ stats.nombre_paiements_mois|intcomma }}</div>
+                <div class="stat-number" id="stats-payment-count">{{ stats.nombre_paiements_mois|intcomma }}</div>
                 <div class="stat-label">Paiements</div>
                 <small class="text-muted">Ce mois</small>
             </div>
         </div>
         <div class="col-md-3">
             <div class="stat-card warning">
-                <div class="stat-number">{{ stats.eleves_en_retard|intcomma }}</div>
+                <div class="stat-number" id="stats-overdue-count">{{ stats.eleves_en_retard|intcomma }}</div>
                 <div class="stat-label">Élèves en retard</div>
                 <small class="text-muted">À relancer</small>
             </div>
         </div>
         <div class="col-md-3">
             <div class="stat-card danger">
-                <div class="stat-number">{{ stats.paiements_en_attente|intcomma }}</div>
+                <div class="stat-number" id="stats-pending-count">{{ stats.paiements_en_attente|intcomma }}</div>
                 <div class="stat-label">En attente</div>
                 <small class="text-muted">À valider</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Encaissements par catégorie et par période -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end mb-3">
+        <div>
+            <h4 class="mb-1"><i class="fas fa-coins me-2 text-primary"></i>Encaissements par catégorie</h4>
+            <p class="text-muted mb-0">Montants enregistrés aujourd'hui, cette semaine, ce mois et cette année civile.</p>
+        </div>
+        <small class="text-muted mt-2 mt-md-0"><i class="fas fa-sync-alt me-1"></i>Actualisation automatique</small>
+    </div>
+    <div class="row g-3 mb-4">
+        {% for card in category_cards %}
+        <div class="col-12 col-md-6 col-xl-4">
+            <div class="category-card {{ card.color }}" data-category-card="{{ card.key }}">
+                <div class="category-card-header">
+                    <div class="category-icon"><i class="fas {{ card.icon }}"></i></div>
+                    <div>
+                        <h5 class="mb-0">{{ card.label }}</h5>
+                        <small class="text-muted">{{ card.subtitle }}</small>
+                    </div>
+                </div>
+                <div class="category-period-grid">
+                    <div class="category-period">
+                        <span class="category-period-label">Aujourd'hui</span>
+                        <span class="category-amount" data-category="{{ card.key }}" data-period="today">{{ card.values.today|floatformat:0|intcomma }}</span>
+                        <span class="category-currency">GNF</span>
+                    </div>
+                    <div class="category-period">
+                        <span class="category-period-label">Cette semaine</span>
+                        <span class="category-amount" data-category="{{ card.key }}" data-period="week">{{ card.values.week|floatformat:0|intcomma }}</span>
+                        <span class="category-currency">GNF</span>
+                    </div>
+                    <div class="category-period">
+                        <span class="category-period-label">Ce mois</span>
+                        <span class="category-amount" data-category="{{ card.key }}" data-period="month">{{ card.values.month|floatformat:0|intcomma }}</span>
+                        <span class="category-currency">GNF</span>
+                    </div>
+                    <div class="category-period">
+                        <span class="category-period-label">Cette année</span>
+                        <span class="category-amount" data-category="{{ card.key }}" data-period="year">{{ card.values.year|floatformat:0|intcomma }}</span>
+                        <span class="category-currency">GNF</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        <div class="col-12 col-md-6 col-xl-4">
+            <div class="category-card danger">
+                <div class="category-card-header">
+                    <div class="category-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                    <div>
+                        <h5 class="mb-0">Retards de paiement</h5>
+                        <small class="text-muted">Échéances antérieures à aujourd'hui</small>
+                    </div>
+                </div>
+                <div class="p-3 border-top">
+                    <div class="overdue-amount"><span id="stats-overdue-amount">{{ stats.montant_en_retard|floatformat:0|intcomma }}</span> <small class="category-currency">GNF</small></div>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <span class="text-muted"><strong id="stats-overdue-students">{{ stats.eleves_en_retard|intcomma }}</strong> élève(s) à relancer</span>
+                        <a href="{% url 'paiements:liste_paiements' %}?niveau=RETARD" class="btn btn-sm btn-outline-danger">Voir les retards</a>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -444,29 +577,46 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.success) {
                     // Mettre à jour les valeurs dans l'interface
                     const stats = data.stats;
+                    const formatNumber = value => new Intl.NumberFormat('fr-FR').format(value || 0);
                     
                     // Total paiements ce mois
-                    const totalElem = document.querySelector('.stat-card.success .stat-number');
+                    const totalElem = document.getElementById('stats-total-month');
                     if (totalElem) {
-                        totalElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.total_paiements_mois);
+                        totalElem.textContent = formatNumber(stats.total_paiements_mois);
                     }
                     
                     // Nombre de paiements ce mois
-                    const nombreElem = document.querySelector('.stat-card:not(.success):not(.warning):not(.danger) .stat-number');
+                    const nombreElem = document.getElementById('stats-payment-count');
                     if (nombreElem) {
-                        nombreElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.nombre_paiements_mois);
+                        nombreElem.textContent = formatNumber(stats.nombre_paiements_mois);
                     }
                     
                     // Élèves en retard
-                    const retardElem = document.querySelector('.stat-card.warning .stat-number');
+                    const retardElem = document.getElementById('stats-overdue-count');
                     if (retardElem) {
-                        retardElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.eleves_en_retard);
+                        retardElem.textContent = formatNumber(stats.eleves_en_retard);
                     }
                     
                     // Paiements en attente
-                    const attenteElem = document.querySelector('.stat-card.danger .stat-number');
+                    const attenteElem = document.getElementById('stats-pending-count');
                     if (attenteElem) {
-                        attenteElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.paiements_en_attente);
+                        attenteElem.textContent = formatNumber(stats.paiements_en_attente);
+                    }
+
+                    const overdueAmount = document.getElementById('stats-overdue-amount');
+                    const overdueStudents = document.getElementById('stats-overdue-students');
+                    if (overdueAmount) overdueAmount.textContent = formatNumber(stats.montant_en_retard);
+                    if (overdueStudents) overdueStudents.textContent = formatNumber(stats.eleves_en_retard);
+
+                    // Cartes Scolarité, Inscription, Réinscription, Bus et Cantine
+                    if (stats.categories) {
+                        document.querySelectorAll('[data-category][data-period]').forEach(element => {
+                            const category = element.dataset.category;
+                            const period = element.dataset.period;
+                            if (stats.categories[category]) {
+                                element.textContent = formatNumber(stats.categories[category][period]);
+                            }
+                        });
                     }
                     
                     console.log('Statistiques paiements mises à jour:', stats);
@@ -477,10 +627,9 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
     
-    // Mettre à jour les statistiques au chargement
-    updateStatistics();
-    
-    // Actualisation automatique toutes les 30 secondes
+    // Le rendu serveur contient déjà les valeurs courantes. La première
+    // actualisation AJAX intervient après 30 secondes pour éviter de doubler
+    // les calculs au chargement de la page.
     setInterval(updateStatistics, 30000);
 });
 </script>
