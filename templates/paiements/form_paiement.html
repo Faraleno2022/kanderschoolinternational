@@ -443,29 +443,6 @@
                         </ul>
                     </div>
                     
-                    <!-- Confirmation pour paiement partiel -->
-                    {% if show_partial_confirmation %}
-                    <div class="alert alert-danger mt-3" style="border: 2px solid #dc3545;">
-                        <h6 style="color: #dc3545; font-weight: bold;"><i class="fas fa-exclamation-triangle me-2"></i>⚠️ CONFIRMATION REQUISE - PAIEMENT PARTIEL</h6>
-                        <p class="mb-3" style="color: #721c24; font-weight: bold; font-size: 1.05em;">
-                            Le montant saisi (<span style="color: #dc3545;">{{ montant_saisi|floatformat:0 }} GNF</span>) est inférieur au reste à payer
-                            pour {{ type_description }} (<span style="color: #dc3545;">{{ montant_attendu|floatformat:0 }} GNF</span>).
-                        </p>
-                        <div class="form-check p-3" style="background-color: #f8d7da; border-radius: 5px; border: 1px solid #dc3545;">
-                            <input class="form-check-input" type="checkbox" name="confirmation_paiement_partiel" id="confirmationPartiel" value="1" required>
-                            <label class="form-check-label" for="confirmationPartiel" style="color: #721c24; font-weight: bold;">
-                                <i class="fas fa-check-square me-2"></i>Je confirme qu'il s'agit d'un paiement partiel et je souhaite procéder à l'enregistrement.
-                            </label>
-                        </div>
-                        <div class="mt-3">
-                            <button type="button" class="btn btn-outline-danger me-2" onclick="showConfirmationDialog()">
-                                <i class="fas fa-exclamation-circle me-1"></i>Confirmer le paiement partiel
-                            </button>
-                            <small class="text-muted">ou cochez la case ci-dessus et soumettez le formulaire</small>
-                        </div>
-                    </div>
-                    {% endif %}
-
                     <!-- Confirmation pour montant supérieur au type sélectionné -->
                     {% if show_overflow_confirmation %}
                     <div class="alert alert-warning mt-3" style="border: 2px solid #f39c12;">
@@ -1515,41 +1492,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initial UI sync
     updateFinalAmount();
 });
-
-// Fonction pour afficher la boîte de dialogue de confirmation
-function showConfirmationDialog() {
-    const montantSaisi = '{{ montant_saisi|default:"0" }}';
-    const montantAttendu = '{{ montant_attendu|default:"0" }}';
-    const typeDescription = '{{ type_description|default:"" }}';
-    
-    const message = `⚠️ CONFIRMATION DE PAIEMENT PARTIEL\n\n` +
-                   `Montant saisi: ${parseInt(montantSaisi).toLocaleString()} GNF\n` +
-                   `Montant standard pour ${typeDescription}: ${parseInt(montantAttendu).toLocaleString()} GNF\n\n` +
-                   `Voulez-vous vraiment enregistrer ce paiement partiel ?\n\n` +
-                   `⚠️ Cette action est irréversible une fois validée.`;
-    
-    if (confirm(message)) {
-        // Cocher automatiquement la case de confirmation
-        const checkbox = document.getElementById('confirmationPartiel');
-        if (checkbox) {
-            checkbox.checked = true;
-            
-            // Soumettre automatiquement le formulaire
-            const form = document.getElementById('paiementForm');
-            if (form) {
-                // Changer le texte du bouton pour indiquer l'action
-                const submitBtn = document.getElementById('submitBtn');
-                if (submitBtn) {
-                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement du paiement partiel...';
-                    submitBtn.disabled = true;
-                }
-                
-                // Soumettre le formulaire
-                form.submit();
-            }
-        }
-    }
-}
 
 // Améliorer l'affichage des messages d'erreur
 document.addEventListener('DOMContentLoaded', function() {

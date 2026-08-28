@@ -132,13 +132,19 @@ class MontantSuperieurConfirmationTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Paiement.objects.filter(eleve=self.eleve).exists())
 
-    def test_montant_inferieur_demande_toujours_confirmation(self):
-        """Le contrôle historique reste en place, dans l'autre sens."""
+    def test_montant_inferieur_est_accepte_du_premier_coup(self):
+        """Le contrôle n'est pas symétrique, et c'est voulu.
+
+        Un excédent engage de l'argent sur des postes que l'agent n'a pas
+        choisis, d'où la confirmation. Un versement incomplet ne fait que
+        moins remplir le poste visé : rien à confirmer.
+        """
         response = self._post(400000)
 
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context['show_partial_confirmation'])
-        self.assertFalse(Paiement.objects.filter(eleve=self.eleve).exists())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            Paiement.objects.get(eleve=self.eleve).montant, Decimal("400000"),
+        )
 
     def test_plafond_annuel_reste_bloquant(self):
         """Confirmer la répartition n'autorise pas à dépasser le total dû."""
