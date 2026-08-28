@@ -119,4 +119,12 @@ class SynchronisationApiTests(TestCase):
             HTTP_X_SYNC_TOKEN=device_two['sync_token'],
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()['changes']), 1)
+        # Le second poste recoit la modification poussee par le premier, et
+        # desormais aussi la creation de l'ecole faite sur le serveur : un
+        # changement ne circule plus seulement s'il vient d'un autre poste.
+        changements = [
+            (item['model_label'], item['operation'])
+            for item in response.json()['changes']
+        ]
+        self.assertIn(('eleves.Ecole', 'UPDATE'), changements)
+        self.assertIn(('eleves.Ecole', 'CREATE'), changements)

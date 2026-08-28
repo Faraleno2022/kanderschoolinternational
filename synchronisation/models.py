@@ -40,6 +40,44 @@ class SyncDevice(models.Model):
         return f'{self.nom} - {self.ecole}'
 
 
+class SyncCursor(models.Model):
+    """Repere du dernier changement serveur applique par ce poste.
+
+    Sans lui, chaque synchronisation repartait du debut du journal et
+    dedupliquait par une recherche JSON non indexee : le poste retelechargeait
+    indefiniment les memes changements. Le curseur est cote client seulement,
+    le serveur n'en a pas besoin.
+    """
+
+    ecole = models.OneToOneField(
+        Ecole, on_delete=models.CASCADE, related_name='sync_cursor',
+    )
+    server_change_id = models.BigIntegerField(default=0)
+    derniere_synchro = models.DateTimeField(null=True, blank=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Repere de synchronisation'
+        verbose_name_plural = 'Reperes de synchronisation'
+
+    def avancer(self, server_change_id):
+        """N'avance jamais a rebours : un lot hors sequence ne recule pas le repere."""
+        valeur = int(server_change_id or 0)
+        if valeur <= self.server_change_id:
+            self.derniere_synchro = timezone.now()
+            self.save(update_fields=['derniere_synchro', 'date_modification'])
+            return False
+        self.server_change_id = valeur
+        self.derniere_synchro = timezone.now()
+        self.save(update_fields=[
+            'server_change_id', 'derniere_synchro', 'date_modification',
+        ])
+        return True
+
+    def __str__(self):
+        return f'{self.ecole} @ {self.server_change_id}'
+
+
 class SyncChange(models.Model):
     OPERATION_CREATE = 'CREATE'
     OPERATION_UPDATE = 'UPDATE'

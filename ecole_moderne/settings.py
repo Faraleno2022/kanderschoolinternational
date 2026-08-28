@@ -397,6 +397,25 @@ PHONE_VERIFY_TTL_SECONDS = int(os.environ.get('PHONE_VERIFY_TTL_SECONDS', 4 * 36
 # reste donc volontairement désactivée, à activer sciemment le jour voulu.
 PHONE_VERIFY_ENFORCED = os.environ.get('PHONE_VERIFY_ENFORCED', '0').lower() in ('1', 'true', 'yes')
 
+# =================== Synchronisation hors-ligne ===================
+# Le poste hors-ligne dialogue avec le serveur via ces quatre valeurs. Sans
+# elles la commande `sync_offline` s'arrete d'emblee : elles ne sont donc pas
+# facultatives sur un poste, mais restent vides sur le serveur lui-meme.
+MYSCHOOL_SYNC_SERVER_URL = os.environ.get('MYSCHOOL_SYNC_SERVER_URL', '')
+MYSCHOOL_SYNC_DEVICE_ID = os.environ.get('MYSCHOOL_SYNC_DEVICE_ID', '')
+MYSCHOOL_SYNC_TOKEN = os.environ.get('MYSCHOOL_SYNC_TOKEN', '')
+MYSCHOOL_SYNC_ECOLE_ID = os.environ.get('MYSCHOOL_SYNC_ECOLE_ID', '')
+
+# Secondes pendant lesquelles le serveur retient une requete `pull` avant de
+# repondre a vide. Plus la valeur est haute, plus la donnee descend vite et
+# moins il y a de requetes ; elle doit rester sous le delai d'inactivite de
+# l'hebergeur et du reverse proxy.
+MYSCHOOL_SYNC_WAIT = int(os.environ.get('MYSCHOOL_SYNC_WAIT', 25))
+MYSCHOOL_SYNC_LONGPOLL_MAX = int(os.environ.get('MYSCHOOL_SYNC_LONGPOLL_MAX', 30))
+MYSCHOOL_SYNC_LONGPOLL_INTERVAL = float(
+    os.environ.get('MYSCHOOL_SYNC_LONGPOLL_INTERVAL', 1.0)
+)
+
 # =================== Synchronisation offline/online ===================
 MYSCHOOL_SYNC_SERVER_URL = os.environ.get('MYSCHOOL_SYNC_SERVER_URL', '').rstrip('/')
 MYSCHOOL_SYNC_DEVICE_ID = os.environ.get('MYSCHOOL_SYNC_DEVICE_ID', '')
