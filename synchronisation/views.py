@@ -1,5 +1,6 @@
 import json
 import secrets
+import time
 from uuid import UUID
 
 from django.conf import settings
@@ -231,6 +232,45 @@ def push(request):
     })
 
 
+def _changements_a_envoyer(device, since_id):
+    """Journal destine a ce poste, du plus ancien au plus recent.
+
+    Les changements nes de l'usage web du serveur restent au statut PENDING :
+    personne ne les « applique » ici puisqu'ils y sont deja. Les filtrer sur
+    APPLIED revenait donc a ne jamais transmettre au poste ce qui est saisi
+    sur le serveur. Seuls les echecs sont ecartes.
+    """
+    changements = (
+        SyncChange.objects
+        .filter(ecole=device.ecole)
+        .exclude(statut=SyncChange.STATUT_FAILED)
+        .exclude(device=device)
+    )
+    if since_id:
+        changements = changements.filter(id__gt=since_id)
+    return changements.order_by('id')
+
+
+def _attendre_un_changement(device, since_id, attente):
+    """Retient la requete jusqu'a l'arrivee d'un changement, ou expiration.
+
+    Le poste obtient ainsi la donnee en une seconde environ au lieu d'attendre
+    son prochain reveil, sans WebSocket ni broker : une seule requete HTTP
+    tenue, que n'importe quel reseau domestique laisse passer.
+    """
+    plafond = int(getattr(settings, 'MYSCHOOL_SYNC_LONGPOLL_MAX', 30))
+    pas = float(getattr(settings, 'MYSCHOOL_SYNC_LONGPOLL_INTERVAL', 1.0))
+    attente = max(0, min(int(attente or 0), plafond))
+    if attente <= 0:
+        return
+
+    echeance = time.monotonic() + attente
+    while time.monotonic() < echeance:
+        time.sleep(min(pas, max(0.0, echeance - time.monotonic())))
+        if _changements_a_envoyer(device, since_id).exists():
+            return
+
+
 @csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def pull(request):
@@ -250,6 +290,16 @@ def pull(request):
         initial = data.get('initial') in {True, '1', 'true', 'yes'}
 
     if initial:
+        # Le repere est pris AVANT de composer l'instantane : un changement
+        # survenu pendant sa fabrication sera relu au prochain tour plutot
+        # que saute definitivement.
+        repere = (
+            SyncChange.objects
+            .filter(ecole=device.ecole)
+            .order_by('-id')
+            .values_list('id', flat=True)
+            .first()
+        ) or 0
         serialized_changes = snapshot_changes_for_ecole(device.ecole)
         return JsonResponse({
             'ok': True,
@@ -259,25 +309,44 @@ def pull(request):
             'since_id': since_id,
             'initial': True,
             'changes': serialized_changes,
-            'latest_change_id': since_id,
+            'latest_change_id': repere,
+            'has_more': False,
             'server_time': timezone.now().isoformat(),
         })
 
-    changes = SyncChange.objects.filter(ecole=device.ecole, statut=SyncChange.STATUT_APPLIED).exclude(device=device)
+    curseur = None
     if since_id:
         try:
-            changes = changes.filter(id__gt=int(since_id))
+            curseur = int(since_id)
         except (TypeError, ValueError):
             return JsonResponse({'ok': False, 'error': 'since_id invalide.'}, status=400)
     elif since:
+        # Compatibilite : un horodatage designe le dernier changement connu.
         parsed_since = parse_datetime(str(since))
         if not parsed_since:
             return JsonResponse({'ok': False, 'error': 'since invalide. Utilisez une date ISO ou since_id.'}, status=400)
         if timezone.is_naive(parsed_since):
             parsed_since = timezone.make_aware(parsed_since, timezone.get_current_timezone())
-        changes = changes.filter(date_creation__gt=parsed_since)
+        dernier_connu = (
+            SyncChange.objects
+            .filter(ecole=device.ecole, date_creation__lte=parsed_since)
+            .order_by('-id')
+            .values_list('id', flat=True)
+            .first()
+        )
+        curseur = dernier_connu or 0
 
-    changes = changes.order_by('id')[:200]
+    attente = request.GET.get('wait')
+    if request.method == 'POST':
+        attente = (data or {}).get('wait', attente)
+    if attente and not _changements_a_envoyer(device, curseur).exists():
+        _attendre_un_changement(device, curseur, attente)
+
+    # 201 lignes demandees pour savoir s'il en reste : le poste enchaine alors
+    # sans attendre, au lieu de dormir avec du retard accumule.
+    lot = list(_changements_a_envoyer(device, curseur)[:201])
+    has_more = len(lot) > 200
+    changes = lot[:200]
     serialized_changes = [
         {
             'id': change.id,
@@ -300,6 +369,9 @@ def pull(request):
         'since': since,
         'since_id': since_id,
         'changes': serialized_changes,
-        'latest_change_id': serialized_changes[-1]['id'] if serialized_changes else since_id,
+        'latest_change_id': (
+            serialized_changes[-1]['id'] if serialized_changes else (curseur or 0)
+        ),
+        'has_more': has_more,
         'server_time': timezone.now().isoformat(),
     })
