@@ -2191,43 +2191,28 @@ def ajouter_paiement(request, eleve_id:int=None):
             type_description = calcul_attendu['description']
             
             # Vérifier si le montant correspond au type sélectionné
+            paiement_partiel_info = None
             if montant_attendu > 0 and montant_saisi != montant_attendu:
-                # Paiements partiels: autoriser sans confirmation pour une tranche simple
-                is_single_tranche = type_description in ["1ère tranche", "2ème tranche", "3ème tranche"]
-                if montant_saisi < montant_attendu and is_single_tranche:
-                    # Autoriser directement le paiement partiel de tranche
-                    pass
-                elif montant_saisi < montant_attendu:
-                    # Demander confirmation pour paiement partiel (inscription ou types combinés)
-                    confirmation_partiel = request.POST.get('confirmation_paiement_partiel')
-                    if not confirmation_partiel:
-                        # Message d'avertissement et demande de confirmation
-                        from django.utils.safestring import mark_safe
-                        message_html = mark_safe(
-                            f'<span style="color: #dc3545; font-weight: bold; font-size: 1.1em;">'
-                            f'⚠️ ATTENTION: Le montant saisi ({montant_saisi:,} GNF) est inférieur au reste à payer '
-                            f'pour {type_description} ({montant_attendu:,} GNF).</span><br>'
-                            f'<strong>S\'agit-il d\'un paiement partiel ?</strong> Si oui, confirmez ci-dessous.'
-                        )
-                        messages.error(request, message_html)
-                        return render(request, 'paiements/form_paiement.html', {
-                            'titre_page': titre_page,
-                            'action': action,
-                            'form': form,
-                            'eleve': eleve,
-                            'montant_attendu': montant_attendu,
-                            'montant_saisi': montant_saisi,
-                            'type_description': type_description,
-                            'show_partial_confirmation': True,
-                        })
+                if montant_saisi < montant_attendu:
+                    # Un versement incomplet est une situation normale de
+                    # caisse, pas une anomalie à confirmer. Le moteur
+                    # d'allocation, appliqué à la validation, répartit déjà
+                    # correctement un montant partiel sur les postes
+                    # concernés : la confirmation n'ajoutait aucune
+                    # protection, seulement un second envoi à faire.
+                    # L'agent est informé après coup, pas bloqué avant.
+                    paiement_partiel_info = {
+                        'montant_saisi': montant_saisi,
+                        'reste': montant_attendu - montant_saisi,
+                        'type_description': type_description,
+                    }
                 else:
-                    # Montant supérieur au montant standard : l'excédent est bien
+                    # Montant supérieur au reste attendu : l'excédent est bien
                     # reporté sur les tranches suivantes par l'allocation
-                    # automatique, mais plus en silence. Les contrôles par type
-                    # étant neutralisés par `cascade_automatique` ci-dessous, ce
-                    # cas ne rencontrait aucune confirmation, alors que le montant
-                    # inférieur en demandait une : la voici, symétrique, avec la
-                    # répartition réelle sous les yeux de l'agent.
+                    # automatique, mais plus en silence. Contrairement au
+                    # versement partiel, l'agent engage ici de l'argent sur des
+                    # postes qu'il n'a pas choisis : la confirmation lui met la
+                    # répartition réelle sous les yeux avant de valider.
                     if not request.POST.get('confirmation_montant_superieur'):
                         from django.utils.safestring import mark_safe
 
@@ -2689,6 +2674,17 @@ def ajouter_paiement(request, eleve_id:int=None):
             except Exception:
                 logging.getLogger(__name__).exception("Erreur lors de l'envoi des notifications Twilio")
             messages.success(request, "Paiement enregistré avec succès.")
+            if paiement_partiel_info:
+                # Information, pas avertissement : le versement est accepté,
+                # l'agent a seulement besoin de savoir ce qui reste attendu.
+                messages.info(
+                    request,
+                    "Versement partiel enregistré pour "
+                    f"{paiement_partiel_info['type_description']} : "
+                    f"{paiement_partiel_info['montant_saisi']:,} GNF reçus, "
+                    f"reste {paiement_partiel_info['reste']:,} GNF à payer."
+                    .replace(',', ' '),
+                )
             # Rediriger vers la page échéancier de l'élève
             return redirect('paiements:echeancier_eleve', eleve_id=paiement.eleve_id)
         else:
