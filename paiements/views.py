@@ -38,7 +38,10 @@ from ecole_moderne.security_decorators import require_school_object
 from .models import Paiement, EcheancierPaiement, TypePaiement, ModePaiement, RemiseReduction, PaiementRemise, Relance, TwilioInboundMessage
 from eleves.models import Eleve, GrilleTarifaire, Classe
 from eleves.utils_annee import get_annee_active
-from .forms import PaiementForm, ModificationPaiementForm, EcheancierForm, RechercheForm
+from .forms import (
+    PaiementForm, ModificationPaiementForm, AnnulationPaiementForm,
+    SuppressionPaiementForm, EcheancierForm, RechercheForm,
+)
 from .remise_forms import PaiementRemiseForm, CalculateurRemiseForm
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school, user_school
 from utilisateurs.permissions import has_permission, get_user_permissions, can_add_payments, can_modify_payments, can_delete_payments, can_validate_payments, can_view_reports, can_apply_discounts
@@ -510,11 +513,16 @@ def _allocate_combined_payment(paiement: "Paiement", echeancier: "EcheancierPaie
     _allocate_payment_to_echeancier(paiement)
 
 
-def _sum_validated_payments_and_remises(eleve):
-    """Retourne (paiements_valides, remises_valides) sans double comptage SQL."""
+def _sum_validated_payments_and_remises(eleve, annee_scolaire=None, ecole_id=None):
+    """Retourne (paiements_valides, remises_valides) sans double comptage SQL.
+
+    Le contexte par défaut est la classe actuelle de l'élève. Il doit être
+    fourni explicitement pour recalculer une année ou une école que l'élève a
+    quittée : sinon la couverture d'une autre période serait additionnée ici.
+    """
     contexte = {
-        'annee_scolaire': eleve.classe.annee_scolaire,
-        'ecole_encaissement_id': eleve.classe.ecole_id,
+        'annee_scolaire': annee_scolaire or eleve.classe.annee_scolaire,
+        'ecole_encaissement_id': ecole_id or eleve.classe.ecole_id,
     }
     paiement_total = (
         Paiement.objects
@@ -635,7 +643,23 @@ def _repartition_previsionnelle(montant, postes) -> dict:
     return {'lignes': lignes, 'non_alloue': restant}
 
 
-def _auto_validate_echeancier_for_eleve(eleve: "Eleve") -> None:
+def _recalculer_soldes_du_paiement(paiement: "Paiement") -> None:
+    """Recalcule l'échéancier auquel ce paiement appartient réellement.
+
+    Après un transfert, la classe actuelle de l'élève ne désigne plus l'école
+    ni l'année de l'encaissement : corriger un ancien paiement doit remettre à
+    jour l'échéancier d'origine, pas celui de la nouvelle classe.
+    """
+    _auto_validate_echeancier_for_eleve(
+        paiement.eleve,
+        annee_scolaire=paiement.annee_scolaire or None,
+        ecole_id=paiement.ecole_encaissement_id or None,
+    )
+
+
+def _auto_validate_echeancier_for_eleve(
+    eleve: "Eleve", annee_scolaire=None, ecole_id=None,
+) -> None:
     """Synchronise l'échéancier de l'élève avec les paiements VALIDÉS avant impression du reçu.
 
     Règles conservatrices:
@@ -647,14 +671,14 @@ def _auto_validate_echeancier_for_eleve(eleve: "Eleve") -> None:
     Cette fonction évite les incohérences si l'allocation manuelle par tranche a été oubliée.
     """
     try:
-        # Récupérer l'échéancier (sans exception si absent)
-        echeancier = getattr(eleve, 'echeancier', None)
-        if echeancier is None:
-            echeancier = EcheancierPaiement.objects.filter(
-                eleve=eleve,
-                annee_scolaire=eleve.classe.annee_scolaire,
-                ecole_reference_id=eleve.classe.ecole_id,
-            ).first()
+        # Récupérer l'échéancier du contexte demandé (sans exception si absent)
+        annee_cible = annee_scolaire or eleve.classe.annee_scolaire
+        ecole_cible = ecole_id or eleve.classe.ecole_id
+        echeancier = EcheancierPaiement.objects.filter(
+            eleve=eleve,
+            annee_scolaire=annee_cible,
+            ecole_reference_id=ecole_cible,
+        ).first()
         if not echeancier:
             return
 
@@ -665,7 +689,9 @@ def _auto_validate_echeancier_for_eleve(eleve: "Eleve") -> None:
                        + (echeancier.tranche_3_due or 0))
 
         # Paiements validés et remises appliquées sur des paiements
-        sum_montant, sum_remises = _sum_validated_payments_and_remises(eleve)
+        sum_montant, sum_remises = _sum_validated_payments_and_remises(
+            eleve, annee_cible, ecole_cible,
+        )
 
         couverture = max(0, sum_montant + sum_remises)
 
@@ -2180,8 +2206,9 @@ def modifier_paiement(request, paiement_id: int):
                 paiement._audit_user = request.user
                 paiement._audit_reason = form.cleaned_data['motif_modification'].strip()
                 paiement.save()
-                if paiement.statut == 'VALIDE':
-                    _auto_validate_echeancier_for_eleve(paiement.eleve)
+                # Recalcul systématique : un paiement redescendu sous son
+                # ancien montant doit aussi libérer la dette qu'il couvrait.
+                _recalculer_soldes_du_paiement(paiement)
             messages.success(
                 request,
                 f"Le paiement {paiement.numero_recu} a été corrigé et mémorisé dans l'historique.",
@@ -2861,6 +2888,119 @@ def valider_paiement(request, paiement_id:int):
 
     messages.success(request, "Paiement validé avec succès.")
     return redirect('paiements:detail_paiement', paiement_id=paiement.id)
+
+@login_required
+@require_POST
+def annuler_paiement(request, paiement_id: int):
+    """Annule un encaissement et recalcule les soldes qu'il couvrait.
+
+    L'annulation remplace la suppression : le reçu garde son numéro et la
+    ligne reste consultable, ce qu'une ligne effacée ne permettrait plus.
+    Seul le statut change, donc le paiement sort des soldes et des rapports.
+    """
+    paiement_qs = filter_by_user_school(
+        Paiement.objects.select_related('eleve', 'eleve__classe'),
+        request.user, 'ecole_encaissement',
+    )
+    paiement = get_object_or_404(paiement_qs, pk=paiement_id)
+    retour = redirect('paiements:detail_paiement', paiement_id=paiement.id)
+
+    # `peut_supprimer_paiements` existait déjà sans vue pour l'exercer :
+    # c'est la permission attendue pour retirer un encaissement des comptes.
+    if not (user_is_admin(request.user)
+            or has_permission(request.user, 'peut_supprimer_paiements')):
+        messages.error(request, "Vous n'avez pas l'autorisation d'annuler ce paiement.")
+        return retour
+
+    if paiement.statut == 'ANNULE':
+        messages.info(request, "Ce paiement est déjà annulé.")
+        return retour
+
+    form = AnnulationPaiementForm(request.POST)
+    if not form.is_valid():
+        messages.error(
+            request,
+            "Motif d'annulation obligatoire (5 caractères minimum) : "
+            "il est conservé dans l'historique du paiement.",
+        )
+        return retour
+
+    with transaction.atomic():
+        paiement.statut = 'ANNULE'
+        paiement._audit_user = request.user
+        paiement._audit_reason = (
+            f"Annulation : {form.cleaned_data['motif_annulation']}"
+        )
+        paiement.save()
+        # Les remises portées par ce paiement cessent aussi de couvrir la
+        # dette : elles sont filtrées sur le statut du paiement porteur.
+        _recalculer_soldes_du_paiement(paiement)
+
+    messages.success(
+        request,
+        f"Le paiement {paiement.numero_recu} a été annulé et les soldes "
+        "ont été recalculés.",
+    )
+    return retour
+
+
+@login_required
+@require_POST
+def supprimer_paiement(request, paiement_id: int):
+    """Efface définitivement un paiement. Réservé à l'administration.
+
+    À la différence de l'annulation, la ligne disparaît des écrans : le
+    numéro de reçu est libéré et le détail n'est plus consultable. Seule
+    l'entrée d'historique subsiste pour expliquer la disparition.
+    """
+    paiement_qs = filter_by_user_school(
+        Paiement.objects.select_related('eleve', 'eleve__classe'),
+        request.user, 'ecole_encaissement',
+    )
+    paiement = get_object_or_404(paiement_qs, pk=paiement_id)
+
+    if not user_is_admin(request.user):
+        messages.error(
+            request,
+            "La suppression définitive est réservée à l'administration. "
+            "Vous pouvez annuler le paiement : il restera consultable.",
+        )
+        return redirect('paiements:detail_paiement', paiement_id=paiement.id)
+
+    form = SuppressionPaiementForm(request.POST)
+    if not form.is_valid():
+        messages.error(
+            request,
+            "Motif de suppression obligatoire (5 caractères minimum) : "
+            "c'est la seule trace qui restera de ce paiement.",
+        )
+        return redirect('paiements:detail_paiement', paiement_id=paiement.id)
+
+    # Le contexte doit être lu avant l'effacement : ensuite, plus rien ne
+    # rattache le montant supprimé à l'échéancier qu'il couvrait.
+    eleve = paiement.eleve
+    annee_scolaire = paiement.annee_scolaire or None
+    ecole_id = paiement.ecole_encaissement_id or None
+    numero_recu = paiement.numero_recu
+
+    with transaction.atomic():
+        paiement.supprimer_definitivement(
+            utilisateur=request.user,
+            motif=f"Suppression définitive : {form.cleaned_data['motif_suppression']}",
+        )
+        _auto_validate_echeancier_for_eleve(eleve, annee_scolaire, ecole_id)
+
+    logging.getLogger(__name__).warning(
+        "Paiement %s supprimé définitivement par %s (élève %s)",
+        numero_recu, request.user, eleve.matricule,
+    )
+    messages.success(
+        request,
+        f"Le paiement {numero_recu} a été supprimé définitivement "
+        "et les soldes ont été recalculés.",
+    )
+    return redirect('paiements:liste_paiements')
+
 
 @login_required
 @require_POST
