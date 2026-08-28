@@ -43,6 +43,7 @@ from .forms import (
     SuppressionPaiementForm, EcheancierForm, RechercheForm,
 )
 from .remise_forms import PaiementRemiseForm, CalculateurRemiseForm
+from .soldes import couverture_reelle, recalculer_echeancier
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school, user_school
 from utilisateurs.permissions import has_permission, get_user_permissions, can_add_payments, can_modify_payments, can_delete_payments, can_validate_payments, can_view_reports, can_apply_discounts
 from .notifications import (
@@ -514,34 +515,17 @@ def _allocate_combined_payment(paiement: "Paiement", echeancier: "EcheancierPaie
 
 
 def _sum_validated_payments_and_remises(eleve, annee_scolaire=None, ecole_id=None):
-    """Retourne (paiements_valides, remises_valides) sans double comptage SQL.
+    """Retourne (paiements_validés, remises_validées) pour un contexte donné.
 
     Le contexte par défaut est la classe actuelle de l'élève. Il doit être
-    fourni explicitement pour recalculer une année ou une école que l'élève a
+    fourni explicitement pour lire une année ou une école que l'élève a
     quittée : sinon la couverture d'une autre période serait additionnée ici.
     """
-    contexte = {
-        'annee_scolaire': annee_scolaire or eleve.classe.annee_scolaire,
-        'ecole_encaissement_id': ecole_id or eleve.classe.ecole_id,
-    }
-    paiement_total = (
-        Paiement.objects
-        .filter(eleve=eleve, statut='VALIDE', **contexte)
-        .aggregate(total=Sum('montant'))
-        .get('total') or 0
+    return couverture_reelle(
+        eleve.pk,
+        annee_scolaire or eleve.classe.annee_scolaire,
+        ecole_id or eleve.classe.ecole_id,
     )
-    remise_total = (
-        PaiementRemise.objects
-        .filter(
-            paiement__eleve=eleve,
-            paiement__statut='VALIDE',
-            paiement__annee_scolaire=contexte['annee_scolaire'],
-            paiement__ecole_encaissement_id=contexte['ecole_encaissement_id'],
-        )
-        .aggregate(total=Sum('montant_remise'))
-        .get('total') or 0
-    )
-    return int(paiement_total or 0), int(remise_total or 0)
 
 
 def _get_payment_allocation_breakdown(paiement: "Paiement") -> dict:
@@ -660,126 +644,24 @@ def _recalculer_soldes_du_paiement(paiement: "Paiement") -> None:
 def _auto_validate_echeancier_for_eleve(
     eleve: "Eleve", annee_scolaire=None, ecole_id=None,
 ) -> None:
-    """Synchronise l'échéancier de l'élève avec les paiements VALIDÉS avant impression du reçu.
+    """Réaligne l'échéancier du contexte demandé sur sa couverture réelle.
 
-    Règles conservatrices:
-    - Si la somme des paiements validés + remises couvre le total dû -> statut = PAYE_COMPLET
-      et on aligne les champs *_payee sur les *_due pour cohérence d'affichage.
-    - Si couverture = 0 -> statut = A_PAYER (pas d'allocation détaillée effectuée ici)
-    - Sinon -> statut = PAYE_PARTIEL (sans répartir finement par tranche)
-
-    Cette fonction évite les incohérences si l'allocation manuelle par tranche a été oubliée.
+    Les erreurs sont avalées à dessein : cette synchronisation accompagne des
+    actions (impression d'un reçu, validation) qui ne doivent pas échouer à
+    cause d'elle. Le recalcul lui-même vit dans `paiements.soldes`.
     """
     try:
-        # Récupérer l'échéancier du contexte demandé (sans exception si absent)
-        annee_cible = annee_scolaire or eleve.classe.annee_scolaire
-        ecole_cible = ecole_id or eleve.classe.ecole_id
         echeancier = EcheancierPaiement.objects.filter(
             eleve=eleve,
-            annee_scolaire=annee_cible,
-            ecole_reference_id=ecole_cible,
+            annee_scolaire=annee_scolaire or eleve.classe.annee_scolaire,
+            ecole_reference_id=ecole_id or eleve.classe.ecole_id,
         ).first()
-        if not echeancier:
-            return
-
-        # Totaux dus
-        total_du = int((echeancier.frais_inscription_du or 0)
-                       + (echeancier.tranche_1_due or 0)
-                       + (echeancier.tranche_2_due or 0)
-                       + (echeancier.tranche_3_due or 0))
-
-        # Paiements validés et remises appliquées sur des paiements
-        sum_montant, sum_remises = _sum_validated_payments_and_remises(
-            eleve, annee_cible, ecole_cible,
-        )
-
-        couverture = max(0, sum_montant + sum_remises)
-
-        # Déterminer le nouveau statut avec gestion du retard
-        # Calcul de l'exigible (sommes dont la date d'échéance est passée ou aujourd'hui)
-        from django.utils import timezone as _tz
-        today = _tz.localdate() if hasattr(_tz, 'localdate') else date.today()
-        exigible = 0
-        if echeancier.date_echeance_inscription and echeancier.date_echeance_inscription < today:
-            exigible += int(echeancier.frais_inscription_du or 0)
-        if echeancier.date_echeance_tranche_1 and echeancier.date_echeance_tranche_1 < today:
-            exigible += int(echeancier.tranche_1_due or 0)
-        if echeancier.date_echeance_tranche_2 and echeancier.date_echeance_tranche_2 < today:
-            exigible += int(echeancier.tranche_2_due or 0)
-        if echeancier.date_echeance_tranche_3 and echeancier.date_echeance_tranche_3 < today:
-            exigible += int(echeancier.tranche_3_due or 0)
-
-        # Reconstituer les montants payés depuis la couverture réelle. Cette
-        # remise à plat rend le calcul idempotent et corrige aussi les anciens
-        # échéanciers qui utilisaient une répartition proportionnelle.
-        old_insc = int(echeancier.frais_inscription_paye or 0)
-        old_t1 = int(echeancier.tranche_1_payee or 0)
-        old_t2 = int(echeancier.tranche_2_payee or 0)
-        old_t3 = int(echeancier.tranche_3_payee or 0)
-        remaining = max(0, couverture)
-
-        def _alloc(due: int, remaining_local: int):
-            take = min(max(0, int(due or 0)), max(0, int(remaining_local)))
-            return take, remaining_local - take
-
-        new_insc, remaining = _alloc(echeancier.frais_inscription_du, remaining)
-        new_t1, remaining = _alloc(echeancier.tranche_1_due, remaining)
-        new_t2, remaining = _alloc(echeancier.tranche_2_due, remaining)
-        new_t3, remaining = _alloc(echeancier.tranche_3_due, remaining)
-
-        changed = False
-        if new_insc != old_insc:
-            echeancier.frais_inscription_paye = new_insc
-            changed = True
-        if new_t1 != old_t1:
-            echeancier.tranche_1_payee = new_t1
-            changed = True
-        if new_t2 != old_t2:
-            echeancier.tranche_2_payee = new_t2
-            changed = True
-        if new_t3 != old_t3:
-            echeancier.tranche_3_payee = new_t3
-            changed = True
-
-        # Somme payée effective bornée au total dû
-        paye_effectif = min(couverture, total_du)
-
-        if total_du <= 0:
-            new_statut = 'PAYE_COMPLET'
-        elif paye_effectif >= total_du:
-            new_statut = 'PAYE_COMPLET'
-        elif exigible > 0 and paye_effectif < exigible:
-            new_statut = 'EN_RETARD'
-        elif paye_effectif <= 0:
-            new_statut = 'A_PAYER'
-        else:
-            new_statut = 'PAYE_PARTIEL'
-
-        # Appliquer le statut et éventuellement aligner les montants payés si totalement soldé
-        # 'changed' peut déjà être True si allocation ci-dessus a modifié des champs
-        if echeancier.statut != new_statut:
-            echeancier.statut = new_statut
-            changed = True
-        if new_statut == 'PAYE_COMPLET':
-            # Aligner les montants payés pour refléter le soldé complet
-            if echeancier.frais_inscription_paye != echeancier.frais_inscription_du:
-                echeancier.frais_inscription_paye = echeancier.frais_inscription_du
-                changed = True
-            if echeancier.tranche_1_payee != echeancier.tranche_1_due:
-                echeancier.tranche_1_payee = echeancier.tranche_1_due
-                changed = True
-            if echeancier.tranche_2_payee != echeancier.tranche_2_due:
-                echeancier.tranche_2_payee = echeancier.tranche_2_due
-                changed = True
-            if echeancier.tranche_3_payee != echeancier.tranche_3_due:
-                echeancier.tranche_3_payee = echeancier.tranche_3_due
-                changed = True
-
-        if changed:
-            echeancier.save()
+        if echeancier:
+            recalculer_echeancier(echeancier)
     except Exception:
-        # Ne jamais bloquer l'impression du reçu à cause de cette étape
-        logging.getLogger(__name__).exception("Erreur lors de la validation automatique de l'échéancier")
+        logging.getLogger(__name__).exception(
+            "Erreur lors de la validation automatique de l'échéancier"
+        )
 
 
 def _is_valid_twilio_request(request):
@@ -3918,7 +3800,10 @@ def generer_recu_pdf(request, paiement_id:int):
                 total_du = 0
 
             try:
-                sum_montant, sum_remises = _sum_validated_payments_and_remises(paiement.eleve)
+                sum_montant, sum_remises = _sum_validated_payments_and_remises(
+                    paiement.eleve, paiement.annee_scolaire or None,
+                    paiement.ecole_encaissement_id or None,
+                )
             except Exception:
                 sum_montant = 0
                 sum_remises = 0
