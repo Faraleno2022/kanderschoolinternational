@@ -10,6 +10,7 @@ from django.template import loader
 from django.core.cache import cache
 from django.conf import settings
 from django.utils.deprecation import MiddlewareMixin
+from django.contrib import messages
 from django.contrib.auth import logout
 from django.shortcuts import redirect
 from django.core.exceptions import TooManyFieldsSent
@@ -362,7 +363,11 @@ class SessionSecurityMiddleware(MiddlewareMixin):
         """
         # Vérifier que l'utilisateur est disponible (après AuthenticationMiddleware)
         if hasattr(request, 'user') and request.user.is_authenticated:
-            # Enforcer la vérification du téléphone pour la session
+            # Enforcer la vérification du téléphone pour la session.
+            # Ce contrôle n'a jamais tourné en production tant que le
+            # middleware était mal placé : l'activer d'office redirigerait
+            # tout le monde vers l'écran de vérification. Il reste donc
+            # explicitement opt-in.
             try:
                 path = request.path or ''
                 # Routes exemptées
@@ -394,7 +399,8 @@ class SessionSecurityMiddleware(MiddlewareMixin):
                         request.session['phone_verified_at'] = None
                         verified = False
 
-                if not exempt and not verified:
+                enforce_phone = getattr(settings, 'PHONE_VERIFY_ENFORCED', False)
+                if enforce_phone and not exempt and not verified:
                     # Préserver la destination initiale
                     from django.urls import reverse
                     verify_url = reverse('utilisateurs:verify_phone')
@@ -404,8 +410,20 @@ class SessionSecurityMiddleware(MiddlewareMixin):
                 pass
             # Vérifier l'inactivité de session
             if self.is_session_expired(request):
+                username = request.user.username
                 logout(request)
-                logger.info(f"Session expirée pour utilisateur: {request.user.username}")
+                logger.info(f"Session expirée pour utilisateur: {username}")
+                # Le message est ajouté après logout(), qui vide la session :
+                # ajouté avant, il disparaîtrait avec elle.
+                try:
+                    messages.info(
+                        request,
+                        "Votre session a été fermée après "
+                        f"{self.inactivity_timeout() // 60} minutes d'inactivité. "
+                        "Reconnectez-vous pour continuer.",
+                    )
+                except Exception:
+                    pass
                 return redirect('utilisateurs:login')
             
             # Vérifier le changement d'IP (optionnel, peut causer des problèmes avec les proxies)
@@ -429,12 +447,26 @@ class SessionSecurityMiddleware(MiddlewareMixin):
             ip = request.META.get('REMOTE_ADDR')
         return ip
     
+    @staticmethod
+    def inactivity_timeout():
+        """Délai d'inactivité toléré, en secondes."""
+        return int(getattr(settings, 'SESSION_INACTIVITY_TIMEOUT', 30 * 60))
+
     def is_session_expired(self, request):
-        """Vérifie si la session a expiré (30 minutes d'inactivité)"""
+        """Indique si la dernière activité dépasse le délai toléré.
+
+        Une session sans `last_activity` n'est jamais expirée : c'est le cas
+        de la toute première requête, où le repère n'a pas encore été posé.
+        """
         last_activity = request.session.get('last_activity')
-        if last_activity:
-            return time.time() - last_activity > 1800  # 30 minutes
-        return False
+        if not last_activity:
+            return False
+        try:
+            return time.time() - float(last_activity) > self.inactivity_timeout()
+        except (TypeError, ValueError):
+            # Valeur illisible : on repart d'un repère neuf plutôt que de
+            # déconnecter quelqu'un sur une donnée corrompue.
+            return False
     
     def detect_session_hijacking(self, request):
         """Détecte les tentatives de détournement de session"""

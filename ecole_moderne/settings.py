@@ -196,9 +196,23 @@ if DEBUG:
 else:
     MIDDLEWARE.append('ecole_moderne.image_optimization_middleware.ImageOptimizationMiddleware')
     MIDDLEWARE.insert(1, 'ecole_moderne.security_middleware.SecurityMiddleware')
-    MIDDLEWARE.insert(3, 'ecole_moderne.security_middleware.SessionSecurityMiddleware')
-    MIDDLEWARE.insert(5, 'ecole_moderne.security_middleware.CSRFSecurityMiddleware')
+    # Les positions numériques plaçaient ce middleware avant SessionMiddleware
+    # et AuthenticationMiddleware : `request.user` n'existait pas encore, son
+    # garde `hasattr` échouait, et la fermeture des sessions inactives ne
+    # s'exécutait jamais. L'ancrage se fait donc sur un voisin nommé.
+    # Après MessageMiddleware, pour pouvoir expliquer la déconnexion.
+    MIDDLEWARE.insert(
+        MIDDLEWARE.index('django.contrib.messages.middleware.MessageMiddleware') + 1,
+        'ecole_moderne.security_middleware.SessionSecurityMiddleware',
+    )
+    MIDDLEWARE.insert(
+        MIDDLEWARE.index('django.middleware.csrf.CsrfViewMiddleware'),
+        'ecole_moderne.security_middleware.CSRFSecurityMiddleware',
+    )
     MIDDLEWARE.append('ecole_moderne.security_middleware.CSPMiddleware')
+
+# Délai d'inactivité au-delà duquel la session est fermée d'office.
+SESSION_INACTIVITY_TIMEOUT = int(os.environ.get('SESSION_INACTIVITY_TIMEOUT', 30 * 60))
 
 # =================== Authentication Backends ===================
 AUTHENTICATION_BACKENDS = [
@@ -378,6 +392,10 @@ DATA_UPLOAD_MAX_NUMBER_FIELDS = 5000
 TWILIO_ENABLED = os.getenv("TWILIO_ENABLED", "false").lower() in {"1", "true", "yes"}
 TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
 PHONE_VERIFY_TTL_SECONDS = int(os.environ.get('PHONE_VERIFY_TTL_SECONDS', 4 * 3600))
+# La vérification téléphonique n'a jamais été appliquée en production : le
+# middleware qui la porte tournait trop tôt pour voir `request.user`. Elle
+# reste donc volontairement désactivée, à activer sciemment le jour voulu.
+PHONE_VERIFY_ENFORCED = os.environ.get('PHONE_VERIFY_ENFORCED', '0').lower() in ('1', 'true', 'yes')
 
 # =================== Synchronisation offline/online ===================
 MYSCHOOL_SYNC_SERVER_URL = os.environ.get('MYSCHOOL_SYNC_SERVER_URL', '').rstrip('/')
