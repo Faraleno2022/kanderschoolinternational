@@ -226,6 +226,29 @@ class Paiement(SyncTrackedModel):
         self._audit_user = None
         self._audit_reason = ''
 
+    def supprimer_definitivement(self, utilisateur=None, motif=''):
+        """Efface le paiement en laissant la trace de l'effacement.
+
+        L'historique survit volontairement à la ligne : sa clé est en SET_NULL
+        et le numéro de reçu y est recopié, donc un reçu disparu reste
+        explicable — qui l'a supprimé, quand, pourquoi, et pour quel montant.
+        """
+        try:
+            eleve_label = f"{self.eleve.matricule} - {self.eleve.nom_complet}"
+        except Exception:
+            eleve_label = ''
+        HistoriqueModificationPaiement.objects.create(
+            paiement=self,
+            numero_recu=self.numero_recu,
+            eleve=eleve_label,
+            utilisateur=utilisateur,
+            motif=motif or "Suppression définitive du paiement",
+            champs_modifies=list(self.AUDIT_FIELDS),
+            donnees_avant=self._audit_snapshot(self.pk) or {},
+            donnees_apres={},
+        )
+        self.delete()
+
     @property
     def montant_avec_frais(self):
         return self.montant + self.mode_paiement.frais_supplementaires

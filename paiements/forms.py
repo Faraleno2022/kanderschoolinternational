@@ -156,6 +156,44 @@ class ModificationPaiementForm(forms.ModelForm):
         return montant
 
 
+class AnnulationPaiementForm(forms.Form):
+    """Annulation d'un encaissement : le motif est la seule saisie autorisée."""
+
+    motif_annulation = forms.CharField(
+        required=True,
+        min_length=5,
+        label="Motif de l'annulation",
+        help_text="Ce motif sera conservé dans l'historique du paiement.",
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': "Ex. : double saisie du même encaissement",
+        }),
+    )
+
+    def clean_motif_annulation(self):
+        return self.cleaned_data['motif_annulation'].strip()
+
+
+class SuppressionPaiementForm(forms.Form):
+    """Suppression définitive : le motif reste la seule trace de l'opération."""
+
+    motif_suppression = forms.CharField(
+        required=True,
+        min_length=5,
+        label="Motif de la suppression",
+        help_text="Seule trace conservée une fois la ligne effacée.",
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': "Ex. : saisie de test créée par erreur",
+        }),
+    )
+
+    def clean_motif_suppression(self):
+        return self.cleaned_data['motif_suppression'].strip()
+
+
 class EcheancierForm(forms.ModelForm):
     """Formulaire pour créer/modifier un échéancier"""
     

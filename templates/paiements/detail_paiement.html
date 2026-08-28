@@ -53,7 +53,113 @@
         <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#relanceModal">
             <i class="fas fa-bell me-1"></i>Relance
         </button>
+        {% if paiement.statut != 'ANNULE' %}
+        {% if is_admin or user_permissions.can_delete_payments %}
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#annulationModal">
+                <i class="fas fa-ban me-1"></i>Annuler le paiement
+            </button>
+        {% endif %}
+        {% endif %}
+        {% if is_admin %}
+            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#suppressionModal">
+                <i class="fas fa-trash me-1"></i>Supprimer définitivement
+            </button>
+        {% endif %}
     </div>
+
+    {% if paiement.statut != 'ANNULE' %}
+    {% if is_admin or user_permissions.can_delete_payments %}
+    <!-- Annulation : le motif est obligatoire, il rejoint l'historique du paiement. -->
+    <div class="modal fade" id="annulationModal" tabindex="-1" aria-labelledby="annulationModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" action="{% url 'paiements:annuler_paiement' paiement.id %}">
+                    {% csrf_token %}
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="annulationModalLabel">
+                            <i class="fas fa-ban me-2 text-danger"></i>Annuler le paiement {{ paiement.numero_recu }}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-3">
+                            Le paiement de <strong>{{ paiement.montant|floatformat:0 }} GNF</strong> cessera de
+                            couvrir la scolarité de <strong>{{ paiement.eleve.nom_complet }}</strong> et les soldes
+                            seront recalculés immédiatement.
+                        </p>
+                        <p class="text-muted small mb-3">
+                            Le reçu garde son numéro et la ligne reste consultable : l'annulation se voit
+                            dans l'historique, elle n'efface rien.
+                        </p>
+                        <label for="motifAnnulation" class="form-label fw-semibold">Motif de l'annulation</label>
+                        <textarea class="form-control" id="motifAnnulation" name="motif_annulation" rows="3"
+                                  minlength="5" required
+                                  placeholder="Ex. : double saisie du même encaissement"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Retour</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-ban me-1"></i>Confirmer l'annulation
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if is_admin %}
+    <!-- Suppression définitive : réservée à l'administration, sans retour possible. -->
+    <div class="modal fade" id="suppressionModal" tabindex="-1" aria-labelledby="suppressionModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content border-danger">
+                <form method="post" action="{% url 'paiements:supprimer_paiement' paiement.id %}">
+                    {% csrf_token %}
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title" id="suppressionModalLabel">
+                            <i class="fas fa-trash me-2"></i>Supprimer définitivement {{ paiement.numero_recu }}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-danger d-flex align-items-start" role="alert">
+                            <i class="fas fa-exclamation-triangle me-2 mt-1"></i>
+                            <div>
+                                <strong>Cette action est irréversible.</strong>
+                                La ligne disparaîtra des écrans et le reçu
+                                {{ paiement.numero_recu }} ne sera plus consultable.
+                            </div>
+                        </div>
+                        <p class="mb-3">
+                            Paiement de <strong>{{ paiement.montant|floatformat:0 }} GNF</strong> pour
+                            <strong>{{ paiement.eleve.nom_complet }}</strong>. Les soldes seront recalculés
+                            immédiatement après la suppression.
+                        </p>
+                        <p class="text-muted small mb-3">
+                            Pour garder une trace consultable, préférez
+                            <em>Annuler le paiement</em> : le reçu reste visible et sort quand même
+                            des soldes.
+                        </p>
+                        <label for="motifSuppression" class="form-label fw-semibold">Motif de la suppression</label>
+                        <textarea class="form-control" id="motifSuppression" name="motif_suppression" rows="3"
+                                  minlength="5" required
+                                  placeholder="Ex. : saisie de test créée par erreur"></textarea>
+                        <div class="form-text">
+                            Ce motif sera la seule trace conservée, dans l'historique des modifications.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Retour</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash me-1"></i>Supprimer définitivement
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 {% endblock %}
 
 {% block content %}
