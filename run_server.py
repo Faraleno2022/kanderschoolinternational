@@ -139,6 +139,14 @@ os.environ['OPENAI_DISABLED'] = '1'
 os.environ['MYSCHOOL_BASE_DIR'] = BASE_DIR
 
 
+def migrate_legacy_data():
+    """Ramene les donnees PyInstaller 6 vers le dossier stable de l'EXE."""
+    from offline_data import migrate_legacy_data_layout
+
+    for action in migrate_legacy_data_layout(BASE_DIR):
+        print(f"[MySchoolGN] {action}")
+
+
 # ─── Fenêtre d'activation de licence (tkinter) ────────────────────────────────
 def show_activation_window(mid: str, trial_days_left: int = 0, first_trial_prompt: bool = False) -> bool:
     """
@@ -522,11 +530,20 @@ def setup_database():
     
     En cas de mise à jour, sauvegarde automatiquement la DB avant migration.
     """
+    # Cette etape doit preceder django.setup() : les settings utilisent deja
+    # le nouvel emplacement stable pour SQLite, les medias et les journaux.
+    migrate_legacy_data()
+
     import django
     django.setup()
+    from django.conf import settings
     from django.core.management import call_command
 
-    db_path = os.path.join(BASE_DIR, 'db.sqlite3')
+    # Le chemin vient de Django, jamais d'une supposition : PyInstaller 6 a
+    # deplace le code dans `_internal`, et la base a suivi. Deviner ce chemin
+    # revenait a sauvegarder un fichier vide pendant que la vraie base, elle,
+    # n'etait pas protegee.
+    db_path = str(settings.DATABASES['default']['NAME'])
     is_new_db = not os.path.exists(db_path) or os.path.getsize(db_path) == 0
 
     # Sauvegarder la DB existante avant migration (protection des données client)

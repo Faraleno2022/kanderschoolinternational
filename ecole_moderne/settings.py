@@ -13,6 +13,12 @@ except ImportError:
 # =================== Base ===================
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Les fichiers applicatifs restent sous BASE_DIR (dans ``_internal`` avec
+# PyInstaller 6), tandis que les donnees modifiables doivent vivre dans un
+# emplacement stable a cote de l'EXE. Le lanceur Windows renseigne cette
+# variable avant d'initialiser Django ; en developpement, rien ne change.
+DATA_DIR = Path(os.environ.get("MYSCHOOL_BASE_DIR", BASE_DIR)).resolve()
+
 
 def _load_plain_env(path):
     if not path.exists():
@@ -33,9 +39,9 @@ RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '').strip(
 
 # Charger .env si disponible
 if load_dotenv:
-    load_dotenv(BASE_DIR / ".env")
+    load_dotenv(DATA_DIR / ".env")
 else:
-    _load_plain_env(BASE_DIR / ".env")
+    _load_plain_env(DATA_DIR / ".env")
 
 # =================== Clés et debug ===================
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'dev-unsafe-key')
@@ -282,7 +288,7 @@ if DEBUG or not os.environ.get('DJANGO_DB_NAME'):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            "NAME": DATA_DIR / "db.sqlite3",
         }
     }
 else:
@@ -355,7 +361,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = DATA_DIR / 'media'
 
 if DEBUG:
     STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
@@ -363,7 +369,7 @@ else:
     STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
 
 # =================== Logging ===================
-LOGS_DIR = BASE_DIR / 'logs'
+LOGS_DIR = DATA_DIR / 'logs'
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 LOGGING = {

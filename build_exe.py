@@ -10,6 +10,7 @@ import os
 import sys
 import shutil
 import subprocess
+from glob import glob
 
 # Repertoire du projet
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -121,26 +122,48 @@ def copy_extra_files():
         shutil.copytree(static_src, static_dst)
         print("  [OK] Fichiers statiques copies")
 
-    # Copier le dossier media
-    media_src = os.path.join(BASE_DIR, 'media')
-    media_dst = os.path.join(OUTPUT_DIR, 'media')
-    if os.path.exists(media_src) and not os.path.exists(media_dst):
-        shutil.copytree(media_src, media_dst)
-        print("  [OK] Dossier media copie")
+    # Ne jamais copier le dossier media complet : il contient les photos,
+    # logos et documents des utilisateurs du poste de compilation. Nettoyer
+    # aussi une eventuelle collecte PyInstaller, puis n'autoriser que les deux
+    # ressources generiques necessaires a une installation neuve.
+    for media_dst in [
+        os.path.join(OUTPUT_DIR, 'media'),
+        os.path.join(OUTPUT_DIR, '_internal', 'media'),
+    ]:
+        if os.path.exists(media_dst):
+            shutil.rmtree(media_dst)
 
-    # NE PAS copier la base de données du développeur dans le build
-    # run_server.py créera une base vierge via 'migrate' au premier démarrage
-    db_dst = os.path.join(OUTPUT_DIR, 'db.sqlite3')
-    if os.path.exists(db_dst):
-        os.remove(db_dst)
-        print("  [INFO] db.sqlite3 du dev supprimee du build (sera creee au 1er demarrage)")
+    default_media = [
+        ('eleves', 'default', 'avatar.jpg'),
+        ('ecoles', 'default', 'logo.png'),
+    ]
+    for relative_parts in default_media:
+        media_src = os.path.join(BASE_DIR, 'media', *relative_parts)
+        media_dst = os.path.join(OUTPUT_DIR, 'media', *relative_parts)
+        if not os.path.isfile(media_src):
+            raise FileNotFoundError(f"Media par defaut introuvable: {media_src}")
+        os.makedirs(os.path.dirname(media_dst), exist_ok=True)
+        shutil.copy2(media_src, media_dst)
+        print(f"  [OK] Media par defaut copie : {os.path.join(*relative_parts)}")
 
-    # Supprimer les fichiers de licence/essai du dev s'ils ont été copiés
-    for dev_file in ['license.dat', '.trial_start', '.secret_key', '.env']:
-        dev_dst = os.path.join(OUTPUT_DIR, dev_file)
-        if os.path.exists(dev_dst):
-            os.remove(dev_dst)
-            print(f"  [INFO] {dev_file} du dev supprime du build")
+    # NE PAS livrer les donnees du developpeur.
+    # PyInstaller collecte db.sqlite3 dans `_internal` malgre son exclusion du
+    # .spec : ne nettoyer que la racine laissait donc la base du dev dans la
+    # distribution, prete a ecraser celle du client a la mise a jour.
+    # run_server.py cree une base vierge au premier demarrage.
+    for dev_file in ['db.sqlite3', 'license.dat', '.trial_start', '.secret_key', '.env']:
+        for location in [OUTPUT_DIR, os.path.join(OUTPUT_DIR, '_internal')]:
+            dev_dst = os.path.join(location, dev_file)
+            if os.path.exists(dev_dst):
+                os.remove(dev_dst)
+                print(f"  [INFO] {os.path.relpath(dev_dst, OUTPUT_DIR)} du dev supprime du build")
+
+    # Les licences nominatives du poste de compilation sont sensibles elles
+    # aussi. Une licence client ne doit entrer que via l'installateur.
+    for location in [OUTPUT_DIR, os.path.join(OUTPUT_DIR, '_internal')]:
+        for license_path in glob(os.path.join(location, 'license_*.lic')):
+            os.remove(license_path)
+            print(f"  [INFO] {os.path.relpath(license_path, OUTPUT_DIR)} du dev supprime du build")
 
     # Creer les dossiers necessaires
     for folder in ['logs', 'media', 'backups']:

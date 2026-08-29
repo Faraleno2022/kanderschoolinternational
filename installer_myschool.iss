@@ -1,7 +1,7 @@
 ﻿; MySchoolGN - Inno Setup Installer Script
 ; ==========================================
 ; Auteur  : GS Hadja Kanfing Dian
-; Version : 1.1.0
+; Version : 1.2.0
 ;
 ; Prérequis : Inno Setup 6+ (https://jrsoftware.org/isinfo.php)
 ;
@@ -19,8 +19,8 @@
 ; ── Identification ─────────────────────────────────────────────────────────────
 AppId={{B7E4A2D1-F3C8-4B91-A5E6-GS2024HADJA01}
 AppName=MySchoolGN
-AppVersion=1.1.0
-AppVerName=MySchoolGN 1.1.0
+AppVersion=1.2.0
+AppVerName=MySchoolGN 1.2.0
 AppPublisher=GS Hadja Kanfing Dian
 AppPublisherURL=https://myschoolgn.space
 AppSupportURL=https://myschoolgn.space
@@ -40,7 +40,7 @@ RestartApplications=no
 
 ; ── Sortie ─────────────────────────────────────────────────────────────────────
 OutputDir=Output
-OutputBaseFilename=MySchoolGN_Setup_v1.1.0
+OutputBaseFilename=MySchoolGN_Setup_v1.2.0
 
 ; ── Icône et splash ────────────────────────────────────────────────────────────
 SetupIconFile=myschool.ico
@@ -61,7 +61,7 @@ UninstallDisplayIcon={autopf}\MySchoolGN\MySchoolGN.exe
 CreateUninstallRegKey=yes
 
 ; ── Version info (visible dans Programmes et fonctionnalités) ──────────────────
-VersionInfoVersion=1.1.0.0
+VersionInfoVersion=1.2.0.0
 VersionInfoCompany=GS Hadja Kanfing Dian
 VersionInfoDescription=MySchoolGN - Système de Gestion Scolaire
 VersionInfoCopyright=Copyright © 2024 GS Hadja Kanfing Dian
@@ -75,8 +75,13 @@ Name: "startmenuicon"; Description: "Créer une entrée dans le menu Démarrer";
 Name: "autostart";     Description: "Lancer MySchoolGN au démarrage de Windows"; GroupDescription: "Options :";   Flags: unchecked
 
 [Files]
-; Application compilée (tout le dossier dist\MySchoolGN)
-Source: "dist\MySchoolGN\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Application compilée. Toutes les données modifiables et tous les secrets sont
+; exclus par sécurité, même si le script de build devait être contourné.
+Source: "dist\MySchoolGN\*"; DestDir: "{app}"; Excludes: "db.sqlite3,_internal\db.sqlite3,.env,_internal\.env,.secret_key,_internal\.secret_key,.trial_start,_internal\.trial_start,license.dat,_internal\license.dat,license_*.lic,_internal\license_*.lic,.data_layout_v2,_internal\.data_layout_v2,media\*,_internal\media\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Seules les ressources media génériques sont autorisées dans l'installateur.
+Source: "dist\MySchoolGN\media\eleves\default\avatar.jpg"; DestDir: "{app}\media\eleves\default"; Flags: ignoreversion
+Source: "dist\MySchoolGN\media\ecoles\default\logo.png"; DestDir: "{app}\media\ecoles\default"; Flags: ignoreversion
 
 ; Script de désinstallation
 Source: "desinstaller.bat"; DestDir: "{app}"; Flags: ignoreversion
@@ -113,7 +118,7 @@ Name: "{userstartup}\MySchoolGN"; Filename: "{app}\MySchoolGN.exe"; WorkingDir: 
 
 [Registry]
 ; Enregistrement pour le panneau "Programmes et fonctionnalités"
-Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "Version";    ValueData: "1.1.0"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "Version";    ValueData: "1.2.0"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}";  Flags: uninsdeletevalue
 
 [Run]
@@ -178,18 +183,63 @@ begin
   Sleep(500);
 end;
 
+// ── Emplacements des donnees persistantes ────────────────────────────────────
+// La version actuelle utilise toujours la racine de l'installation. Une
+// ancienne version PyInstaller 6 peut cependant avoir écrit dans `_internal`.
+function FichierNonVide(const FileName: String): Boolean;
+var
+  FileBytes: Int64;
+begin
+  Result := FileExists(FileName) and FileSize64(FileName, FileBytes) and (FileBytes > 0);
+end;
+
+function CheminBaseExistante(): String;
+var
+  RootPath, InternalPath: String;
+begin
+  RootPath := ExpandConstant('{app}\db.sqlite3');
+  InternalPath := ExpandConstant('{app}\_internal\db.sqlite3');
+
+  // Après migration, la base racine est canonique. Sur une ancienne version,
+  // la racine était souvent un leurre vide : dans ce cas utiliser _internal.
+  if FichierNonVide(RootPath) then
+    Result := 'db.sqlite3'
+  else if FichierNonVide(InternalPath) then
+    Result := '_internal\db.sqlite3'
+  else if FileExists(RootPath) then
+    Result := 'db.sqlite3'
+  else
+    Result := '_internal\db.sqlite3';
+end;
+
+function CheminDossierExistant(const DirName: String): String;
+begin
+  if (CheminBaseExistante() = '_internal\db.sqlite3') and
+     DirExists(ExpandConstant('{app}\_internal\') + DirName) then
+    Result := '_internal\' + DirName
+  else
+    Result := DirName;
+end;
+
 // ── Copier un fichier vers le dossier de sauvegarde temporaire ───────────────
-procedure BackupFile(const FileName: String);
+procedure BackupFileAs(const SourceName, BackupName: String);
 var
   SrcPath, DstPath: String;
 begin
-  SrcPath := ExpandConstant('{app}\') + FileName;
-  DstPath := BackupTempDir + '\' + FileName;
+  SrcPath := ExpandConstant('{app}\') + SourceName;
+  DstPath := BackupTempDir + '\' + BackupName;
   if FileExists(SrcPath) then
   begin
-    Log('Sauvegarde : ' + FileName);
-    CopyFile(SrcPath, DstPath, False);
+    Log('Sauvegarde : ' + SourceName + ' -> ' + BackupName);
+    ForceDirectories(ExtractFileDir(DstPath));
+    if not CopyFile(SrcPath, DstPath, False) then
+      RaiseException('Impossible de sauvegarder le fichier critique : ' + SourceName);
   end;
+end;
+
+procedure BackupFile(const FileName: String);
+begin
+  BackupFileAs(FileName, FileName);
 end;
 
 // ── Restaurer un fichier depuis le dossier de sauvegarde temporaire ──────────
@@ -202,21 +252,23 @@ begin
   if FileExists(SrcPath) then
   begin
     Log('Restauration : ' + FileName);
-    CopyFile(SrcPath, DstPath, False);
+    ForceDirectories(ExtractFileDir(DstPath));
+    if not CopyFile(SrcPath, DstPath, False) then
+      RaiseException('Impossible de restaurer le fichier critique : ' + FileName);
   end;
 end;
 
 // ── Copier récursivement un dossier ──────────────────────────────────────────
-procedure BackupDirectory(const DirName: String);
+procedure BackupDirectoryAs(const SourceDirName, BackupDirName: String);
 var
   SrcDir, DstDir: String;
   FindRec: TFindRec;
 begin
-  SrcDir := ExpandConstant('{app}\') + DirName;
-  DstDir := BackupTempDir + '\' + DirName;
+  SrcDir := ExpandConstant('{app}\') + SourceDirName;
+  DstDir := BackupTempDir + '\' + BackupDirName;
   if DirExists(SrcDir) then
   begin
-    Log('Sauvegarde dossier : ' + DirName);
+    Log('Sauvegarde dossier : ' + SourceDirName + ' -> ' + BackupDirName);
     ForceDirectories(DstDir);
     if FindFirst(SrcDir + '\*', FindRec) then
     try
@@ -224,15 +276,24 @@ begin
         if (FindRec.Name <> '.') and (FindRec.Name <> '..') then
         begin
           if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
-            BackupDirectory(DirName + '\' + FindRec.Name)
+            BackupDirectoryAs(
+              SourceDirName + '\' + FindRec.Name,
+              BackupDirName + '\' + FindRec.Name
+            )
           else
-            CopyFile(SrcDir + '\' + FindRec.Name, DstDir + '\' + FindRec.Name, False);
+            if not CopyFile(SrcDir + '\' + FindRec.Name, DstDir + '\' + FindRec.Name, False) then
+              RaiseException('Impossible de sauvegarder : ' + SourceDirName + '\' + FindRec.Name);
         end;
       until not FindNext(FindRec);
     finally
       FindClose(FindRec);
     end;
   end;
+end;
+
+procedure BackupDirectory(const DirName: String);
+begin
+  BackupDirectoryAs(DirName, DirName);
 end;
 
 // ── Restaurer récursivement un dossier ───────────────────────────────────────
@@ -255,7 +316,8 @@ begin
           if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
             RestoreDirectory(DirName + '\' + FindRec.Name)
           else
-            CopyFile(SrcDir + '\' + FindRec.Name, DstDir + '\' + FindRec.Name, False);
+            if not CopyFile(SrcDir + '\' + FindRec.Name, DstDir + '\' + FindRec.Name, False) then
+              RaiseException('Impossible de restaurer : ' + DirName + '\' + FindRec.Name);
         end;
       until not FindNext(FindRec);
     finally
@@ -278,10 +340,12 @@ var
   AppDir: String;
 begin
   BackupTempDir := ExpandConstant('{tmp}\MySchoolGN_UpdateBackup');
+  CleanupBackupDir();
   ForceDirectories(BackupTempDir);
 
   // Fichiers de données critiques
-  BackupFile('db.sqlite3');
+  // Toujours restaurer dans le nouvel emplacement canonique a la racine.
+  BackupFileAs(CheminBaseExistante(), 'db.sqlite3');
   BackupFile('.secret_key');
   BackupFile('.trial_start');
   BackupFile('.env');
@@ -299,13 +363,13 @@ begin
   end;
 
   // Dossier media (photos élèves, logos écoles, etc.)
-  BackupDirectory('media');
+  BackupDirectoryAs(CheminDossierExistant('media'), 'media');
 
   // Dossier backups
   BackupDirectory('backups');
 
   // Dossier logs
-  BackupDirectory('logs');
+  BackupDirectoryAs(CheminDossierExistant('logs'), 'logs');
 end;
 
 // ── Restauration des données utilisateur après l'installation ────────────────
@@ -439,7 +503,7 @@ begin
     if IsUpdate then
     begin
       WizardForm.WelcomeLabel1.Caption := 'Mise à jour de MySchoolGN';
-      WelcomeMsg := 'Ce programme va mettre à jour MySchoolGN vers la version 1.1.0 sur votre ordinateur.' + #13#10 + #13#10 +
+      WelcomeMsg := 'Ce programme va mettre à jour MySchoolGN vers la version 1.2.0 sur votre ordinateur.' + #13#10 + #13#10 +
         'Vos données seront automatiquement préservées :' + #13#10 +
         '  • Base de données (élèves, notes, etc.)' + #13#10 +
         '  • Licences et période d''essai' + #13#10 +
@@ -507,7 +571,7 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
-    DbPath := ExpandConstant('{app}\db.sqlite3');
+    DbPath := ExpandConstant('{app}\') + CheminBaseExistante();
     if FileExists(DbPath) then
     begin
       if MsgBox(

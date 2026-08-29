@@ -158,18 +158,18 @@ def _add_if_exists(src_rel, dst):
     if os.path.exists(src):
         datas.append((src, dst))
 
-# Dossiers principaux
+# Dossiers applicatifs uniquement. Les medias sont des donnees utilisateur et
+# ne doivent jamais etre captures depuis le poste de compilation. Les deux
+# ressources par defaut sont ajoutees explicitement par build_exe.py.
 _add_if_exists('templates', 'templates')
 _add_if_exists('static', 'static')
 _add_if_exists('staticfiles', 'staticfiles')
-_add_if_exists('media', 'media')
 
 # Base de données : NE PAS inclure la DB du dev dans le build
 # Elle sera créée automatiquement via 'migrate' au premier lancement chez le client
 # _add_if_exists('db.sqlite3', '.')
 
-# Fichier .env
-_add_if_exists('.env', '.')
+# Le fichier .env contient des secrets et ne doit jamais entrer dans le build.
 
 # PROTECTION ANTI-MODIFICATION :
 # Les modules critiques (integrity_check, license_manager, load_env) sont
