@@ -51,9 +51,9 @@
                     <label class="form-label">Type de Repas</label>
                     <select name="type_repas" class="form-select">
                         <option value="">Tous</option>
-                        <option value="DEJEUNER" {% if type_repas == 'DEJEUNER' %}selected{% endif %}>Déjeuner</option>
-                        <option value="GOUTER" {% if type_repas == 'GOUTER' %}selected{% endif %}>Goûter</option>
-                        <option value="COMPLET" {% if type_repas == 'COMPLET' %}selected{% endif %}>Complet</option>
+                        {% for option_repas in types_repas %}
+                        <option value="{{ option_repas.code }}" {% if type_repas == option_repas.code %}selected{% endif %}>{{ option_repas.libelle }}</option>
+                        {% endfor %}
                     </select>
                 </div>
                 <div class="col-md-2 d-flex align-items-end">

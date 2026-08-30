@@ -15,7 +15,7 @@ import io
 import csv
 
 from eleves.models import Eleve
-from .models import AbonnementBus
+from .models import AbonnementBus, TypePeriodiciteAbonnement
 from .forms import AbonnementBusForm
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school
 from utilisateurs.permissions import can_delete_subscriptions
@@ -115,7 +115,10 @@ def liste_abonnements(request):
                     nb_expiration_proche += 1
 
     # Periodicite breakdown
-    choices_map = dict(AbonnementBus.Periodicite.choices)
+    choices_map = TypePeriodiciteAbonnement.libelles(
+        TypePeriodiciteAbonnement.Service.BUS,
+        AbonnementBus.Periodicite.choices,
+    )
     periodicite_rows = []
     for row in qs.values('periodicite').annotate(nb=Count('id'), montant=Sum('montant')):
         code = row['periodicite']
@@ -164,25 +167,22 @@ def abonnement_create(request):
     eleve_id = request.GET.get('eleve')
     if eleve_id:
         try:
-            initial['eleve'] = Eleve.objects.get(id=int(eleve_id))
-        except Exception:
+            eleves_autorises = filter_by_user_school(
+                Eleve.objects.select_related('classe', 'classe__ecole'),
+                request.user,
+                'classe__ecole',
+            )
+            initial['eleve'] = eleves_autorises.get(id=int(eleve_id))
+        except (TypeError, ValueError, Eleve.DoesNotExist):
             pass
     if request.method == 'POST':
-        form = AbonnementBusForm(request.POST)
+        form = AbonnementBusForm(request.POST, user=request.user)
         if form.is_valid():
             abo = form.save()
             messages.success(request, "Abonnement bus créé avec succès.")
             return redirect('bus:liste')
     else:
-        form = AbonnementBusForm(initial=initial)
-
-    # Sécurité : filtrer les élèves par école de l'utilisateur
-    if not user_is_superadmin(request.user):
-        form.fields['eleve'].queryset = filter_by_user_school(
-            Eleve.objects.all(),
-            request.user,
-            'classe__ecole'
-        )
+        form = AbonnementBusForm(initial=initial, user=request.user)
 
     return render(request, 'bus/form.html', {'form': form, 'titre_page': 'Nouvel abonnement Bus'})
 
@@ -192,21 +192,13 @@ def abonnement_create(request):
 def abonnement_edit(request, abo_id):
     abo = get_object_or_404(AbonnementBus, id=abo_id)
     if request.method == 'POST':
-        form = AbonnementBusForm(request.POST, instance=abo)
+        form = AbonnementBusForm(request.POST, instance=abo, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Abonnement mis à jour.")
             return redirect('bus:liste')
     else:
-        form = AbonnementBusForm(instance=abo)
-
-    # Sécurité : filtrer les élèves par école de l'utilisateur
-    if not user_is_superadmin(request.user):
-        form.fields['eleve'].queryset = filter_by_user_school(
-            Eleve.objects.all(),
-            request.user,
-            'classe__ecole'
-        )
+        form = AbonnementBusForm(instance=abo, user=request.user)
 
     return render(request, 'bus/form.html', {'form': form, 'titre_page': 'Modifier abonnement Bus'})
 
@@ -555,7 +547,10 @@ def export_abonnements_breakdown_csv(request, kind: str):
 
     if kind == 'periodicite':
         writer.writerow(['Périodicité', 'Nombre', 'Montant (GNF)'])
-        label_map = dict(AbonnementBus.Periodicite.choices)
+        label_map = TypePeriodiciteAbonnement.libelles(
+            TypePeriodiciteAbonnement.Service.BUS,
+            AbonnementBus.Periodicite.choices,
+        )
         for row in qs.values('periodicite').annotate(nb=Count('id'), montant=Sum('montant')).order_by('periodicite'):
             code = row['periodicite']
             label = label_map.get(code, code or '-')

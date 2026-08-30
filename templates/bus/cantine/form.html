@@ -33,16 +33,24 @@
                             </div>
                             <div class="card-body">
                                 <div class="row">
-                                    <div class="col-md-8">
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Filtrer par classe</label>
+                                            {{ form.classe_filtre }}
+                                            <small class="form-text text-muted">Réduit immédiatement la liste des élèves.</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-5">
                                         <div class="mb-3">
                                             <label class="form-label">Élève *</label>
                                             {{ form.eleve }}
+                                            <small class="form-text text-muted">Matricule — prénom et nom</small>
                                             {% if form.eleve.errors %}
                                                 <div class="text-danger">{{ form.eleve.errors }}</div>
                                             {% endif %}
                                         </div>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
                                         <div class="mb-3">
                                             <label class="form-label">Contact Parent</label>
                                             {{ form.contact_parent }}
@@ -240,12 +248,37 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const eleveSelect = document.getElementById('id_eleve');
+    const classeSelect = document.getElementById('id_classe_filtre');
     const contactParentInput = document.getElementById('id_contact_parent');
     const eleveInfoDiv = document.getElementById('eleve-info');
     const infoNomComplet = document.getElementById('info-nom-complet');
     const infoClasse = document.getElementById('info-classe');
     const infoPhoto = document.getElementById('info-photo');
     const infoNoPhoto = document.getElementById('info-no-photo');
+    const eleveOptions = eleveSelect
+        ? Array.from(eleveSelect.options).map(option => option.cloneNode(true))
+        : [];
+
+    function filterStudentsByClass() {
+        if (!eleveSelect || !classeSelect) return;
+        const currentValue = eleveSelect.value;
+        const classeId = classeSelect.value;
+        eleveSelect.innerHTML = '';
+        eleveOptions.forEach(original => {
+            if (!original.value || !classeId || original.dataset.classeId === classeId) {
+                eleveSelect.appendChild(original.cloneNode(true));
+            }
+        });
+        if (Array.from(eleveSelect.options).some(option => option.value === currentValue)) {
+            eleveSelect.value = currentValue;
+        } else {
+            eleveSelect.value = '';
+            eleveInfoDiv.style.display = 'none';
+        }
+    }
+
+    classeSelect && classeSelect.addEventListener('change', filterStudentsByClass);
+    filterStudentsByClass();
     
     if (eleveSelect) {
         // Charger les infos si un élève est déjà sélectionné (mode édition)
@@ -268,6 +301,30 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    const periodiciteSelect = document.getElementById('id_periodicite');
+    const dateDebutInput = document.getElementById('id_date_debut');
+    const dateExpirationInput = document.getElementById('id_date_expiration');
+
+    function calculateExpirationDate() {
+        if (!periodiciteSelect || !dateDebutInput || !dateExpirationInput || !dateDebutInput.value) return;
+        const selectedOption = periodiciteSelect.options[periodiciteSelect.selectedIndex];
+        if (!selectedOption) return;
+        const months = parseInt(selectedOption.dataset.dureeMois || '0', 10);
+        const days = parseInt(selectedOption.dataset.dureeJours || '0', 10);
+        if (!months && !days) return;
+        const expiration = new Date(dateDebutInput.value);
+        if (Number.isNaN(expiration.getTime())) return;
+        if (months) expiration.setMonth(expiration.getMonth() + months);
+        if (days) expiration.setDate(expiration.getDate() + days);
+        const year = expiration.getFullYear();
+        const month = String(expiration.getMonth() + 1).padStart(2, '0');
+        const day = String(expiration.getDate()).padStart(2, '0');
+        dateExpirationInput.value = `${year}-${month}-${day}`;
+    }
+
+    periodiciteSelect && periodiciteSelect.addEventListener('change', calculateExpirationDate);
+    dateDebutInput && dateDebutInput.addEventListener('change', calculateExpirationDate);
     
     function loadEleveInfo(eleveId) {
         // Afficher un indicateur de chargement

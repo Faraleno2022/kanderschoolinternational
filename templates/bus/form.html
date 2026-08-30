@@ -38,30 +38,29 @@
         <h5 class="d-flex align-items-center"><i class="fas fa-user me-2"></i>Élève</h5>
 
         <div class="row">
-          {% if not form.instance.pk and not form.initial.eleve %}
-          <!-- Recherche par matricule -->
-          <div class="col-md-6 mb-3">
-            <label class="form-label small-label">Matricule de l'élève <span class="required-field">*</span></label>
-            <div class="input-group">
-              <input type="text" id="matriculeInput" class="form-control" placeholder="Ex: 1CE00048" maxlength="20">
-              <button type="button" id="rechercherBtn" class="btn btn-outline-primary">
-                <i class="fas fa-search"></i> Rechercher
-              </button>
-            </div>
-            <div id="matriculeHelp" class="help-text">Saisissez le matricule puis cliquez sur Rechercher.</div>
-            <div id="matriculeError" class="text-danger small" style="display:none;"></div>
+          {% if not form.instance.pk %}
+          <div class="col-md-4 mb-3">
+            <label class="form-label small-label" for="{{ form.classe_filtre.id_for_label }}">Filtrer par classe</label>
+            {{ form.classe_filtre }}
+            <div class="help-text">Choisissez une classe pour réduire la liste.</div>
           </div>
 
-          <!-- Sélection manuelle alternative (datalist) -->
-          <div class="col-md-6 mb-3">
-            <label class="form-label small-label">Ou sélectionner manuellement</label>
-            <input type="text" id="eleveInput" class="form-control" list="elevesList" placeholder="Tapez: nom, prénom, classe...">
-            <datalist id="elevesList">
-              {% for e in form.fields.eleve.queryset %}
-                <option value="{{ e.prenom }} {{ e.nom }} ({{ e.matricule }}) - {{ e.classe.nom }} / {{ e.classe.ecole.nom }}" data-id="{{ e.id }}"></option>
-              {% endfor %}
-            </datalist>
-            <div class="help-text">Astuce: choisissez depuis la liste si vous ne connaissez pas le matricule.</div>
+          <div class="col-md-5 mb-3">
+            <label class="form-label small-label" for="{{ form.eleve.id_for_label }}">Élève <span class="required-field">*</span></label>
+            {{ form.eleve }}
+            <div class="help-text">Format : matricule — prénom et nom.</div>
+            {% if form.eleve.errors %}<div class="text-danger small">{{ form.eleve.errors.0 }}</div>{% endif %}
+          </div>
+
+          <div class="col-md-3 mb-3">
+            <label class="form-label small-label">Recherche directe</label>
+            <div class="input-group">
+              <input type="text" id="matriculeInput" class="form-control" placeholder="Matricule" maxlength="20">
+              <button type="button" id="rechercherBtn" class="btn btn-outline-primary">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
+            <div id="matriculeError" class="text-danger small" style="display:none;"></div>
           </div>
 
           <!-- Élève sélectionné (infos) -->
@@ -82,8 +81,6 @@
             </div>
           </div>
 
-          <!-- Champ réel masqué pour la soumission -->
-          <div class="d-none">{{ form.eleve }}</div>
           <div id="eleveError" class="text-danger small" style="display:none;">Veuillez sélectionner un élève.</div>
           {% else %}
             {{ form.eleve.as_hidden }}
@@ -181,8 +178,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const ajaxEleveInfoUrl = '{% url "paiements:ajax_eleve_info" %}';
   const matriculeInput = document.getElementById('matriculeInput');
   const rechercherBtn = document.getElementById('rechercherBtn');
-  const eleveInput = document.getElementById('eleveInput');
   const eleveSelect = document.querySelector('[name="eleve"]');
+  const classeSelect = document.getElementById('id_classe_filtre');
   const eleveInfoSection = document.getElementById('eleveInfoSection');
   const eleveNomPrenom = document.getElementById('eleveNomPrenom');
   const eleveMatricule = document.getElementById('eleveMatricule');
@@ -193,6 +190,27 @@ document.addEventListener('DOMContentLoaded', function() {
   const form = document.getElementById('busForm');
   const montantInput = document.getElementById('id_montant');
   const montantDisplay = document.getElementById('montantDisplay');
+  const eleveOptions = eleveSelect
+    ? Array.from(eleveSelect.options).map(option => option.cloneNode(true))
+    : [];
+
+  function filterStudentsByClass() {
+    if (!eleveSelect || !classeSelect) return;
+    const currentValue = eleveSelect.value;
+    const classeId = classeSelect.value;
+    eleveSelect.innerHTML = '';
+    eleveOptions.forEach(original => {
+      if (!original.value || !classeId || original.dataset.classeId === classeId) {
+        eleveSelect.appendChild(original.cloneNode(true));
+      }
+    });
+    if (Array.from(eleveSelect.options).some(option => option.value === currentValue)) {
+      eleveSelect.value = currentValue;
+    } else {
+      eleveSelect.value = '';
+      if (eleveInfoSection) eleveInfoSection.style.display = 'none';
+    }
+  }
 
   function showEleveInfo(data) {
     if (!data || !data.success || !data.eleve) return;
@@ -208,13 +226,17 @@ document.addEventListener('DOMContentLoaded', function() {
     eleveError && (eleveError.style.display = 'none');
   }
 
-  async function fetchByMatricule(m) {
+  async function fetchByMatricule(m, resetClass = false) {
     try {
       const url = new URL(ajaxEleveInfoUrl, window.location.origin);
       url.searchParams.set('matricule', m.trim());
       const resp = await fetch(url.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       const data = await resp.json();
       if (data && data.success) {
+        if (resetClass && classeSelect) {
+          classeSelect.value = '';
+          filterStudentsByClass();
+        }
         showEleveInfo(data);
         matriculeError && (matriculeError.style.display = 'none');
       } else {
@@ -235,28 +257,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
   rechercherBtn && rechercherBtn.addEventListener('click', function() {
     if (matriculeInput && matriculeInput.value.trim()) {
-      fetchByMatricule(matriculeInput.value);
+      fetchByMatricule(matriculeInput.value, true);
     }
   });
 
   matriculeInput && matriculeInput.addEventListener('keyup', function(e) {
     if (e.key === 'Enter' && matriculeInput.value.trim()) {
-      fetchByMatricule(matriculeInput.value);
+      fetchByMatricule(matriculeInput.value, true);
     }
   });
 
-  // Datalist sélection manuelle
-  eleveInput && eleveInput.addEventListener('change', function() {
-    const options = Array.from(document.querySelectorAll('#elevesList option'));
-    const match = options.find(o => o.value.trim() === eleveInput.value.trim());
-    if (match) {
-      eleveSelect.value = match.getAttribute('data-id');
-      eleveError && (eleveError.style.display = 'none');
-      // Essayer de récupérer infos via matricule extrait du texte
-      const m = (eleveInput.value.match(/\(([^)]+)\)/) || [null, null])[1];
-      if (m) fetchByMatricule(m);
+  classeSelect && classeSelect.addEventListener('change', filterStudentsByClass);
+  filterStudentsByClass();
+
+  eleveSelect && eleveSelect.addEventListener('change', function() {
+    const option = this.options[this.selectedIndex];
+    const matricule = option ? option.dataset.matricule : '';
+    if (matricule) {
+      fetchByMatricule(matricule);
+    } else if (eleveInfoSection) {
+      eleveInfoSection.style.display = 'none';
     }
   });
+
+  if (eleveSelect && eleveSelect.value) {
+    const initialOption = eleveSelect.options[eleveSelect.selectedIndex];
+    if (initialOption && initialOption.dataset.matricule) {
+      fetchByMatricule(initialOption.dataset.matricule);
+    }
+  }
 
   // Calcul automatique de la date d'expiration
   const periodiciteSelect = document.getElementById('id_periodicite');
@@ -266,32 +295,20 @@ document.addEventListener('DOMContentLoaded', function() {
   function calculateExpirationDate() {
     if (!periodiciteSelect || !dateDebutInput || !dateExpirationInput) return;
     
-    const periodicite = periodiciteSelect.value;
     const dateDebut = dateDebutInput.value;
-    
-    if (!periodicite || !dateDebut) return;
+    const selectedOption = periodiciteSelect.options[periodiciteSelect.selectedIndex];
+    if (!selectedOption || !dateDebut) return;
     
     const debut = new Date(dateDebut);
     if (isNaN(debut.getTime())) return;
     
     let expiration = new Date(debut);
     
-    switch(periodicite) {
-      case 'MENSUEL':
-        expiration.setMonth(expiration.getMonth() + 1);
-        break;
-      case 'TRIMESTRIEL':
-        expiration.setMonth(expiration.getMonth() + 3);
-        break;
-      case 'SEMESTRIEL':
-        expiration.setMonth(expiration.getMonth() + 6);
-        break;
-      case 'ANNUEL':
-        expiration.setFullYear(expiration.getFullYear() + 1);
-        break;
-      default:
-        return;
-    }
+    const months = parseInt(selectedOption.dataset.dureeMois || '0', 10);
+    const days = parseInt(selectedOption.dataset.dureeJours || '0', 10);
+    if (!months && !days) return;
+    if (months) expiration.setMonth(expiration.getMonth() + months);
+    if (days) expiration.setDate(expiration.getDate() + days);
     
     // Format YYYY-MM-DD pour l'input date
     const year = expiration.getFullYear();

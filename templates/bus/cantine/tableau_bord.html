@@ -257,36 +257,20 @@
 
     <!-- Statistiques par Type de Repas -->
     <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <i class="fas fa-sun fa-3x text-warning mb-3"></i>
-                    <h5>Déjeuner</h5>
-                    <h2 class="text-primary">{{ stats_type_repas.dejeuner }}</h2>
-                    <p class="text-muted mb-0">abonnements actifs</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body text-center">
-                    <i class="fas fa-cookie-bite fa-3x text-info mb-3"></i>
-                    <h5>Goûter</h5>
-                    <h2 class="text-primary">{{ stats_type_repas.gouter }}</h2>
-                    <p class="text-muted mb-0">abonnements actifs</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card">
+        {% for repas in stats_type_repas_rows %}
+        <div class="col-md-6 col-xl-3 mb-3">
+            <div class="card h-100">
                 <div class="card-body text-center">
                     <i class="fas fa-utensils fa-3x text-success mb-3"></i>
-                    <h5>Complet (Déjeuner + Goûter)</h5>
-                    <h2 class="text-primary">{{ stats_type_repas.complet }}</h2>
+                    <h5>{{ repas.libelle }}</h5>
+                    <h2 class="text-primary">{{ repas.nombre }}</h2>
                     <p class="text-muted mb-0">abonnements actifs</p>
                 </div>
             </div>
         </div>
+        {% empty %}
+        <div class="col-12"><div class="alert alert-info">Aucun type de repas actif n'est configuré.</div></div>
+        {% endfor %}
     </div>
 
     <!-- Revenus Estimés -->
