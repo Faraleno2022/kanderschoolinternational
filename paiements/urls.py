@@ -19,6 +19,8 @@ from .rapports_professionnels import (
     export_recouvrement_excel,
     export_recouvrement_pdf,
 )
+from . import views_admissions
+from . import views_audit
 
 app_name = 'paiements'
 
@@ -28,6 +30,13 @@ urlpatterns = [
     
     # Gestion des paiements
     path('liste/', views.liste_paiements, name='liste_paiements'),
+    path('historique-operations/', views_audit.historique_operations_paiements, name='historique_operations'),
+    path('eleves-inscrits/', views_admissions.liste_eleves_inscrits, name='liste_eleves_inscrits'),
+    path('eleves-reinscrits/', views_admissions.liste_eleves_reinscrits, name='liste_eleves_reinscrits'),
+    path('eleves-inscrits/export/pdf/', views_admissions.export_eleves_inscrits_pdf, name='export_eleves_inscrits_pdf'),
+    path('eleves-inscrits/export/excel/', views_admissions.export_eleves_inscrits_excel, name='export_eleves_inscrits_excel'),
+    path('eleves-reinscrits/export/pdf/', views_admissions.export_eleves_reinscrits_pdf, name='export_eleves_reinscrits_pdf'),
+    path('eleves-reinscrits/export/excel/', views_admissions.export_eleves_reinscrits_excel, name='export_eleves_reinscrits_excel'),
     path('detail/<int:paiement_id>/', views.detail_paiement, name='detail_paiement'),
     path('modifier/<int:paiement_id>/', views.modifier_paiement, name='modifier_paiement'),
     path('ajouter/', views.ajouter_paiement, name='ajouter_paiement'),

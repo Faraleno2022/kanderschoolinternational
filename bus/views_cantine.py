@@ -102,7 +102,8 @@ def liste_abonnements_cantine(request):
             Q(eleve__nom__icontains=q) |
             Q(eleve__prenom__icontains=q) |
             Q(eleve__matricule__icontains=q) |
-            Q(contact_parent__icontains=q)
+            Q(contact_parent__icontains=q) |
+            Q(reference_paiement__icontains=q)
         )
     
     # Filtres
@@ -263,7 +264,7 @@ def export_cantine_excel(request):
     # En-têtes
     headers = [
         'Matricule', 'Nom', 'Prénom', 'Classe', 'Type Repas', 'Périodicité', 
-        'Montant (GNF)', 'Date Début', 'Date Expiration', 'Jours Restants', 
+        'Montant (GNF)', 'Référence paiement', 'Date Début', 'Date Expiration', 'Jours Restants',
         'Statut', 'Régime Alimentaire', 'Allergies', 'Contact Parent'
     ]
     ws.append(headers)
@@ -278,6 +279,7 @@ def export_cantine_excel(request):
             abo.get_type_repas_display(),
             abo.get_periodicite_display(),
             float(abo.montant),
+            abo.reference_paiement or '',
             abo.date_debut.strftime('%d/%m/%Y'),
             abo.date_expiration.strftime('%d/%m/%Y'),
             abo.jours_restants,
@@ -547,6 +549,8 @@ def generer_recu_cantine_pdf(request, abo_id):
     line('Type de repas', abo.get_type_repas_display())
     line('Périodicité', abo.get_periodicite_display())
     line('Montant', f"{int(abo.montant):,}".replace(',', ' ') + ' GNF')
+    if abo.reference_paiement:
+        line('Référence paiement', abo.reference_paiement)
     line('Début', abo.date_debut.strftime('%d/%m/%Y') if abo.date_debut else '')
     line('Expiration', abo.date_expiration.strftime('%d/%m/%Y') if abo.date_expiration else '')
     

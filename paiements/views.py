@@ -913,7 +913,13 @@ def _dashboard_payment_allocations(payments, today):
 
 
 def _dashboard_subscription_periods(queryset, today):
-    """Somme les abonnements Bus/Cantine d'après leur enregistrement."""
+    """Somme les abonnements Bus/Cantine selon leur date réelle de paiement.
+
+    Les abonnements ne possèdent pas encore un champ ``date_paiement`` dédié :
+    leur ``date_debut`` est la date métier saisie par l'utilisateur. Utiliser
+    ``created_at`` rendait les cartes fausses lors d'une saisie rétrospective
+    ou d'un import.
+    """
     starts = _dashboard_period_starts(today)
     money = DecimalField(max_digits=14, decimal_places=0)
     aggregates = queryset.aggregate(**{
@@ -921,8 +927,8 @@ def _dashboard_subscription_periods(queryset, today):
             Sum(
                 'montant',
                 filter=Q(
-                    created_at__date__gte=start,
-                    created_at__date__lte=today,
+                    date_debut__gte=start,
+                    date_debut__lte=today,
                 ),
             ),
             Value(0, output_field=money),
@@ -1087,6 +1093,8 @@ def _compute_stats(user):
     _qs_attente = filter_by_user_school(_qs_attente, user, 'ecole_encaissement')
     en_attente_count = _qs_attente.count()
 
+    from .audit import statistiques_operations_paiements
+
     return {
         'total_paiements_mois': int(total_mois or 0),
         'nombre_paiements_mois': int(nb_paiements_mois or 0),
@@ -1094,6 +1102,7 @@ def _compute_stats(user):
         'montant_en_retard': int(montant_en_retard or 0),
         'paiements_en_attente': int(en_attente_count or 0),
         'categories': _dashboard_category_stats(user, today),
+        'operations': statistiques_operations_paiements(user, today),
     }
 
 
@@ -2857,8 +2866,6 @@ def supprimer_paiement(request, paiement_id: int):
     # Le contexte doit être lu avant l'effacement : ensuite, plus rien ne
     # rattache le montant supprimé à l'échéancier qu'il couvrait.
     eleve = paiement.eleve
-    annee_scolaire = paiement.annee_scolaire or None
-    ecole_id = paiement.ecole_encaissement_id or None
     numero_recu = paiement.numero_recu
 
     with transaction.atomic():
@@ -2866,7 +2873,7 @@ def supprimer_paiement(request, paiement_id: int):
             utilisateur=request.user,
             motif=f"Suppression définitive : {form.cleaned_data['motif_suppression']}",
         )
-        _auto_validate_echeancier_for_eleve(eleve, annee_scolaire, ecole_id)
+        # `Paiement.delete()` recalcule atomiquement l'échéancier d'origine.
 
     logging.getLogger(__name__).warning(
         "Paiement %s supprimé définitivement par %s (élève %s)",

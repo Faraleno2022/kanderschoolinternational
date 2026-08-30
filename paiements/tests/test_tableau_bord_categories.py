@@ -199,10 +199,6 @@ class TableauBordCategoriesTests(TestCase):
             other_student, self.type_inscription, "500000", self.today,
         )
 
-    def _set_created_at(self, model, pk, day):
-        moment = timezone.make_aware(datetime.combine(day, datetime.min.time()))
-        model.objects.filter(pk=pk).update(created_at=moment)
-
     def _create_bus_and_cantine_data(self):
         student = Eleve.objects.get(matricule="DASH-AUJOURDHUI")
         bus_today = AbonnementBus.objects.create(
@@ -211,23 +207,18 @@ class TableauBordCategoriesTests(TestCase):
             date_debut=self.today,
             date_expiration=self.today + timedelta(days=30),
         )
-        self._set_created_at(AbonnementBus, bus_today.pk, self.today)
         bus_month = AbonnementBus.objects.create(
             eleve=student,
             montant=Decimal("50000"),
             date_debut=date(2026, 8, 5),
             date_expiration=date(2026, 9, 5),
         )
-        self._set_created_at(AbonnementBus, bus_month.pk, date(2026, 8, 5))
 
         cantine_week = AbonnementCantine.objects.create(
             eleve=student,
             montant=Decimal("60000"),
             date_debut=self.today - timedelta(days=2),
             date_expiration=self.today + timedelta(days=28),
-        )
-        self._set_created_at(
-            AbonnementCantine, cantine_week.pk, self.today - timedelta(days=2),
         )
 
         other_student = Eleve.objects.get(matricule="DASH-AUTRE-ECOLE")
@@ -237,7 +228,18 @@ class TableauBordCategoriesTests(TestCase):
             date_debut=self.today,
             date_expiration=self.today + timedelta(days=30),
         )
-        self._set_created_at(AbonnementBus, other_bus.pk, self.today)
+
+        # La date technique de création peut différer (import/saisie tardive) :
+        # seule la date métier de début doit alimenter le tableau de bord.
+        old_created_at = timezone.make_aware(
+            datetime.combine(date(2025, 1, 1), datetime.min.time())
+        )
+        AbonnementBus.objects.filter(pk__in=[bus_today.pk, bus_month.pk]).update(
+            created_at=old_created_at,
+        )
+        AbonnementCantine.objects.filter(pk=cantine_week.pk).update(
+            created_at=old_created_at,
+        )
 
     @patch("django.utils.timezone.localdate")
     def test_categories_sont_ventilees_par_periode_et_par_ecole(self, localdate):

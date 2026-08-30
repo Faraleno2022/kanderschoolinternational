@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Paiements</a></li>
+<li class="breadcrumb-item active">{{ titre_page }}</li>
+{% endblock %}
+
+{% block page_actions %}
+<div class="d-flex flex-wrap gap-2">
+  {% if nature == 'INSCRIPTION' %}
+  <a class="btn btn-outline-primary" href="{% url 'paiements:liste_eleves_reinscrits' %}"><i class="fas fa-user-check me-1"></i>Voir les réinscrits</a>
+  <a class="btn btn-danger" href="{% url 'paiements:export_eleves_inscrits_pdf' %}?{{ request.GET.urlencode }}"><i class="fas fa-file-pdf me-1"></i>PDF</a>
+  <a class="btn btn-success" href="{% url 'paiements:export_eleves_inscrits_excel' %}?{{ request.GET.urlencode }}"><i class="fas fa-file-excel me-1"></i>Excel</a>
+  {% else %}
+  <a class="btn btn-outline-primary" href="{% url 'paiements:liste_eleves_inscrits' %}"><i class="fas fa-user-plus me-1"></i>Voir les inscrits</a>
+  <a class="btn btn-danger" href="{% url 'paiements:export_eleves_reinscrits_pdf' %}?{{ request.GET.urlencode }}"><i class="fas fa-file-pdf me-1"></i>PDF</a>
+  <a class="btn btn-success" href="{% url 'paiements:export_eleves_reinscrits_excel' %}?{{ request.GET.urlencode }}"><i class="fas fa-file-excel me-1"></i>Excel</a>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4 shadow-sm">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-4"><label class="form-label">Recherche</label><input class="form-control" name="q" value="{{ q }}" placeholder="Matricule, nom, prénom ou classe"></div>
+      <div class="col-md-3"><label class="form-label">Classe</label><select class="form-select" name="classe"><option value="">Toutes les classes</option>{% for classe in classes %}<option value="{{ classe.classe_reference_id }}" {% if selected_class == classe.classe_reference_id|stringformat:'s' %}selected{% endif %}>{{ classe.classe_reference__nom }}</option>{% endfor %}</select></div>
+      <div class="col-md-3"><label class="form-label">Année scolaire</label><select class="form-select" name="annee_scolaire"><option value="">Toutes</option>{% for annee in annees %}<option value="{{ annee }}" {% if selected_year == annee %}selected{% endif %}>{{ annee }}</option>{% endfor %}</select></div>
+      <div class="col-md-2"><button class="btn btn-primary w-100"><i class="fas fa-filter me-1"></i>Filtrer</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between"><strong>{{ titre_page }}</strong><span class="badge bg-primary">{{ page_obj.paginator.count }}</span></div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light"><tr><th>Matricule</th><th>Élève</th><th>Sexe</th><th>Classe</th><th>École</th><th>Année</th><th class="text-end">Frais dû</th><th class="text-end">Frais payé</th></tr></thead>
+      <tbody>
+      {% for echeancier in page_obj %}
+      <tr><td><strong>{{ echeancier.eleve.matricule }}</strong></td><td>{{ echeancier.eleve.nom_complet }}</td><td>{{ echeancier.eleve.get_sexe_display }}</td><td>{{ echeancier.classe_reference.nom|default:'-' }}</td><td>{{ echeancier.ecole_reference.nom|default:'-' }}</td><td>{{ echeancier.annee_scolaire }}</td><td class="text-end">{{ echeancier.frais_inscription_du|floatformat:0|intcomma }} GNF</td><td class="text-end">{{ echeancier.frais_inscription_paye|floatformat:0|intcomma }} GNF</td></tr>
+      {% empty %}<tr><td colspan="8" class="text-center text-muted py-5">Aucun élève trouvé.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}<div class="card-footer d-flex justify-content-center gap-2">{% if page_obj.has_previous %}<a class="btn btn-sm btn-outline-primary" href="?{{ request.GET.urlencode }}&page={{ page_obj.previous_page_number }}">Précédent</a>{% endif %}<span class="btn btn-sm btn-light">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="btn btn-sm btn-outline-primary" href="?{{ request.GET.urlencode }}&page={{ page_obj.next_page_number }}">Suivant</a>{% endif %}</div>{% endif %}
+</div>
+{% endblock %}

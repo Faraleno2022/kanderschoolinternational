@@ -60,6 +60,15 @@
             <a href="{% url 'paiements:liste_eleves_soldes' %}" class="btn btn-outline-success">
                 <i class="fas fa-check-circle me-1"></i>Élèves soldés
             </a>
+            <a href="{% url 'paiements:historique_operations' %}" class="btn btn-outline-dark">
+                <i class="fas fa-history me-1"></i>Corrections / suppressions
+            </a>
+            <a href="{% url 'paiements:liste_eleves_inscrits' %}" class="btn btn-outline-primary">
+                <i class="fas fa-user-plus me-1"></i>Inscrits
+            </a>
+            <a href="{% url 'paiements:liste_eleves_reinscrits' %}" class="btn btn-outline-primary">
+                <i class="fas fa-user-check me-1"></i>Réinscrits
+            </a>
             <a href="{% url 'paiements:liste_relances' %}" class="btn btn-outline-warning">
                 <i class="fas fa-bell me-1"></i>Relances
             </a>

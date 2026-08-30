@@ -115,6 +115,15 @@
         </div>
 
         <div class="row">
+          <div class="col-md-8 mb-3">
+            <label class="form-label small-label" for="{{ form.reference_paiement.id_for_label }}">Référence externe / n° reçu</label>
+            {{ form.reference_paiement }}
+            <div class="form-text">Numéro du reçu, référence Mobile Money, chèque ou virement.</div>
+            {% if form.reference_paiement.errors %}<div class="text-danger small">{{ form.reference_paiement.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="row">
           <div class="col-md-4 mb-3">
             <label class="form-label small-label" for="{{ form.date_debut.id_for_label }}">Date de début</label>
             {{ form.date_debut }}

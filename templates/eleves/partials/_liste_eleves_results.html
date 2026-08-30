@@ -26,6 +26,7 @@
                             <th>Classe</th>
                             <th>Responsable</th>
                             <th>Statut</th>
+                            <th>Test d'accueil</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -99,6 +100,22 @@
                                     {% else %}
                                         <span class="badge bg-danger">{{ eleve.get_statut_display }}</span>
                                     {% endif %}
+                                </td>
+                                <td>
+                                    {% if eleve.test_accueil_evalue %}
+                                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>Évalué</span>
+                                        {% if eleve.date_evaluation_accueil %}<div class="small text-muted mt-1">{{ eleve.date_evaluation_accueil|date:'d/m/Y H:i' }}</div>{% endif %}
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Non évalué</span>
+                                    {% endif %}
+                                    <form method="post" action="{% url 'eleves:pointer_test_accueil' eleve.id %}" class="mt-1">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <input type="hidden" name="evalue" value="{% if eleve.test_accueil_evalue %}0{% else %}1{% endif %}">
+                                        <button class="btn btn-sm {% if eleve.test_accueil_evalue %}btn-outline-secondary{% else %}btn-outline-success{% endif %}" type="submit">
+                                            {% if eleve.test_accueil_evalue %}Marquer non évalué{% else %}Marquer évalué{% endif %}
+                                        </button>
+                                    </form>
                                 </td>
                                 <td>
                                     <div class="btn-group btn-group-sm" role="group">

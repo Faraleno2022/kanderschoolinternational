@@ -75,8 +75,24 @@ class ObjetSupprime(models.Model):
 
         if self.restaure or not self.donnees:
             return False
+        restored_objects = []
         for obj in serializers.deserialize('json', json.dumps(self.donnees)):
             obj.save()
+            restored_objects.append(obj.object)
+
+        # Une restauration de paiement doit remettre l'échéancier et les
+        # cartes dans le même état que l'encaissement restauré.
+        for restored in restored_objects:
+            if restored._meta.label_lower == 'paiements.paiement':
+                from paiements.models import EcheancierPaiement
+                from paiements.soldes import recalculer_echeancier
+                echeancier = EcheancierPaiement.objects.filter(
+                    eleve_id=restored.eleve_id,
+                    annee_scolaire=restored.annee_scolaire,
+                    ecole_reference_id=restored.ecole_encaissement_id,
+                ).first()
+                if echeancier:
+                    recalculer_echeancier(echeancier)
         self.restaure = True
         self.restaure_le = timezone.now()
         self.save(update_fields=['restaure', 'restaure_le'])

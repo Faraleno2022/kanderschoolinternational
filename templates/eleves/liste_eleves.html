@@ -17,6 +17,16 @@
         <a href="{% url 'eleves:statistiques_eleves' %}" class="btn btn-outline-info">
             <i class="fas fa-chart-pie me-1"></i>Statistiques
         </a>
+        <div class="btn-group">
+            <a href="{% url 'eleves:liste_eleves' %}?evaluation=evalue" class="btn btn-outline-success"><i class="fas fa-clipboard-check me-1"></i>Évalués</a>
+            <a href="{% url 'eleves:export_tests_accueil_pdf' 'evalues' %}" class="btn btn-outline-danger" title="PDF des évalués"><i class="fas fa-file-pdf"></i></a>
+            <a href="{% url 'eleves:export_tests_accueil_excel' 'evalues' %}" class="btn btn-outline-success" title="Excel des évalués"><i class="fas fa-file-excel"></i></a>
+        </div>
+        <div class="btn-group">
+            <a href="{% url 'eleves:liste_eleves' %}?evaluation=non_evalue" class="btn btn-outline-warning"><i class="fas fa-clipboard-list me-1"></i>Non évalués</a>
+            <a href="{% url 'eleves:export_tests_accueil_pdf' 'non-evalues' %}" class="btn btn-outline-danger" title="PDF des non évalués"><i class="fas fa-file-pdf"></i></a>
+            <a href="{% url 'eleves:export_tests_accueil_excel' 'non-evalues' %}" class="btn btn-outline-success" title="Excel des non évalués"><i class="fas fa-file-excel"></i></a>
+        </div>
     </div>
 {% endblock %}
 
@@ -395,4 +405,3 @@
     });
     </script>
 {% endblock %}
-

@@ -107,9 +107,9 @@ class GrilleTarifaireAdmin(admin.ModelAdmin):
 class EleveAdmin(admin.ModelAdmin):
     list_display = (
         'matricule', 'nom', 'prenom', 'classe', 'statut',
-        'date_inscription',
+        'test_accueil_evalue', 'date_inscription',
     )
-    list_filter = ('statut', 'classe__ecole', 'classe')
+    list_filter = ('statut', 'test_accueil_evalue', 'classe__ecole', 'classe')
     search_fields = ('matricule', 'nom', 'prenom')
     list_select_related = ('classe', 'classe__ecole')
     actions = ('placer_dans_corbeille',)

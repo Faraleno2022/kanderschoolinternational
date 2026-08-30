@@ -16,8 +16,17 @@
         <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-info">
             <i class="fas fa-list me-1"></i>Tous les Paiements
         </a>
+        <a href="{% url 'paiements:historique_operations' %}" class="btn btn-outline-dark">
+            <i class="fas fa-history me-1"></i>Modifications / suppressions
+        </a>
         <a href="{% url 'paiements:liste_eleves_soldes' %}" class="btn btn-outline-success">
             <i class="fas fa-check-circle me-1"></i>Élèves soldés
+        </a>
+        <a href="{% url 'paiements:liste_eleves_inscrits' %}" class="btn btn-outline-primary">
+            <i class="fas fa-user-plus me-1"></i>Élèves inscrits
+        </a>
+        <a href="{% url 'paiements:liste_eleves_reinscrits' %}" class="btn btn-outline-primary">
+            <i class="fas fa-user-check me-1"></i>Élèves réinscrits
         </a>
         <a href="{% url 'paiements:liste_eleves_impayes' %}" class="btn btn-outline-danger">
             <i class="fas fa-exclamation-triangle me-1"></i>Élèves impayés
@@ -183,6 +192,19 @@
         font-size: 1.55rem;
         font-weight: 800;
     }
+    .audit-period-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        border-top: 1px solid #eef1f4;
+    }
+    .audit-period { padding: 14px 16px; border-right: 1px solid #eef1f4; }
+    .audit-period:last-child { border-right: 0; }
+    .audit-line { display: flex; justify-content: space-between; gap: 8px; font-size: .84rem; margin-top: 5px; }
+    @media (max-width: 991px) {
+        .audit-period-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .audit-period:nth-child(2) { border-right: 0; }
+        .audit-period:nth-child(-n+2) { border-bottom: 1px solid #eef1f4; }
+    }
     @supports not (background: color-mix(in srgb, red 10%, white)) {
         .category-icon { background: #f1f4f8; }
     }
@@ -283,6 +305,31 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Impact des corrections, annulations et suppressions -->
+    <div class="category-card danger mb-4">
+        <div class="category-card-header d-flex justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+                <div class="category-icon"><i class="fas fa-file-signature"></i></div>
+                <div>
+                    <h5 class="mb-0">Montants corrigés, annulés et supprimés</h5>
+                    <small class="text-muted">Volume des corrections et impact des retraits enregistrés dans le registre d’audit</small>
+                </div>
+            </div>
+            <a href="{% url 'paiements:historique_operations' %}" class="btn btn-sm btn-outline-danger">Voir la liste et les motifs</a>
+        </div>
+        <div class="audit-period-grid">
+            {% for period, values in stats.operations.items %}
+            <div class="audit-period">
+                <span class="category-period-label">{% if period == 'today' %}Aujourd'hui{% elif period == 'week' %}Cette semaine{% elif period == 'month' %}Ce mois{% else %}Cette année{% endif %}</span>
+                <div class="audit-line"><span>Modifiés (<span data-operation-period="{{ period }}" data-operation-field="nombre_modifications">{{ values.nombre_modifications }}</span>)</span><strong data-operation-period="{{ period }}" data-operation-field="montant_modifie">{{ values.montant_modifie|floatformat:0|intcomma }} GNF</strong></div>
+                <div class="audit-line text-warning"><span>Annulés (<span data-operation-period="{{ period }}" data-operation-field="nombre_annulations">{{ values.nombre_annulations }}</span>)</span><strong data-operation-period="{{ period }}" data-operation-field="montant_annule">{{ values.montant_annule|floatformat:0|intcomma }} GNF</strong></div>
+                <div class="audit-line text-danger"><span>Supprimés (<span data-operation-period="{{ period }}" data-operation-field="nombre_suppressions">{{ values.nombre_suppressions }}</span>)</span><strong data-operation-period="{{ period }}" data-operation-field="montant_supprime">{{ values.montant_supprime|floatformat:0|intcomma }} GNF</strong></div>
+                <div class="audit-line border-top pt-1"><span>Impact net</span><strong data-operation-period="{{ period }}" data-operation-field="impact_net">{{ values.impact_net|floatformat:0|intcomma }} GNF</strong></div>
+            </div>
+            {% endfor %}
         </div>
     </div>
 
@@ -615,6 +662,19 @@ document.addEventListener('DOMContentLoaded', function() {
                             const period = element.dataset.period;
                             if (stats.categories[category]) {
                                 element.textContent = formatNumber(stats.categories[category][period]);
+                            }
+                        });
+                    }
+
+                    if (stats.operations) {
+                        document.querySelectorAll('[data-operation-period][data-operation-field]').forEach(element => {
+                            const period = element.dataset.operationPeriod;
+                            const field = element.dataset.operationField;
+                            if (stats.operations[period]) {
+                                const isCount = field.startsWith('nombre_');
+                                element.textContent = isCount
+                                    ? formatNumber(stats.operations[period][field])
+                                    : `${formatNumber(stats.operations[period][field])} GNF`;
                             }
                         });
                     }

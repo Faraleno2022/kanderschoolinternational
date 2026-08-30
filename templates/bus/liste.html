@@ -11,7 +11,7 @@
 {% block content %}
 <form method="get" class="row g-2 mb-3">
   <div class="col-md-4">
-    <input type="text" name="q" class="form-control" placeholder="Rechercher (élève, zone, arrêt, contact)" value="{{ q }}">
+    <input type="text" name="q" class="form-control" placeholder="Rechercher (élève, référence, zone, arrêt, contact)" value="{{ q }}">
   </div>
   <div class="col-md-2">
     <button class="btn btn-primary w-100" type="submit"><i class="fas fa-search me-1"></i>Rechercher</button>
@@ -188,6 +188,7 @@
       <th>Classe</th>
       <th>Périodicité</th>
       <th>Montant</th>
+      <th>Référence</th>
       <th>Début</th>
       <th>Expiration</th>
       <th>Statut</th>
@@ -203,6 +204,7 @@
       <td>{{ a.eleve.classe.nom }}</td>
       <td>{{ a.get_periodicite_display }}</td>
       <td>{{ a.montant|intcomma }} GNF</td>
+      <td>{{ a.reference_paiement|default:"-" }}</td>
       <td>{{ a.date_debut|date:'d/m/Y' }}</td>
       <td>{{ a.date_expiration|date:'d/m/Y' }}</td>
       <td>{{ a.get_statut_display }}</td>
@@ -217,7 +219,7 @@
       </td>
     </tr>
     {% empty %}
-    <tr><td colspan="10" class="text-center text-muted py-4">Aucun abonnement trouvé</td></tr>
+    <tr><td colspan="11" class="text-center text-muted py-4">Aucun abonnement trouvé</td></tr>
     {% endfor %}
   </tbody>
 </table>

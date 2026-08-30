@@ -160,6 +160,9 @@ def abonnement_public_pdf(request, abonnement_id):
         top -= line_h
         c.drawString(left, top, f"Montant: {abonnement.montant:,.0f} GNF".replace(",", " "))
         top -= line_h
+        if abonnement.reference_paiement:
+            c.drawString(left, top, f"Référence paiement: {abonnement.reference_paiement}")
+            top -= line_h
         c.drawString(left, top, f"Date début: {abonnement.date_debut.strftime('%d/%m/%Y')}")
         top -= line_h
         c.drawString(left, top, f"Date expiration: {abonnement.date_expiration.strftime('%d/%m/%Y')}")

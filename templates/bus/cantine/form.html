@@ -137,6 +137,18 @@
                                     </div>
                                 </div>
                                 <div class="row">
+                                    <div class="col-md-8">
+                                        <div class="mb-3">
+                                            <label class="form-label">Référence externe / n° reçu</label>
+                                            {{ form.reference_paiement }}
+                                            <small class="form-text text-muted">Numéro du reçu, référence Mobile Money, chèque ou virement.</small>
+                                            {% if form.reference_paiement.errors %}
+                                                <div class="text-danger">{{ form.reference_paiement.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
                                     <div class="col-md-6">
                                         <div class="mb-3">
                                             <label class="form-label">Statut *</label>

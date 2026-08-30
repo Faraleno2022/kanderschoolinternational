@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Sum
 from django.contrib.auth.models import User
 from decimal import Decimal
@@ -249,6 +249,28 @@ class Paiement(SyncTrackedModel):
         )
         self.delete()
 
+    def delete(self, *args, **kwargs):
+        """Supprime puis recalcule atomiquement l'échéancier concerné.
+
+        Cette protection couvre aussi les suppressions déclenchées en dehors
+        de la vue principale (administration, script de maintenance, API).
+        """
+        eleve_id = self.eleve_id
+        annee_scolaire = self.annee_scolaire
+        ecole_id = self.ecole_encaissement_id
+        with transaction.atomic():
+            result = super().delete(*args, **kwargs)
+            if eleve_id and annee_scolaire and ecole_id:
+                echeancier = EcheancierPaiement.objects.filter(
+                    eleve_id=eleve_id,
+                    annee_scolaire=annee_scolaire,
+                    ecole_reference_id=ecole_id,
+                ).first()
+                if echeancier:
+                    from .soldes import recalculer_echeancier
+                    recalculer_echeancier(echeancier)
+            return result
+
     @property
     def montant_avec_frais(self):
         return self.montant + self.mode_paiement.frais_supplementaires
@@ -302,6 +324,64 @@ class HistoriqueModificationPaiement(models.Model):
 
     def __str__(self):
         return f"{self.numero_recu} - {self.date_modification:%d/%m/%Y %H:%M}"
+
+    @staticmethod
+    def _montant(data):
+        try:
+            return Decimal(str((data or {}).get('montant') or 0))
+        except (TypeError, ValueError, ArithmeticError):
+            return Decimal('0')
+
+    @property
+    def montant_avant(self):
+        return self._montant(self.donnees_avant)
+
+    @property
+    def montant_apres(self):
+        return self._montant(self.donnees_apres)
+
+    @property
+    def est_suppression(self):
+        return bool(self.donnees_avant) and not bool(self.donnees_apres)
+
+    @property
+    def est_annulation(self):
+        return (
+            not self.est_suppression
+            and (self.donnees_apres or {}).get('statut') == 'ANNULE'
+            and (self.donnees_avant or {}).get('statut') != 'ANNULE'
+        )
+
+    @property
+    def type_operation(self):
+        if self.est_suppression:
+            return 'SUPPRESSION'
+        if self.est_annulation:
+            return 'ANNULATION'
+        return 'MODIFICATION'
+
+    @property
+    def variation_montant(self):
+        if self.est_suppression:
+            return -self.montant_avant
+        if self.est_annulation:
+            return -self.montant_avant
+        return self.montant_apres - self.montant_avant
+
+    @property
+    def impact_financier(self):
+        """Variation réelle des encaissements validés dans les cartes."""
+        before_status = (self.donnees_avant or {}).get('statut')
+        after_status = (self.donnees_apres or {}).get('statut')
+        before_effective = self.montant_avant if before_status == 'VALIDE' else Decimal('0')
+        after_effective = self.montant_apres if after_status == 'VALIDE' else Decimal('0')
+        return after_effective - before_effective
+
+    @property
+    def volume_montant_modifie(self):
+        if self.type_operation != 'MODIFICATION' or 'montant' not in self.champs_modifies:
+            return Decimal('0')
+        return abs(self.variation_montant)
 
 
 class EcheancierPaiement(SyncTrackedModel):

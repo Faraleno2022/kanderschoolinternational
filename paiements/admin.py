@@ -1,6 +1,7 @@
 from django.contrib import admin
+from django.db import transaction
 
-from administration.corbeille import CorbeilleAdminMixin
+from administration.corbeille import CorbeilleAdminMixin, archiver_avant_suppression
 
 from .models import (
     TypePaiement, ModePaiement, Paiement, HistoriqueModificationPaiement,
@@ -35,6 +36,32 @@ class PaiementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
             obj._audit_user = request.user
             obj._audit_reason = "Modification depuis l'administration Django"
         super().save_model(request, obj, form, change)
+        if change:
+            from .soldes import recalculer_echeancier
+            echeancier = EcheancierPaiement.objects.filter(
+                eleve_id=obj.eleve_id,
+                annee_scolaire=obj.annee_scolaire,
+                ecole_reference_id=obj.ecole_encaissement_id,
+            ).first()
+            if echeancier:
+                recalculer_echeancier(echeancier)
+
+    @transaction.atomic
+    def delete_model(self, request, obj):
+        archiver_avant_suppression(obj, request.user)
+        obj.supprimer_definitivement(
+            utilisateur=request.user,
+            motif='Suppression définitive depuis l’administration Django',
+        )
+
+    @transaction.atomic
+    def delete_queryset(self, request, queryset):
+        for obj in queryset.select_related('eleve'):
+            archiver_avant_suppression(obj, request.user)
+            obj.supprimer_definitivement(
+                utilisateur=request.user,
+                motif='Suppression définitive en masse depuis l’administration Django',
+            )
 
 
 @admin.register(HistoriqueModificationPaiement)
