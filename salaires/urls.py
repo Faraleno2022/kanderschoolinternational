@@ -19,6 +19,13 @@ urlpatterns = [
     path('enseignants/<int:enseignant_id>/affectations/ajouter/', views.ajouter_affectation, name='ajouter_affectation'),
     path('enseignants/affectations/<int:affectation_id>/clore/', views.clore_affectation, name='clore_affectation'),
     path('enseignants/affectations/<int:affectation_id>/supprimer/', views.supprimer_affectation, name='supprimer_affectation'),
+
+    # Avances sur salaire
+    path('avances/', views.liste_avances_salaire, name='liste_avances_salaire'),
+    path('avances/ajouter/', views.ajouter_avance_salaire, name='ajouter_avance_salaire'),
+    path('avances/<int:avance_id>/modifier/', views.modifier_avance_salaire, name='modifier_avance_salaire'),
+    path('avances/<int:avance_id>/approuver/', views.approuver_avance_salaire, name='approuver_avance_salaire'),
+    path('avances/<int:avance_id>/annuler/', views.annuler_avance_salaire, name='annuler_avance_salaire'),
     
     # États de salaire
     path('etats/', views.etats_salaire, name='etats_salaire'),

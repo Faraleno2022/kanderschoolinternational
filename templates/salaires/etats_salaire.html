@@ -172,6 +172,9 @@
             <p class="text-muted mb-0">Gestion et suivi des salaires des enseignants</p>
         </div>
         <div class="d-flex align-items-center gap-2">
+            <a href="{% url 'salaires:liste_avances_salaire' %}" class="btn btn-warning">
+                <i class="fas fa-hand-holding-usd"></i> Avances
+            </a>
             <a href="{% url 'salaires:gestion_periodes' %}" class="btn btn-outline-secondary me-2">
                 <i class="fas fa-calendar-alt"></i> Périodes
             </a>
@@ -352,6 +355,12 @@
                     <div class="breakdown-item">
                         <span>Retenues:</span>
                         <span class="text-danger">-{{ etat.deductions|intcomma }} GNF</span>
+                    </div>
+                    {% endif %}
+                    {% if etat.montant_avances and etat.montant_avances > 0 %}
+                    <div class="breakdown-item">
+                        <span>Avances sur salaire:</span>
+                        <span class="text-warning">-{{ etat.montant_avances|intcomma }} GNF</span>
                     </div>
                     {% endif %}
                     <div class="breakdown-item">

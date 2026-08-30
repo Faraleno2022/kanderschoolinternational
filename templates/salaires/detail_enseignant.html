@@ -347,6 +347,62 @@
         </div>
     </div>
 
+    <!-- Avances sur salaire -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="teacher-info-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-hand-holding-usd me-2 text-warning"></i>
+                        Avances sur salaire
+                    </h5>
+                    <span class="badge bg-warning text-dark">
+                        Total : {{ stats.total_avances|floatformat:0|intcomma }} GNF
+                    </span>
+                </div>
+
+                {% if avances_salaire %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Période</th>
+                                <th>Motif</th>
+                                <th>Montant</th>
+                                <th>Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for avance in avances_salaire %}
+                            <tr>
+                                <td>{{ avance.date_avance|date:"d/m/Y" }}</td>
+                                <td>{{ avance.periode.nom_periode }}</td>
+                                <td>{{ avance.motif }}</td>
+                                <td class="fw-bold">{{ avance.montant|floatformat:0|intcomma }} GNF</td>
+                                <td>
+                                    {% if avance.statut == 'APPROUVEE' %}
+                                    <span class="badge bg-success">{{ avance.get_statut_display }}</span>
+                                    {% elif avance.statut == 'DEDUITE' %}
+                                    <span class="badge bg-primary">{{ avance.get_statut_display }}</span>
+                                    {% elif avance.statut == 'ANNULEE' %}
+                                    <span class="badge bg-danger">{{ avance.get_statut_display }}</span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark">{{ avance.get_statut_display }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Aucune avance enregistrée pour cet employé.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
     <!-- Actions -->
     <div class="row">
         <div class="col-12">
@@ -363,6 +419,10 @@
                     
                     <a href="{% url 'salaires:etats_salaire' %}?enseignant={{ enseignant.id }}" class="btn btn-info btn-action">
                         <i class="fas fa-money-bill-wave me-2"></i>Voir tous les salaires
+                    </a>
+
+                    <a href="{% url 'salaires:ajouter_avance_salaire' %}?enseignant={{ enseignant.id }}" class="btn btn-success btn-action">
+                        <i class="fas fa-hand-holding-usd me-2"></i>Ajouter une avance
                     </a>
                     
                     <a href="{% url 'salaires:modifier_enseignant' enseignant.id %}" class="btn btn-warning btn-action">

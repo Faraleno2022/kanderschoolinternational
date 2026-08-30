@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre }}{% endblock %}
+
+{% block content %}
+<div class="container py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1"><i class="fas fa-hand-holding-usd text-warning me-2"></i>{{ titre }}</h1>
+            <p class="text-muted mb-0">L'avance approuvée sera déduite automatiquement du salaire net de la période.</p>
+        </div>
+        <a href="{% url 'salaires:liste_avances_salaire' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Retour
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.enseignant.id_for_label }}">Employé / enseignant *</label>
+                        {{ form.enseignant }}
+                        {% for error in form.enseignant.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.periode.id_for_label }}">Période de déduction *</label>
+                        {{ form.periode }}
+                        {% for error in form.periode.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="{{ form.montant.id_for_label }}">Montant de l'avance *</label>
+                        <div class="input-group">{{ form.montant }}<span class="input-group-text">GNF</span></div>
+                        {% for error in form.montant.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="{{ form.date_avance.id_for_label }}">Date de versement *</label>
+                        {{ form.date_avance }}
+                        {% for error in form.date_avance.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="{{ form.mode_paiement.id_for_label }}">Mode de versement *</label>
+                        {{ form.mode_paiement }}
+                        {% for error in form.mode_paiement.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.reference_paiement.id_for_label }}">Référence / n° reçu</label>
+                        {{ form.reference_paiement }}
+                        {% for error in form.reference_paiement.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.motif.id_for_label }}">Motif *</label>
+                        {{ form.motif }}
+                        {% for error in form.motif.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="{{ form.observations.id_for_label }}">Observations</label>
+                        {{ form.observations }}
+                        {% for error in form.observations.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check border rounded p-3 ps-5 bg-light">
+                            {{ form.approuver_immediatement }}
+                            <label class="form-check-label fw-semibold" for="{{ form.approuver_immediatement.id_for_label }}">
+                                {{ form.approuver_immediatement.label }}
+                            </label>
+                            <div class="form-text">{{ form.approuver_immediatement.help_text }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <a href="{% url 'salaires:liste_avances_salaire' %}" class="btn btn-light">Annuler</a>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-save me-1"></i>Enregistrer l'avance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

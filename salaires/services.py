@@ -13,6 +13,7 @@ from django.db import transaction
 from django.db.models import Q, Sum
 
 from .models import (
+    AvanceSalaire,
     DetailHeuresClasse,
     Enseignant,
     EtatSalaire,
@@ -32,6 +33,58 @@ def arrondir_heures(valeur):
 
 def arrondir_montant(valeur):
     return Decimal(valeur or 0).quantize(MONTANT, rounding=ROUND_HALF_UP)
+
+
+def total_avances_a_deduire(enseignant, periode, *, exclure_avance=None):
+    """Total des avances approuvées ou déjà déduites pour une paie."""
+    avances = AvanceSalaire.objects.filter(
+        enseignant=enseignant,
+        periode=periode,
+        statut__in=(AvanceSalaire.Statut.APPROUVEE, AvanceSalaire.Statut.DEDUITE),
+    )
+    if exclure_avance and exclure_avance.pk:
+        avances = avances.exclude(pk=exclure_avance.pk)
+    return arrondir_montant(avances.aggregate(total=Sum('montant'))['total'])
+
+
+def plafond_avance_disponible(enseignant, periode, *, exclure_avance=None):
+    """Montant encore disponible sans rendre le salaire net négatif."""
+    etat = EtatSalaire.objects.filter(
+        enseignant=enseignant,
+        periode=periode,
+    ).first()
+    if etat:
+        brut_disponible = (
+            (etat.salaire_base or Decimal('0'))
+            + (etat.primes or Decimal('0'))
+            - (etat.deductions or Decimal('0'))
+        )
+    else:
+        brut_disponible = enseignant.calculer_salaire_mensuel()
+    deja_avance = total_avances_a_deduire(
+        enseignant,
+        periode,
+        exclure_avance=exclure_avance,
+    )
+    return max(Decimal('0'), arrondir_montant(brut_disponible - deja_avance))
+
+
+@transaction.atomic
+def synchroniser_avances_etat(enseignant, periode):
+    """Répercute les avances sur un état ouvert sans toucher à une paie validée."""
+    etat = (
+        EtatSalaire.objects.select_for_update()
+        .filter(enseignant=enseignant, periode=periode)
+        .first()
+    )
+    if etat is None or etat.valide or periode.cloturee:
+        return etat, False
+    montant = total_avances_a_deduire(enseignant, periode)
+    if etat.montant_avances == montant:
+        return etat, False
+    etat.montant_avances = montant
+    etat.save(update_fields={'montant_avances', 'salaire_net'})
+    return etat, True
 
 
 def bornes_periode(periode):
@@ -175,6 +228,7 @@ def calculer_etat_salaire(
         return etat, False
 
     etat.details_heures.all().delete()
+    etat.montant_avances = total_avances_a_deduire(enseignant, periode)
 
     if enseignant.est_taux_horaire:
         source = source_heures

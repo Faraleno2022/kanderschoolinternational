@@ -2,8 +2,10 @@ from django import forms
 from django.core.exceptions import ValidationError
 from .models import (
     AffectationClasse,
+    AvanceSalaire,
     Enseignant,
     EtatSalaire,
+    PeriodeSalaire,
     PresenceEnseignant,
     StatutEnseignant,
     TypeEnseignant,
@@ -358,11 +360,108 @@ class EtatSalaireAjustementForm(forms.ModelForm):
         primes = cleaned_data.get('primes') or 0
         deductions = cleaned_data.get('deductions') or 0
         salaire_base = self.instance.salaire_base or 0
+        montant_avances = self.instance.montant_avances or 0
 
-        if deductions > salaire_base + primes:
+        if deductions + montant_avances > salaire_base + primes:
             self.add_error(
                 'deductions',
-                'Les retenues ne peuvent pas dépasser le salaire de base et les primes.',
+                'Le total des retenues et avances ne peut pas dépasser le salaire brut.',
             )
 
+        return cleaned_data
+
+
+class AvanceSalaireForm(forms.ModelForm):
+    """Création et modification sécurisées d'une avance sur salaire."""
+
+    approuver_immediatement = forms.BooleanField(
+        required=False,
+        initial=True,
+        label='Approuver immédiatement cette avance',
+        help_text='Si décoché, la demande restera en attente de validation.',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+    )
+
+    class Meta:
+        model = AvanceSalaire
+        fields = [
+            'enseignant', 'periode', 'montant', 'date_avance',
+            'mode_paiement', 'reference_paiement', 'motif', 'observations',
+        ]
+        widgets = {
+            'enseignant': forms.Select(attrs={'class': 'form-select'}),
+            'periode': forms.Select(attrs={'class': 'form-select'}),
+            'montant': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '1', 'step': '1',
+                'placeholder': 'Montant en GNF',
+            }),
+            'date_avance': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'mode_paiement': forms.Select(attrs={'class': 'form-select'}),
+            'reference_paiement': forms.TextInput(attrs={
+                'class': 'form-control', 'placeholder': 'N° reçu ou référence externe',
+            }),
+            'motif': forms.TextInput(attrs={
+                'class': 'form-control', 'placeholder': "Motif de l'avance",
+            }),
+            'observations': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+        enseignants = Enseignant.objects.select_related('ecole').filter(
+            statut=StatutEnseignant.ACTIF
+        ).order_by('nom', 'prenoms')
+        periodes = PeriodeSalaire.objects.select_related('ecole').filter(
+            cloturee=False
+        ).order_by('-annee', '-mois')
+        if user is not None:
+            from utilisateurs.utils import filter_by_user_school
+            enseignants = filter_by_user_school(enseignants, user, 'ecole')
+            periodes = filter_by_user_school(periodes, user, 'ecole')
+        self.fields['enseignant'].queryset = enseignants
+        self.fields['periode'].queryset = periodes
+        if not self.instance.pk:
+            from django.utils import timezone
+            self.fields['date_avance'].initial = timezone.localdate()
+        elif self.instance.statut in {
+            AvanceSalaire.Statut.APPROUVEE,
+            AvanceSalaire.Statut.DEDUITE,
+        }:
+            self.fields['approuver_immediatement'].initial = True
+
+    def clean(self):
+        cleaned_data = super().clean()
+        enseignant = cleaned_data.get('enseignant')
+        periode = cleaned_data.get('periode')
+        montant = cleaned_data.get('montant') or 0
+        if not enseignant or not periode:
+            return cleaned_data
+        if enseignant.ecole_id != periode.ecole_id:
+            self.add_error('periode', "La période doit appartenir à l'école de l'employé.")
+            return cleaned_data
+        if periode.cloturee:
+            self.add_error('periode', 'Une avance ne peut pas être affectée à une période clôturée.')
+            return cleaned_data
+        etat = EtatSalaire.objects.filter(enseignant=enseignant, periode=periode).first()
+        if etat and etat.valide:
+            self.add_error('periode', 'La paie de cette période est déjà validée.')
+            return cleaned_data
+
+        sera_approuvee = (
+            cleaned_data.get('approuver_immediatement')
+            or self.instance.statut == AvanceSalaire.Statut.APPROUVEE
+        )
+        if sera_approuvee:
+            from .services import plafond_avance_disponible
+            plafond = plafond_avance_disponible(
+                enseignant,
+                periode,
+                exclure_avance=self.instance,
+            )
+            if montant > plafond:
+                self.add_error(
+                    'montant',
+                    f"Le montant dépasse le salaire disponible ({plafond:,.0f} GNF).",
+                )
         return cleaned_data

@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Avances sur salaire{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h1 class="h3 mb-1"><i class="fas fa-hand-holding-usd text-warning me-2"></i>Avances sur salaire</h1>
+            <p class="text-muted mb-0">Versements anticipés et déductions automatiques sur la paie.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'salaires:etats_salaire' %}" class="btn btn-outline-primary">États de salaire</a>
+            <a href="{% url 'salaires:ajouter_avance_salaire' %}" class="btn btn-warning">
+                <i class="fas fa-plus me-1"></i>Nouvelle avance
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted">Avances affichées</div><div class="h3 mb-0">{{ totaux.nombre }}</div></div></div></div>
+        <div class="col-6 col-xl-3"><div class="card h-100 border-warning"><div class="card-body"><div class="text-muted">En attente</div><div class="h3 text-warning mb-0">{{ totaux.en_attente }}</div></div></div></div>
+        <div class="col-6 col-xl-3"><div class="card h-100 border-primary"><div class="card-body"><div class="text-muted">À déduire</div><div class="h4 text-primary mb-0">{{ totaux.a_deduire|floatformat:0|intcomma }} GNF</div></div></div></div>
+        <div class="col-6 col-xl-3"><div class="card h-100 border-success"><div class="card-body"><div class="text-muted">Déjà déduit</div><div class="h4 text-success mb-0">{{ totaux.deduit|floatformat:0|intcomma }} GNF</div></div></div></div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">Recherche</label>
+                    <input name="search" value="{{ search }}" class="form-control" placeholder="Nom, référence ou motif">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Période</label>
+                    <select name="periode" class="form-select">
+                        <option value="">Toutes les périodes</option>
+                        {% for periode in periodes %}
+                        <option value="{{ periode.id }}" {% if periode_selectionnee == periode.id|stringformat:'s' %}selected{% endif %}>{{ periode }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Statut</label>
+                    <select name="statut" class="form-select">
+                        <option value="">Tous les statuts</option>
+                        {% for code, label in statuts %}
+                        <option value="{{ code }}" {% if statut_selectionne == code %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button class="btn btn-primary flex-grow-1"><i class="fas fa-filter"></i></button>
+                    <a href="{% url 'salaires:liste_avances_salaire' %}" class="btn btn-outline-secondary"><i class="fas fa-times"></i></a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th><th>Employé</th><th>Période</th><th>Montant</th>
+                        <th>Versement</th><th>Motif</th><th>Statut</th><th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for avance in page_obj %}
+                    <tr>
+                        <td>{{ avance.date_avance|date:'d/m/Y' }}</td>
+                        <td><strong>{{ avance.enseignant.nom_complet }}</strong><br><small class="text-muted">{{ avance.enseignant.ecole.nom }}</small></td>
+                        <td>{{ avance.periode.nom_periode }}</td>
+                        <td class="fw-bold">{{ avance.montant|floatformat:0|intcomma }} GNF</td>
+                        <td>{{ avance.get_mode_paiement_display }}<br><small class="text-muted">{{ avance.reference_paiement|default:'-' }}</small></td>
+                        <td>{{ avance.motif }}{% if avance.motif_annulation %}<br><small class="text-danger">Annulation : {{ avance.motif_annulation }}</small>{% endif %}</td>
+                        <td>
+                            {% if avance.statut == 'EN_ATTENTE' %}<span class="badge bg-warning text-dark">En attente</span>
+                            {% elif avance.statut == 'APPROUVEE' %}<span class="badge bg-primary">Approuvée</span>
+                            {% elif avance.statut == 'DEDUITE' %}<span class="badge bg-success">Déduite</span>
+                            {% else %}<span class="badge bg-secondary">Annulée</span>{% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if avance.statut == 'EN_ATTENTE' or avance.statut == 'APPROUVEE' %}
+                            <a href="{% url 'salaires:modifier_avance_salaire' avance.id %}" class="btn btn-sm btn-outline-primary" title="Modifier"><i class="fas fa-edit"></i></a>
+                            {% endif %}
+                            {% if avance.statut == 'EN_ATTENTE' %}
+                            <form method="post" action="{% url 'salaires:approuver_avance_salaire' avance.id %}" class="d-inline">
+                                {% csrf_token %}<button class="btn btn-sm btn-success" title="Approuver"><i class="fas fa-check"></i></button>
+                            </form>
+                            {% endif %}
+                            {% if avance.statut == 'EN_ATTENTE' or avance.statut == 'APPROUVEE' %}
+                            <details class="d-inline-block text-start ms-1">
+                                <summary class="btn btn-sm btn-outline-danger" title="Annuler"><i class="fas fa-ban"></i></summary>
+                                <form method="post" action="{% url 'salaires:annuler_avance_salaire' avance.id %}" class="border rounded bg-white shadow p-2 mt-1" style="position:absolute;right:1rem;z-index:5;min-width:260px;">
+                                    {% csrf_token %}
+                                    <label class="form-label small">Motif obligatoire</label>
+                                    <input name="motif_annulation" class="form-control form-control-sm mb-2" required maxlength="255">
+                                    <button class="btn btn-sm btn-danger w-100">Confirmer l'annulation</button>
+                                </form>
+                            </details>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8" class="text-center py-5 text-muted">Aucune avance sur salaire trouvée.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

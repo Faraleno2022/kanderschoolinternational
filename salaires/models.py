@@ -325,6 +325,118 @@ class PeriodeSalaire(SyncTrackedModel):
         return f"{mois_noms[self.mois]} {self.annee}"
 
 
+class AvanceSalaire(SyncTrackedModel):
+    """Somme versée avant la paie et récupérée sur une période précise."""
+
+    class Statut(models.TextChoices):
+        EN_ATTENTE = 'EN_ATTENTE', 'En attente'
+        APPROUVEE = 'APPROUVEE', 'Approuvée'
+        DEDUITE = 'DEDUITE', 'Déduite du salaire'
+        ANNULEE = 'ANNULEE', 'Annulée'
+
+    class ModePaiement(models.TextChoices):
+        ESPECES = 'ESPECES', 'Espèces'
+        ORANGE_MONEY = 'ORANGE_MONEY', 'Orange Money'
+        MOBILE_MONEY = 'MOBILE_MONEY', 'Mobile Money'
+        VIREMENT = 'VIREMENT', 'Virement bancaire'
+        CHEQUE = 'CHEQUE', 'Chèque'
+        AUTRE = 'AUTRE', 'Autre'
+
+    enseignant = models.ForeignKey(
+        Enseignant,
+        on_delete=models.PROTECT,
+        related_name='avances_salaire',
+        verbose_name='Employé / enseignant',
+    )
+    periode = models.ForeignKey(
+        PeriodeSalaire,
+        on_delete=models.PROTECT,
+        related_name='avances_salaire',
+        verbose_name='Période de déduction',
+    )
+    montant = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('1'))],
+        verbose_name='Montant de l’avance',
+    )
+    date_avance = models.DateField(verbose_name='Date de versement')
+    mode_paiement = models.CharField(
+        max_length=20,
+        choices=ModePaiement.choices,
+        default=ModePaiement.ESPECES,
+        verbose_name='Mode de versement',
+    )
+    reference_paiement = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Référence / n° reçu',
+    )
+    motif = models.CharField(max_length=255, verbose_name='Motif de l’avance')
+    statut = models.CharField(
+        max_length=20,
+        choices=Statut.choices,
+        default=Statut.EN_ATTENTE,
+        db_index=True,
+    )
+    observations = models.TextField(blank=True)
+    motif_annulation = models.CharField(max_length=255, blank=True)
+
+    cree_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='avances_salaire_creees',
+    )
+    approuvee_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='avances_salaire_approuvees',
+    )
+    annulee_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='avances_salaire_annulees',
+    )
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+    date_approbation = models.DateTimeField(null=True, blank=True)
+    date_deduction = models.DateTimeField(null=True, blank=True)
+    date_annulation = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Avance sur salaire'
+        verbose_name_plural = 'Avances sur salaire'
+        ordering = ('-date_avance', '-id')
+        indexes = [
+            models.Index(fields=('enseignant', 'periode')),
+            models.Index(fields=('statut', 'date_avance')),
+        ]
+
+    def __str__(self):
+        return f'{self.enseignant.nom_complet} - {self.montant:,.0f} GNF'
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if (
+            self.enseignant_id
+            and self.periode_id
+            and self.enseignant.ecole_id != self.periode.ecole_id
+        ):
+            errors['periode'] = (
+                "La période et l'employé doivent appartenir à la même école."
+            )
+        if self.statut == self.Statut.ANNULEE and not self.motif_annulation:
+            errors['motif_annulation'] = "Le motif d'annulation est obligatoire."
+        if errors:
+            raise ValidationError(errors)
+
+
 class EtatSalaire(SyncTrackedModel):
     """État de salaire d'un enseignant pour une période donnée"""
     
@@ -388,6 +500,14 @@ class EtatSalaire(SyncTrackedModel):
         verbose_name="Déductions",
         validators=[MinValueValidator(Decimal('0'))],
     )
+    montant_avances = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0'),
+        verbose_name='Avances sur salaire',
+        validators=[MinValueValidator(Decimal('0'))],
+        help_text='Total des avances approuvées à déduire pour cette période.',
+    )
     salaire_net = models.DecimalField(
         max_digits=12, 
         decimal_places=2,
@@ -446,11 +566,12 @@ class EtatSalaire(SyncTrackedModel):
         salaire_base = self.salaire_base or Decimal('0')
         primes = self.primes or Decimal('0')
         deductions = self.deductions or Decimal('0')
+        montant_avances = self.montant_avances or Decimal('0')
         errors = {}
 
-        if deductions > salaire_base + primes:
+        if deductions + montant_avances > salaire_base + primes:
             errors['deductions'] = (
-                'Les retenues ne peuvent pas dépasser le salaire de base et les primes.'
+                'Le total des retenues et avances ne peut pas dépasser le salaire brut.'
             )
 
         if (
@@ -470,13 +591,20 @@ class EtatSalaire(SyncTrackedModel):
         salaire_base = self.salaire_base or Decimal('0')
         primes = self.primes or Decimal('0')
         deductions = self.deductions or Decimal('0')
-        self.salaire_net = (salaire_base + primes - deductions).quantize(
+        montant_avances = self.montant_avances or Decimal('0')
+        self.salaire_net = (
+            salaire_base + primes - deductions - montant_avances
+        ).quantize(
             Decimal('0.01'), rounding=ROUND_HALF_UP
         )
         self.full_clean()
         if kwargs.get('update_fields') is not None:
             kwargs['update_fields'] = set(kwargs['update_fields']) | {'salaire_net'}
         super().save(*args, **kwargs)
+
+    @property
+    def salaire_brut(self):
+        return (self.salaire_base or Decimal('0')) + (self.primes or Decimal('0'))
     
     @property
     def peut_etre_valide(self):
