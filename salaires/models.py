@@ -413,8 +413,14 @@ class AvanceSalaire(SyncTrackedModel):
         verbose_name_plural = 'Avances sur salaire'
         ordering = ('-date_avance', '-id')
         indexes = [
-            models.Index(fields=('enseignant', 'periode')),
-            models.Index(fields=('statut', 'date_avance')),
+            models.Index(
+                fields=('enseignant', 'periode'),
+                name='sal_av_ens_per_idx',
+            ),
+            models.Index(
+                fields=('statut', 'date_avance'),
+                name='sal_av_stat_date_idx',
+            ),
         ]
 
     def __str__(self):
