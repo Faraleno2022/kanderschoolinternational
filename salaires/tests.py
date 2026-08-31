@@ -325,7 +325,7 @@ class MoteurPaieTests(TestCase):
                 raise RuntimeError('erreur simulée')
             return calculer_etat_salaire_reel(enseignant, periode, utilisateur)
 
-        with patch('salaires.views.calculer_etat_salaire', side_effect=calcul_avec_erreur):
+        with patch('salaires.services.calculer_etat_salaire', side_effect=calcul_avec_erreur):
             self.calculer()
 
         self.assertEqual(EtatSalaire.objects.count(), 0)
@@ -429,6 +429,89 @@ class MoteurPaieTests(TestCase):
         presence.statut = 'ABSENT'
         with self.assertRaises(ValidationError):
             presence.save()
+
+    def test_creation_periode_regroupe_automatiquement_les_enseignants_actifs(self):
+        fixe = self.creer_fixe(nom='Fixe regroupé', salaire='1000000')
+        horaire = self.creer_secondaire(nom='Horaire regroupé', taux='10000')
+        inactif = self.creer_fixe(nom='En congé')
+        inactif.statut = 'CONGE'
+        inactif.save(update_fields=['statut'])
+        self.creer_fixe(
+            nom='Embauché plus tard',
+            embauche=date(2026, 9, 1),
+        )
+
+        response = self.client.post(
+            reverse('salaires:creer_periode'),
+            {
+                'mois': '8',
+                'annee': '2026',
+                'ecole': str(self.ecole.id),
+                'nombre_semaines': '4.33',
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        periode = PeriodeSalaire.objects.get(
+            ecole=self.ecole,
+            mois=8,
+            annee=2026,
+        )
+        etats = EtatSalaire.objects.filter(periode=periode)
+        self.assertEqual(set(etats.values_list('enseignant_id', flat=True)), {fixe.id, horaire.id})
+        self.assertEqual(etats.get(enseignant=fixe).salaire_base, Decimal('1000000.00'))
+        etat_horaire = etats.get(enseignant=horaire)
+        self.assertEqual(etat_horaire.total_heures, Decimal('0.00'))
+        self.assertEqual(etat_horaire.salaire_base, Decimal('0.00'))
+        self.assertEqual(etat_horaire.source_heures, SourceHeuresSalaire.POINTAGE)
+        self.assertContains(response, '2 état(s) de salaire regroupé(s)')
+
+    def test_cloture_regroupe_les_enseignants_dans_la_periode_suivante(self):
+        enseignant = self.creer_fixe(nom='Période suivante')
+
+        response = self.client.post(
+            reverse('salaires:cloturer_periode', args=[self.periode.pk]),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.periode.refresh_from_db()
+        self.assertTrue(self.periode.cloturee)
+        periode_suivante = PeriodeSalaire.objects.get(
+            ecole=self.ecole,
+            mois=8,
+            annee=2026,
+        )
+        self.assertTrue(EtatSalaire.objects.filter(
+            enseignant=enseignant,
+            periode=periode_suivante,
+        ).exists())
+        self.assertContains(response, '1 enseignant(s) regroupé(s)')
+
+    def test_echec_regroupement_annule_aussi_la_creation_de_periode(self):
+        self.creer_fixe(nom='Erreur atomique')
+
+        with patch(
+            'salaires.views.calculer_etats_salaire_periode',
+            side_effect=RuntimeError('calcul interrompu'),
+        ):
+            response = self.client.post(
+                reverse('salaires:creer_periode'),
+                {
+                    'mois': '8',
+                    'annee': '2026',
+                    'ecole': str(self.ecole.id),
+                    'nombre_semaines': '4.33',
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(PeriodeSalaire.objects.filter(
+            ecole=self.ecole,
+            mois=8,
+            annee=2026,
+        ).exists())
 
     def test_nombre_semaines_invalide_est_refuse(self):
         response = self.client.post(

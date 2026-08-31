@@ -23,6 +23,9 @@
             <a href="{% url 'paiements:generer_recu_pdf' paiement.id %}" class="btn btn-primary">
                 <i class="fas fa-file-pdf me-1"></i>Télécharger le reçu
             </a>
+            <a href="{% url 'paiements:generer_carnet_paiement_pdf' paiement.id %}" class="btn btn-outline-primary">
+                <i class="fas fa-book me-1"></i>Carnet de paiement
+            </a>
             <button type="button" class="btn btn-success" onclick="envoyerRecuWhatsApp()" data-paiement-id="{{ paiement.id }}">
                 <i class="fab fa-whatsapp me-1"></i>Envoyer par WhatsApp
             </button>
