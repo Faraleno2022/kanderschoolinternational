@@ -283,6 +283,45 @@ def calculer_etat_salaire(
     return etat, True
 
 
+@transaction.atomic
+def calculer_etats_salaire_periode(periode, utilisateur):
+    """Regroupe et calcule les états de tous les enseignants éligibles.
+
+    La fonction est idempotente : elle crée les états manquants et recalcule
+    seulement les états encore ouverts. Un état validé reste intact.
+    """
+    periode = PeriodeSalaire.objects.select_for_update().get(pk=periode.pk)
+    if periode.cloturee:
+        raise ValueError("Impossible de calculer une période clôturée.")
+
+    statistiques = {
+        'enseignants': 0,
+        'crees': 0,
+        'recalcules': 0,
+        'ignores': 0,
+        'modifies': 0,
+    }
+    for enseignant in enseignants_eligibles(periode).select_for_update():
+        statistiques['enseignants'] += 1
+        existait = EtatSalaire.objects.filter(
+            enseignant=enseignant,
+            periode=periode,
+        ).exists()
+        _etat, modifie = calculer_etat_salaire(
+            enseignant,
+            periode,
+            utilisateur,
+        )
+        if not modifie:
+            statistiques['ignores'] += 1
+            continue
+        statistiques['modifies'] += 1
+        cle = 'recalcules' if existait else 'crees'
+        statistiques[cle] += 1
+
+    return statistiques
+
+
 def recalculer_etat_salaire_pour_date(enseignant, jour, utilisateur):
     """Synchronise immédiatement un pointage avec la paie du mois ouvert.
 

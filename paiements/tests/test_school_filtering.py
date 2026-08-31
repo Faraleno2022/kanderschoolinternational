@@ -248,6 +248,14 @@ class SchoolFilteringTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 404)
 
+    def test_generer_carnet_paiement_pdf_other_school_is_404(self):
+        self.login1()
+        url = reverse(
+            "paiements:generer_carnet_paiement_pdf",
+            kwargs={"paiement_id": self.paiement2.id},
+        )
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 404)
     def test_echeancier_eleve_other_school_is_404(self):
         self.login1()
         url = reverse("paiements:echeancier_eleve", kwargs={"eleve_id": self.eleve2.id})

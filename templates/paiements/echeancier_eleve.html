@@ -507,6 +507,10 @@
                                        class="btn btn-outline-success" title="Télécharger reçu">
                                         <i class="fas fa-download"></i>
                                     </a>
+                                    <a href="{% url 'paiements:generer_carnet_paiement_pdf' paiement.id %}"
+                                       class="btn btn-outline-primary" title="Télécharger le carnet de paiement">
+                                        <i class="fas fa-book"></i>
+                                    </a>
                                     {% endif %}
                                 </div>
                             </div>

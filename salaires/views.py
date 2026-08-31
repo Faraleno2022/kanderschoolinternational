@@ -36,6 +36,7 @@ from .forms import (
 from .services import (
     arrondir_montant,
     calculer_etat_salaire,
+    calculer_etats_salaire_periode,
     enseignants_eligibles,
     heures_reellement_travaillees,
     plafond_avance_disponible,
@@ -1156,16 +1157,16 @@ def calculer_salaires(request, periode_id):
                 )
                 return redirect('salaires:etats_salaire')
 
-            calculs_effectues = 0
-            for enseignant in enseignants_eligibles(periode).select_for_update():
-                _, modifie = calculer_etat_salaire(
-                    enseignant, periode, request.user
-                )
-                calculs_effectues += int(modifie)
+            regroupement = calculer_etats_salaire_periode(
+                periode,
+                request.user,
+            )
 
         messages.success(
             request,
-            f"Calcul des salaires terminé. {calculs_effectues} état(s) calculé(s).",
+            "Calcul des salaires terminé. "
+            f"{regroupement['modifies']} état(s) calculé(s) pour "
+            f"{regroupement['enseignants']} enseignant(s).",
         )
     except Exception as exc:
         messages.error(
@@ -2006,32 +2007,38 @@ def creer_periode(request):
                 messages.error(request, "Vous n'avez pas le droit de créer une période pour cette école.")
                 return redirect('salaires:gestion_periodes')
             
-            # Vérifier si la période existe déjà
-            periode_existante = PeriodeSalaire.objects.filter(
-                mois=mois,
-                annee=annee,
-                ecole=ecole
-            ).exists()
-            
-            if periode_existante:
-                messages.error(
-                    request, 
-                    f"Une période pour {mois}/{annee} existe déjà pour {ecole.nom}."
+            # La période et tous ses états sont créés dans la même transaction :
+            # une erreur de calcul ne peut pas laisser une période incomplète.
+            with transaction.atomic():
+                periode_existante = PeriodeSalaire.objects.select_for_update().filter(
+                    mois=mois,
+                    annee=annee,
+                    ecole=ecole,
+                ).exists()
+                if periode_existante:
+                    messages.error(
+                        request,
+                        f"Une période pour {mois}/{annee} existe déjà pour {ecole.nom}."
+                    )
+                    return redirect('salaires:gestion_periodes')
+
+                nouvelle_periode = PeriodeSalaire.objects.create(
+                    mois=mois,
+                    annee=annee,
+                    ecole=ecole,
+                    nombre_semaines=nombre_semaines,
+                    cree_par=request.user,
                 )
-                return redirect('salaires:gestion_periodes')
-            
-            # Créer la nouvelle période
-            nouvelle_periode = PeriodeSalaire.objects.create(
-                mois=mois,
-                annee=annee,
-                ecole=ecole,
-                nombre_semaines=nombre_semaines,
-                cree_par=request.user
-            )
-            
+                regroupement = calculer_etats_salaire_periode(
+                    nouvelle_periode,
+                    request.user,
+                )
+
             messages.success(
-                request, 
-                f"Période {nouvelle_periode} créée avec succès !"
+                request,
+                f"Période {nouvelle_periode} créée avec succès. "
+                f"{regroupement['crees']} état(s) de salaire regroupé(s) "
+                f"pour {regroupement['enseignants']} enseignant(s)."
             )
             
         except (ValueError, TypeError, InvalidOperation):
@@ -2043,71 +2050,81 @@ def creer_periode(request):
 
 
 @login_required
+@require_POST
 def cloturer_periode(request, periode_id):
-    """Clôture d'une période de salaire et crée automatiquement la période suivante"""
-    if request.method == 'POST':
-        try:
-            periode = get_object_or_404(PeriodeSalaire, id=periode_id)
-            
-            # Vérifier que l'utilisateur a le droit de clôturer cette période
+    """Clôture une période et initialise atomiquement la période suivante."""
+    try:
+        with transaction.atomic():
+            periode = get_object_or_404(
+                PeriodeSalaire.objects.select_for_update().select_related('ecole'),
+                id=periode_id,
+            )
+
             ecole_user = _ecole_utilisateur(request)
-            if not user_is_admin(request.user) and ecole_user is not None and periode.ecole_id != ecole_user.id:
-                messages.error(request, "Vous n'avez pas le droit de clôturer cette période.")
+            if (
+                not user_is_admin(request.user)
+                and ecole_user is not None
+                and periode.ecole_id != ecole_user.id
+            ):
+                messages.error(
+                    request,
+                    "Vous n'avez pas le droit de clôturer cette période.",
+                )
                 return redirect('salaires:gestion_periodes')
-            
-            # Vérifier que la période n'est pas déjà clôturée
+
             if periode.cloturee:
                 messages.warning(request, f"La période {periode} est déjà clôturée.")
                 return redirect('salaires:gestion_periodes')
-            
-            # Clôturer la période actuelle
+
             periode.cloturee = True
             periode.date_cloture = timezone.now()
             periode.cloturee_par = request.user
-            periode.save()
-            
-            # Calculer le mois et l'année suivants
+            periode.save(update_fields=['cloturee', 'date_cloture', 'cloturee_par'])
+
             mois_suivant = periode.mois + 1
             annee_suivante = periode.annee
-            
             if mois_suivant > 12:
                 mois_suivant = 1
                 annee_suivante += 1
-            
-            # Vérifier si la période suivante existe déjà
-            periode_suivante_existe = PeriodeSalaire.objects.filter(
+
+            periode_suivante, creee = PeriodeSalaire.objects.get_or_create(
                 mois=mois_suivant,
                 annee=annee_suivante,
-                ecole=periode.ecole
-            ).exists()
-            
-            if not periode_suivante_existe:
-                # Créer automatiquement la période suivante
-                nouvelle_periode = PeriodeSalaire.objects.create(
-                    mois=mois_suivant,
-                    annee=annee_suivante,
-                    ecole=periode.ecole,
-                    nombre_semaines=periode.nombre_semaines,  # Reprendre le même nombre de semaines
-                    cree_par=request.user
+                ecole=periode.ecole,
+                defaults={
+                    'nombre_semaines': periode.nombre_semaines,
+                    'cree_par': request.user,
+                },
+            )
+            regroupement = None
+            if not periode_suivante.cloturee:
+                regroupement = calculer_etats_salaire_periode(
+                    periode_suivante,
+                    request.user,
                 )
-                
-                messages.success(
-                    request, 
-                    f"Période {periode} clôturée avec succès ! "
-                    f"Nouvelle période créée automatiquement : {nouvelle_periode}"
-                )
-            else:
-                messages.success(
-                    request, 
-                    f"Période {periode} clôturée avec succès ! "
-                    f"La période suivante existe déjà."
-                )
-                
-        except Exception as e:
-            messages.error(request, f"Erreur lors de la clôture : {str(e)}")
-    
-    return redirect('salaires:gestion_periodes')
 
+        if regroupement is not None:
+            action = 'créée automatiquement' if creee else 'déjà existante et synchronisée'
+            messages.success(
+                request,
+                f"Période {periode} clôturée avec succès. "
+                f"Période suivante {action} : {periode_suivante}. "
+                f"{regroupement['enseignants']} enseignant(s) regroupé(s).",
+            )
+        else:
+            messages.success(
+                request,
+                f"Période {periode} clôturée avec succès. "
+                "La période suivante existe déjà et est clôturée.",
+            )
+    except Exception as exc:
+        messages.error(
+            request,
+            "La clôture a été annulée car la préparation de la période suivante "
+            f"a échoué : {exc}",
+        )
+
+    return redirect('salaires:gestion_periodes')
 
 @login_required
 def changer_statut_enseignant(request, enseignant_id):
