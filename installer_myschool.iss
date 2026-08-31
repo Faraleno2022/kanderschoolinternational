@@ -89,8 +89,8 @@ Source: "desinstaller.bat"; DestDir: "{app}"; Flags: ignoreversion
 ; Script d'arrêt du serveur (raccourci menu Démarrer)
 Source: "Arreter_MySchoolGN.bat"; DestDir: "{app}"; Flags: ignoreversion
 
-; Outil d'activation de licence (pour le technicien)
-Source: "license_manager.py"; DestDir: "{app}"; Flags: ignoreversion
+; Le gestionnaire de licence est compilé dans MySchoolGN.exe et protégé par
+; le manifeste d'intégrité. Ne jamais livrer sa source Python modifiable.
 
 ; Icône
 Source: "myschool.ico"; DestDir: "{app}"; Flags: ignoreversion
