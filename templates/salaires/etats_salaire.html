@@ -374,7 +374,7 @@
                     {% if not etat.valide and not etat.paye %}
                     <a href="{% url 'salaires:ajuster_etat_salaire' etat.id %}"
                        class="btn btn-warning btn-action">
-                        <i class="fas fa-sliders-h"></i> Primes / retenues
+                        <i class="fas fa-sliders-h"></i> Modifier avant validation
                     </a>
                     <form method="post" action="{% url 'salaires:valider_etat_salaire' etat.id %}" class="d-inline">
                         {% csrf_token %}

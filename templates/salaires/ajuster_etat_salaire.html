@@ -1,53 +1,139 @@
 {% extends 'base.html' %}
 {% load humanize %}
 
-{% block title %}Ajuster le salaire{% endblock %}
+{% block title %}Modifier l'état de salaire{% endblock %}
 
 {% block content %}
 <div class="container py-4">
     <div class="row justify-content-center">
-        <div class="col-lg-7">
-            <div class="card shadow-sm">
-                <div class="card-header bg-warning-subtle">
-                    <h4 class="mb-1"><i class="fas fa-sliders-h me-2"></i>Primes et retenues</h4>
-                    <div class="text-muted">
-                        {{ etat.enseignant.nom_complet }} — {{ etat.periode.nom_periode }}
+        <div class="col-xl-9 col-lg-10">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-warning-subtle py-3">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <h4 class="mb-1">
+                                <i class="fas fa-calculator me-2"></i>Modifier l'état de salaire
+                            </h4>
+                            <div class="text-muted">
+                                {{ etat.enseignant.nom_complet }} - {{ etat.periode.nom_periode }}
+                            </div>
+                        </div>
+                        <span class="badge bg-dark">Avant validation finale</span>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div class="alert alert-light border d-flex justify-content-between">
-                        <span>Salaire de base</span>
-                        <strong>{{ etat.salaire_base|intcomma }} GNF</strong>
+                <div class="card-body p-4">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Les valeurs modifiées ici concernent uniquement cette période. La fiche contractuelle
+                        de l'enseignant n'est pas changée. Après validation, cet état devient non modifiable.
                     </div>
 
-                    <form method="post" novalidate>
+                    <form method="post" novalidate id="salary-adjustment-form"
+                          data-hourly="{% if etat.enseignant.est_taux_horaire %}1{% else %}0{% endif %}"
+                          data-manual-source="{{ source_mensuel }}"
+                          data-pointage-hours="{{ heures_pointage|default:0 }}"
+                          data-advances="{{ etat.montant_avances|default:0 }}">
                         {% csrf_token %}
                         {% if form.non_field_errors %}
                         <div class="alert alert-danger">{{ form.non_field_errors }}</div>
                         {% endif %}
 
-                        <div class="mb-3">
-                            <label class="form-label" for="{{ form.primes.id_for_label }}">Primes (GNF)</label>
-                            {{ form.primes }}
-                            {% for error in form.primes.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        <h5 class="border-bottom pb-2 mb-3">Base de calcul</h5>
+                        {% if etat.enseignant.est_taux_horaire %}
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.source_heures.id_for_label }}">
+                                    {{ form.source_heures.label }}
+                                </label>
+                                {{ form.source_heures }}
+                                {% for error in form.source_heures.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                                <div class="form-text">
+                                    Le mode pointage additionne automatiquement les heures journalières du mois.
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.total_heures.id_for_label }}">
+                                    {{ form.total_heures.label }}
+                                </label>
+                                <div class="input-group">
+                                    {{ form.total_heures }}
+                                    <span class="input-group-text">heures</span>
+                                </div>
+                                {% for error in form.total_heures.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.taux_horaire_applique.id_for_label }}">
+                                    {{ form.taux_horaire_applique.label }}
+                                </label>
+                                <div class="input-group">
+                                    {{ form.taux_horaire_applique }}
+                                    <span class="input-group-text">GNF/h</span>
+                                </div>
+                                {% for error in form.taux_horaire_applique.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.salaire_base.id_for_label }}">
+                                    Salaire de base calculé
+                                </label>
+                                <div class="input-group">
+                                    {{ form.salaire_base }}
+                                    <span class="input-group-text">GNF</span>
+                                </div>
+                                <div class="form-text">Heures travaillées × taux horaire.</div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="row g-3">
+                            <div class="col-md-7">
+                                <label class="form-label" for="{{ form.salaire_base.id_for_label }}">
+                                    {{ form.salaire_base.label }}
+                                </label>
+                                <div class="input-group">
+                                    {{ form.salaire_base }}
+                                    <span class="input-group-text">GNF</span>
+                                </div>
+                                {% for error in form.salaire_base.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                                <div class="form-text">{{ form.salaire_base.help_text }}</div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <h5 class="border-bottom pb-2 mt-4 mb-3">Primes et retenues</h5>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label" for="{{ form.primes.id_for_label }}">{{ form.primes.label }}</label>
+                                {{ form.primes }}
+                                {% for error in form.primes.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="{{ form.deductions.id_for_label }}">{{ form.deductions.label }}</label>
+                                {{ form.deductions }}
+                                {% for error in form.deductions.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Avances déjà approuvées</label>
+                                <div class="form-control bg-light fw-semibold">
+                                    {{ etat.montant_avances|intcomma }} GNF
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label" for="{{ form.deductions.id_for_label }}">Retenues (GNF)</label>
-                            {{ form.deductions }}
-                            {% for error in form.deductions.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        <div class="alert alert-success d-flex justify-content-between align-items-center mt-4 mb-3">
+                            <span class="fw-semibold">Salaire net estimé</span>
+                            <strong class="fs-5" id="salary-net-preview">{{ etat.salaire_net|intcomma }} GNF</strong>
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label" for="{{ form.observations.id_for_label }}">Observations</label>
+                        <div class="mb-4">
+                            <label class="form-label" for="{{ form.observations.id_for_label }}">{{ form.observations.label }}</label>
                             {{ form.observations }}
                             {% for error in form.observations.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                         </div>
 
-                        <div class="d-flex justify-content-end gap-2">
-                            <a href="{% url 'salaires:etats_salaire' %}" class="btn btn-outline-secondary">Annuler</a>
+                        <div class="d-flex flex-wrap justify-content-end gap-2">
+                            <a href="{% url 'salaires:etats_salaire' %}?periode={{ etat.periode_id }}"
+                               class="btn btn-outline-secondary">Annuler</a>
                             <button type="submit" class="btn btn-warning">
-                                <i class="fas fa-save me-1"></i>Enregistrer l'ajustement
+                                <i class="fas fa-save me-1"></i>Enregistrer et recalculer
                             </button>
                         </div>
                     </form>
@@ -56,4 +142,52 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('salary-adjustment-form');
+    if (!form) return;
+
+    const isHourly = form.dataset.hourly === '1';
+    const manualSource = form.dataset.manualSource;
+    const pointageHours = Number(String(form.dataset.pointageHours || '0').replace(',', '.')) || 0;
+    const advances = Number(String(form.dataset.advances || '0').replace(',', '.')) || 0;
+    const baseInput = document.getElementById('id_salaire_base');
+    const sourceInput = document.getElementById('id_source_heures');
+    const hoursInput = document.getElementById('id_total_heures');
+    const rateInput = document.getElementById('id_taux_horaire_applique');
+    const primesInput = document.getElementById('id_primes');
+    const deductionsInput = document.getElementById('id_deductions');
+    const netPreview = document.getElementById('salary-net-preview');
+
+    function numberValue(input) {
+        if (!input) return 0;
+        const value = Number(String(input.value || '0').replace(',', '.'));
+        return Number.isFinite(value) ? value : 0;
+    }
+
+    function updatePreview() {
+        let base = numberValue(baseInput);
+        if (isHourly && sourceInput && hoursInput && rateInput) {
+            const manual = sourceInput.value === manualSource;
+            hoursInput.disabled = !manual;
+            if (!manual) hoursInput.value = pointageHours.toFixed(2);
+            base = numberValue(hoursInput) * numberValue(rateInput);
+            if (baseInput) baseInput.value = base.toFixed(2);
+        }
+        const net = Math.max(0, base + numberValue(primesInput) - numberValue(deductionsInput) - advances);
+        netPreview.textContent = Math.round(net).toLocaleString('fr-FR') + ' GNF';
+    }
+
+    [baseInput, sourceInput, hoursInput, rateInput, primesInput, deductionsInput]
+        .filter(Boolean)
+        .forEach(element => {
+            element.addEventListener('input', updatePreview);
+            element.addEventListener('change', updatePreview);
+        });
+    updatePreview();
+});
+</script>
 {% endblock %}
