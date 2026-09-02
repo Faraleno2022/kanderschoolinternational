@@ -116,6 +116,21 @@ def heures_reellement_travaillees(enseignant, periode):
     return arrondir_heures(total)
 
 
+def nombre_jours_presence(enseignant, periode):
+    """Nombre de journées où l'employé était effectivement présent ou en retard."""
+    premier_jour, dernier_jour = bornes_periode(periode)
+    return (
+        enseignant.presences
+        .filter(
+            date__range=(premier_jour, dernier_jour),
+            statut__in=('PRESENT', 'RETARD'),
+        )
+        .values('date')
+        .distinct()
+        .count()
+    )
+
+
 def affectations_de_la_periode(enseignant, periode):
     """Affectations dont les dates chevauchent la période de paie.
 
@@ -282,6 +297,97 @@ def calculer_etat_salaire(
 
     return etat, True
 
+
+@transaction.atomic
+def appliquer_ajustement_etat_salaire(
+    etat,
+    utilisateur,
+    *,
+    salaire_base=None,
+    source_heures=None,
+    total_heures=None,
+    taux_horaire=None,
+    primes=Decimal('0'),
+    deductions=Decimal('0'),
+    observations='',
+):
+    """Applique un ajustement complet à un état encore ouvert.
+
+    Les valeurs modifiées sont propres à la période : elles ne remplacent pas
+    le taux ou le salaire de référence enregistré sur la fiche de l'employé.
+    """
+    etat = (
+        EtatSalaire.objects.select_for_update()
+        .select_related('enseignant', 'periode')
+        .get(pk=etat.pk)
+    )
+    if etat.valide or etat.periode.cloturee:
+        raise ValueError("Cet état de salaire ne peut plus être modifié.")
+
+    enseignant = etat.enseignant
+    etat.montant_avances = total_avances_a_deduire(
+        enseignant,
+        etat.periode,
+    )
+    etat.primes = arrondir_montant(primes)
+    etat.deductions = arrondir_montant(deductions)
+    etat.observations = observations or ''
+    etat.calcule_par = utilisateur
+
+    if enseignant.est_taux_horaire:
+        source = source_heures or etat.source_heures
+        if source not in {
+            SourceHeuresSalaire.POINTAGE,
+            SourceHeuresSalaire.MENSUEL,
+        }:
+            raise ValueError("La source des heures est invalide.")
+
+        if source == SourceHeuresSalaire.POINTAGE:
+            heures = heures_reellement_travaillees(enseignant, etat.periode)
+        else:
+            if total_heures is None:
+                raise ValueError("Le nombre d'heures mensuelles est obligatoire.")
+            heures = arrondir_heures(total_heures)
+
+        if heures < 0 or heures > Decimal('744'):
+            raise ValueError("Le nombre d'heures doit être compris entre 0 et 744.")
+
+        taux = arrondir_montant(
+            taux_horaire
+            if taux_horaire is not None
+            else (etat.taux_horaire_applique or enseignant.taux_horaire)
+        )
+        if taux <= 0:
+            raise ValueError("Le taux horaire doit être supérieur à zéro.")
+
+        etat.source_heures = source
+        etat.total_heures = heures
+        etat.taux_horaire_applique = taux
+        etat.salaire_base = arrondir_montant(heures * taux)
+        etat.details_heures.all().delete()
+        for affectation, heures_prevues, heures_realisees in repartir_heures(
+            heures,
+            heures_prevues_par_affectation(enseignant, etat.periode),
+        ):
+            DetailHeuresClasse.objects.create(
+                etat_salaire=etat,
+                affectation_classe=affectation,
+                heures_prevues=heures_prevues,
+                heures_realisees=heures_realisees,
+                taux_horaire_applique=taux,
+            )
+    else:
+        base = arrondir_montant(salaire_base)
+        if base < 0:
+            raise ValueError("Le salaire de base ne peut pas être négatif.")
+        etat.source_heures = SourceHeuresSalaire.FIXE
+        etat.total_heures = None
+        etat.taux_horaire_applique = None
+        etat.salaire_base = base
+        etat.details_heures.all().delete()
+
+    etat.save()
+    return etat
 
 @transaction.atomic
 def calculer_etats_salaire_periode(periode, utilisateur):

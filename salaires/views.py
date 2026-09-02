@@ -34,11 +34,13 @@ from .forms import (
     PresenceForm,
 )
 from .services import (
+    appliquer_ajustement_etat_salaire,
     arrondir_montant,
     calculer_etat_salaire,
     calculer_etats_salaire_periode,
     enseignants_eligibles,
     heures_reellement_travaillees,
+    nombre_jours_presence,
     plafond_avance_disponible,
     synchroniser_avances_etat,
     total_avances_a_deduire,
@@ -1181,7 +1183,7 @@ def calculer_salaires(request, periode_id):
 @login_required
 @require_school_object(model=EtatSalaire, pk_kwarg='etat_id', field_path='periode__ecole')
 def ajuster_etat_salaire(request, etat_id):
-    """Modifier les primes, retenues et observations avant validation."""
+    """Modifier et recalculer un état de salaire avant sa validation."""
     etat = get_object_or_404(
         EtatSalaire.objects.select_related('enseignant', 'periode'), id=etat_id
     )
@@ -1196,31 +1198,44 @@ def ajuster_etat_salaire(request, etat_id):
     if request.method == 'POST':
         form = EtatSalaireAjustementForm(request.POST, instance=etat)
         if form.is_valid():
-            with transaction.atomic():
-                etat_verrouille = EtatSalaire.objects.select_for_update().get(pk=etat.pk)
-                if etat_verrouille.valide or etat_verrouille.periode.cloturee:
-                    messages.error(request, "Cet état ne peut plus être ajusté.")
-                    return redirect('salaires:etats_salaire')
-
-                etat_verrouille.primes = form.cleaned_data['primes']
-                etat_verrouille.deductions = form.cleaned_data['deductions']
-                etat_verrouille.observations = form.cleaned_data['observations']
-                etat_verrouille.save()
-
-            messages.success(
-                request,
-                f"Primes et retenues de {etat.enseignant.nom_complet} mises à jour.",
-            )
-            return redirect('salaires:etats_salaire')
+            try:
+                etat = appliquer_ajustement_etat_salaire(
+                    etat,
+                    request.user,
+                    salaire_base=form.cleaned_data.get('salaire_base'),
+                    source_heures=form.cleaned_data.get('source_heures'),
+                    total_heures=form.cleaned_data.get('total_heures'),
+                    taux_horaire=form.cleaned_data.get('taux_horaire_applique'),
+                    primes=form.cleaned_data.get('primes'),
+                    deductions=form.cleaned_data.get('deductions'),
+                    observations=form.cleaned_data.get('observations'),
+                )
+            except ValueError as exc:
+                form.add_error(None, str(exc))
+            else:
+                messages.success(
+                    request,
+                    f"L'état de salaire de {etat.enseignant.nom_complet} a été recalculé.",
+                )
+                return redirect(
+                    f"{reverse('salaires:etats_salaire')}?periode={etat.periode_id}"
+                )
     else:
         form = EtatSalaireAjustementForm(instance=etat)
 
     return render(
         request,
         'salaires/ajuster_etat_salaire.html',
-        {'form': form, 'etat': etat},
+        {
+            'form': form,
+            'etat': etat,
+            'heures_pointage': heures_reellement_travaillees(
+                etat.enseignant, etat.periode
+            ),
+            'source_pointage': SourceHeuresSalaire.POINTAGE,
+            'source_mensuel': SourceHeuresSalaire.MENSUEL,
+        },
     )
-
 
 @login_required
 @require_POST
@@ -1476,12 +1491,14 @@ def fiche_paie_pdf(request, etat_id):
     p = canvas.Canvas(response, pagesize=A4)
     width, height = A4
     
-    # Ajouter le logo en filigrane (spécifique à l'école de l'utilisateur)
+    # Logo et filigrane de l'école concernée par la paie.
+    ecole_fp = getattr(getattr(etat, 'periode', None), 'ecole', None)
     from ecole_moderne.pdf_utils import draw_logo_watermark
-    draw_logo_watermark(p, width, height, opacity=0.06, rotate=30, scale=1.2, ecole=_ecole_utilisateur(request))
+    draw_logo_watermark(
+        p, width, height, rotate=30, scale=1.2, ecole=ecole_fp
+    )
     
     # En-tête avec logo et coordonnées dynamiques de l'école de la période
-    ecole_fp = getattr(getattr(etat, 'periode', None), 'ecole', None)
     try:
         header_logo_path = None
         # Priorité: logo de l'école si présent
@@ -1561,10 +1578,12 @@ def fiche_paie_pdf(request, etat_id):
     p.setFont("Helvetica-Bold", 12)
     p.drawString(2*cm, y_pos, "DÉTAILS DU SALAIRE")
     
-    # Tableau des montants
+    # Tableau des montants et de la présence du mois
+    jours_presence = nombre_jours_presence(etat.enseignant, etat.periode)
     data = [
-        ['Élément', 'Montant (GNF)'],
-        ['Salaire de base', f"{etat.salaire_base:,.0f}".replace(',', ' ')],
+        ['Élément', 'Valeur'],
+        ['Salaire de base', f"{etat.salaire_base:,.0f} GNF".replace(',', ' ')],
+        ['Jours de présence', f"{jours_presence} jour(s)"],
     ]
     
     if etat.total_heures is not None:

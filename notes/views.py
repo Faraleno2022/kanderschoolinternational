@@ -2787,7 +2787,7 @@ def bulletin_annuel_pdf(request, classe_id: int, eleve_id: int):
     response['Content-Disposition'] = f'inline; filename="{filename}"'
     c = canvas.Canvas(response, pagesize=A4)
     width, height = A4
-    _apply_watermark(c, width, height)
+    _apply_watermark(c, width, height, ecole=getattr(classe, 'ecole', None))
     margin = 2*cm; y = height - margin
     if getattr(classe, 'ecole', None):
         y = _draw_school_header(c, classe.ecole, y_start=y, margin=margin, page_width=width)
@@ -2815,7 +2815,7 @@ def bulletin_annuel_pdf(request, classe_id: int, eleve_id: int):
     for row in lignes:
         if y < margin + 60:
             c.showPage();
-            _apply_watermark(c, width, height)
+            _apply_watermark(c, width, height, ecole=getattr(classe, 'ecole', None))
             y = height - margin
         x = margin
         c.drawString(x, y, row['matiere']); x += colw[0]
@@ -3036,7 +3036,7 @@ def bulletins_annuels_classe_pdf(request, classe_id: int):
         return "Très faible"
 
     def draw_for_student(eleve):
-        _apply_watermark(c, width, height)
+        _apply_watermark(c, width, height, ecole=getattr(classe, 'ecole', None))
         margin = 2*cm; y = height - margin
         if getattr(classe, 'ecole', None):
             y = _draw_school_header(c, classe.ecole, y_start=y, margin=margin, page_width=width)
@@ -3081,7 +3081,7 @@ def bulletins_annuels_classe_pdf(request, classe_id: int):
         for row in lignes:
             if y < margin + 60:
                 c.showPage();
-                _apply_watermark(c, width, height)
+                _apply_watermark(c, width, height, ecole=getattr(classe, 'ecole', None))
                 y = height - margin
             x = margin
             c.drawString(x, y, row['matiere']); x += colw[0]
@@ -3377,7 +3377,7 @@ def classement_classe_pdf(request, classe_id: int, trimestre: str = "T1"):
     c = canvas.Canvas(response, pagesize=A4)
     width, height = A4
     
-    _apply_watermark(c, width, height)
+    _apply_watermark(c, width, height, ecole=getattr(classe, 'ecole', None))
     
     margin = 2 * cm
     y = height - margin
@@ -3417,7 +3417,7 @@ def classement_classe_pdf(request, classe_id: int, trimestre: str = "T1"):
     for i, item in enumerate(classement):
         if y < margin + 60:
             c.showPage()
-            _apply_watermark(c, width, height)
+            _apply_watermark(c, width, height, ecole=getattr(classe, 'ecole', None))
             y = height - margin
         
         x = margin
@@ -3546,8 +3546,10 @@ def classement_classe_excel(request, classe_id: int, trimestre: str = "T1"):
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill
     from django.http import HttpResponse
+    from ecole_moderne.theme import get_school_palette
     
     classe = get_object_or_404(filter_by_user_school(ClasseEleve.objects.all(), request.user, 'ecole'), pk=classe_id)
+    palette = get_school_palette(classe.ecole)
     
     # Récupérer le classement (même logique que les autres vues)
     eleves = classe.eleves.filter(statut='actif').order_by('prenom', 'nom')
@@ -3621,7 +3623,7 @@ def classement_classe_excel(request, classe_id: int, trimestre: str = "T1"):
     
     # Styles
     header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_fill = PatternFill(start_color=palette['primary'].lstrip('#'), end_color=palette['primary'].lstrip('#'), fill_type="solid")
     center_alignment = Alignment(horizontal="center")
     
     # En-têtes
@@ -3819,6 +3821,9 @@ def cartes_scolaires_pdf(request, classe_id):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+    from ecole_moderne.theme import get_school_palette
+    ecole_obj = getattr(classe, 'ecole', None)
+    palette = get_school_palette(ecole_obj)
     
     # Filigrane standardisé (logo centré, rotation légère, opacité 4%)
     _apply_watermark(c, width, height, ecole=getattr(classe, 'ecole', None))
@@ -3853,7 +3858,7 @@ def cartes_scolaires_pdf(request, classe_id):
         if card_count > 0 and card_count % 10 == 0:
             c.showPage()
             # Filigrane standardisé sur nouvelle page
-            _apply_watermark(c, width, height)
+            _apply_watermark(c, width, height, ecole=getattr(classe, 'ecole', None))
         
         # Position de la carte actuelle
         pos_x, pos_y = positions[card_count % 10]
@@ -3880,7 +3885,8 @@ def cartes_scolaires_pdf(request, classe_id):
                 # Fallback: logo statique
                 logo_path = finders.find('logos/logo.png') or os.path.join(settings.BASE_DIR, 'static', 'logos', 'logo.png')
             
-            if logo_path and os.path.exists(logo_path):
+            if (logo_path and os.path.exists(logo_path)
+                    and getattr(ecole_obj, 'afficher_filigrane', True)):
                 # Calculer la position centrale de la carte
                 center_x = pos_x + card_width / 2
                 center_y = pos_y + card_height / 2
@@ -3893,7 +3899,7 @@ def cartes_scolaires_pdf(request, classe_id):
                 watermark_size = min(card_width, card_height) * 0.6
                 
                 # Dessiner le logo en filigrane avec opacité réduite
-                c.setFillAlpha(0.08)  # Opacité très faible
+                c.setFillAlpha(palette['watermark_opacity'])
                 c.drawImage(logo_path, -watermark_size/2, -watermark_size/2, 
                           watermark_size, watermark_size, preserveAspectRatio=True)
         except Exception:
@@ -3938,7 +3944,7 @@ def cartes_scolaires_pdf(request, classe_id):
             c.drawCentredString(logo_x + logo_size/2, logo_y + logo_size/2, "ERREUR")
         
         # En-tête école (centré sur toute la largeur de la carte)
-        c.setFillColor(colors.darkblue)
+        c.setFillColor(colors.HexColor(palette['primary']))
         ecole_nom = classe.ecole.nom.upper() if classe.ecole else "ÉCOLE"
         # Ajuster la taille de police selon la longueur du nom
         if len(ecole_nom) > 40:
@@ -3952,7 +3958,7 @@ def cartes_scolaires_pdf(request, classe_id):
         
         # Titre "CARTE SCOLAIRE"
         c.setFont('Helvetica-Bold', 8)
-        c.setFillColor(colors.red)
+        c.setFillColor(colors.HexColor(palette['secondary']))
         c.drawCentredString(pos_x + card_width/2, pos_y + card_height - 1.3*cm, "CARTE SCOLAIRE")
         
         # Année scolaire
@@ -4199,9 +4205,12 @@ def carte_eleve_pdf(request, matricule):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+    from ecole_moderne.theme import get_school_palette
+    ecole_obj = getattr(getattr(eleve, 'classe', None), 'ecole', None)
+    palette = get_school_palette(ecole_obj)
     
     # Filigrane standardisé (logo centré, rotation légère, opacité 4%)
-    _apply_watermark(c, width, height)
+    _apply_watermark(c, width, height, ecole=getattr(getattr(eleve, 'classe', None), 'ecole', None))
     
     # Configuration de la carte (centrée sur la page) - Format carte bancaire standard
     card_width = 8.6 * cm  # 86mm
@@ -4232,7 +4241,8 @@ def carte_eleve_pdf(request, matricule):
         if not logo_path:
             logo_path = finders.find('logos/logo.png') or os.path.join(settings.BASE_DIR, 'static', 'logos', 'logo.png')
         
-        if logo_path and os.path.exists(logo_path):
+        if (logo_path and os.path.exists(logo_path)
+                and getattr(ecole_obj, 'afficher_filigrane', True)):
             # Calculer la position centrale de la carte
             center_x = pos_x + card_width / 2
             center_y = pos_y + card_height / 2
@@ -4245,23 +4255,16 @@ def carte_eleve_pdf(request, matricule):
             watermark_size = min(card_width, card_height) * 0.7
             
             # Dessiner le logo en filigrane avec opacité visible
-            c.setFillAlpha(0.12)  # Opacité visible (comme les tickets)
+            c.setFillAlpha(palette['watermark_opacity'])
             c.drawImage(logo_path, -watermark_size/2, -watermark_size/2, 
                       watermark_size, watermark_size, preserveAspectRatio=True)
     except Exception:
         pass
     c.restoreState()
     
-    # Extraire les couleurs du logo de l'école
-    primary_color = '#10b981'
-    light_color = '#d1fae5'
-    
-    try:
-        if logo_path and os.path.exists(logo_path):
-            from eleves.views import _extraire_couleurs_logo
-            primary_color, light_color = _extraire_couleurs_logo(logo_path)
-    except:
-        pass
+    # Appliquer directement la charte définie par l'école.
+    primary_color = palette['primary']
+    light_color = palette['light']
     
     # Design moderne avec couleurs personnalisées
     # Formes géométriques décoratives en arrière-plan
@@ -5814,6 +5817,9 @@ def liste_saisie_pdf(request):
         matiere = get_object_or_404(MatiereNote, pk=matiere_id)
     except Exception as e:
         return HttpResponse(f"Erreur lors de la récupération des données: {str(e)}", status=400)
+
+    from ecole_moderne.theme import get_school_palette
+    palette = get_school_palette(classe.ecole)
     
     # Déterminer le type de notation selon le niveau
     niveau_enseignement = classe.niveau_enseignement or 'SECONDAIRE'
@@ -5861,7 +5867,7 @@ def liste_saisie_pdf(request):
         'CustomTitle',
         parent=styles['Heading1'],
         fontSize=16,
-        textColor=colors.HexColor('#007bff'),
+        textColor=colors.HexColor(palette['primary']),
         spaceAfter=12,
         alignment=TA_CENTER
     )
@@ -5906,13 +5912,13 @@ def liste_saisie_pdf(request):
     # Style du tableau
     table = Table(data, colWidths=col_widths)
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#007bff')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(palette['primary'])),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 10),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor(palette['light'])),
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 9),
@@ -5922,7 +5928,10 @@ def liste_saisie_pdf(request):
     elements.append(table)
     
     # Construire le PDF
-    doc.build(elements)
+    on_page = lambda pdf_canvas, document: _apply_watermark(
+        pdf_canvas, document.pagesize[0], document.pagesize[1], ecole=classe.ecole
+    )
+    doc.build(elements, onFirstPage=on_page, onLaterPages=on_page)
     
     # Retourner la réponse
     buffer.seek(0)

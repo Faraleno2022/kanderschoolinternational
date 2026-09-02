@@ -1,5 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from decimal import Decimal, ROUND_HALF_UP
 from .models import (
     AffectationClasse,
     AvanceSalaire,
@@ -7,6 +8,7 @@ from .models import (
     EtatSalaire,
     PeriodeSalaire,
     PresenceEnseignant,
+    SourceHeuresSalaire,
     StatutEnseignant,
     TypeEnseignant,
 )
@@ -337,30 +339,133 @@ class PresenceForm(forms.ModelForm):
 
 
 class EtatSalaireAjustementForm(forms.ModelForm):
-    """Modification contrôlée des primes et retenues avant validation."""
+    """Modification contrôlée de la paie avant sa validation définitive."""
 
     class Meta:
         model = EtatSalaire
-        fields = ['primes', 'deductions', 'observations']
+        fields = [
+            'salaire_base', 'source_heures', 'total_heures',
+            'taux_horaire_applique', 'primes', 'deductions', 'observations',
+        ]
         widgets = {
+            'salaire_base': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '0.01',
+            }),
+            'source_heures': forms.Select(attrs={
+                'class': 'form-select', 'data-role': 'source-heures',
+            }),
+            'total_heures': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'max': '744',
+                'step': '0.25', 'data-role': 'total-heures',
+            }),
+            'taux_horaire_applique': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0.01', 'step': '0.01',
+                'data-role': 'taux-horaire',
+            }),
             'primes': forms.NumberInput(attrs={
-                'class': 'form-control', 'min': '0', 'step': '0.01'
+                'class': 'form-control', 'min': '0', 'step': '0.01',
+                'data-role': 'primes',
             }),
             'deductions': forms.NumberInput(attrs={
-                'class': 'form-control', 'min': '0', 'step': '0.01'
+                'class': 'form-control', 'min': '0', 'step': '0.01',
+                'data-role': 'deductions',
             }),
             'observations': forms.Textarea(attrs={
                 'class': 'form-control', 'rows': 4,
-                'placeholder': 'Motif des primes ou retenues',
+                'placeholder': 'Motif des modifications, primes ou retenues',
             }),
         }
+        labels = {
+            'salaire_base': 'Salaire de base pour cette période (GNF)',
+            'source_heures': 'Source des heures',
+            'total_heures': "Nombre d'heures travaillées",
+            'taux_horaire_applique': 'Taux horaire pour cette période (GNF/h)',
+            'primes': 'Primes (GNF)',
+            'deductions': 'Retenues (GNF)',
+            'observations': 'Observations et motif de modification',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.est_taux_horaire = bool(
+            getattr(self.instance, 'enseignant_id', None)
+            and self.instance.enseignant.est_taux_horaire
+        )
+
+        if self.est_taux_horaire:
+            self.fields['source_heures'].choices = [
+                (SourceHeuresSalaire.POINTAGE, 'Pointages arrivée / départ'),
+                (SourceHeuresSalaire.MENSUEL, 'Nombre d’heures saisi manuellement'),
+            ]
+            self.fields['total_heures'].required = False
+            self.fields['taux_horaire_applique'].required = True
+            self.fields['salaire_base'].disabled = True
+            self.fields['salaire_base'].help_text = (
+                'Calcul automatique : nombre d’heures × taux horaire.'
+            )
+        else:
+            self.fields.pop('source_heures')
+            self.fields.pop('total_heures')
+            self.fields.pop('taux_horaire_applique')
+            self.fields['salaire_base'].required = True
+            self.fields['salaire_base'].help_text = (
+                'Cette modification concerne uniquement cette période de salaire.'
+            )
 
     def clean(self):
         cleaned_data = super().clean()
-        primes = cleaned_data.get('primes') or 0
-        deductions = cleaned_data.get('deductions') or 0
-        salaire_base = self.instance.salaire_base or 0
-        montant_avances = self.instance.montant_avances or 0
+        primes = cleaned_data.get('primes') or Decimal('0')
+        deductions = cleaned_data.get('deductions') or Decimal('0')
+        montant_avances = self.instance.montant_avances or Decimal('0')
+
+        if self.est_taux_horaire:
+            source = cleaned_data.get('source_heures')
+            taux = cleaned_data.get('taux_horaire_applique')
+            heures = cleaned_data.get('total_heures')
+
+            if taux is None or taux <= 0:
+                self.add_error(
+                    'taux_horaire_applique',
+                    'Le taux horaire doit être supérieur à zéro.',
+                )
+            if source == SourceHeuresSalaire.POINTAGE:
+                from .services import heures_reellement_travaillees
+                heures = heures_reellement_travaillees(
+                    self.instance.enseignant,
+                    self.instance.periode,
+                )
+                cleaned_data['total_heures'] = heures
+            elif source == SourceHeuresSalaire.MENSUEL:
+                if heures is None:
+                    self.add_error(
+                        'total_heures',
+                        "Renseignez le nombre d'heures travaillées.",
+                    )
+                elif heures < 0 or heures > Decimal('744'):
+                    self.add_error(
+                        'total_heures',
+                        'Le nombre d’heures doit être compris entre 0 et 744.',
+                    )
+            else:
+                self.add_error('source_heures', 'Sélectionnez une source valide.')
+
+            if taux is not None and taux > 0 and heures is not None:
+                salaire_base = (heures * taux).quantize(
+                    Decimal('0.01'), rounding=ROUND_HALF_UP
+                )
+                cleaned_data['salaire_base'] = salaire_base
+            else:
+                salaire_base = self.instance.salaire_base or Decimal('0')
+        else:
+            salaire_base = cleaned_data.get('salaire_base')
+            if salaire_base is None:
+                self.add_error('salaire_base', 'Le salaire de base est obligatoire.')
+                salaire_base = Decimal('0')
+            elif salaire_base < 0:
+                self.add_error(
+                    'salaire_base',
+                    'Le salaire de base ne peut pas être négatif.',
+                )
 
         if deductions + montant_avances > salaire_base + primes:
             self.add_error(
@@ -369,7 +474,6 @@ class EtatSalaireAjustementForm(forms.ModelForm):
             )
 
         return cleaned_data
-
 
 class AvanceSalaireForm(forms.ModelForm):
     """Création et modification sécurisées d'une avance sur salaire."""

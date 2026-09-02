@@ -84,6 +84,7 @@
             font-weight: bold;
             margin: 20px 0;
             text-decoration: underline;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
         }
         
         /* Informations élève */
@@ -135,7 +136,8 @@
         }
         
         .notes-table th {
-            background-color: #d9d9d9;
+            background-color: {{ ecole.couleur_fond_clair|default:'#d9d9d9' }};
+            color: {{ ecole.couleur_texte|default:'#1f2937' }};
             font-weight: bold;
             font-size: 10pt;
         }
@@ -273,11 +275,11 @@
             display: inline-block;
         }
         
-        .smiley-a { color: #27ae60; } /* Vert - Excellent */
+        .smiley-a { color: {{ ecole.couleur_succes|default:'#27ae60' }}; } /* Vert - Excellent */
         .smiley-b { color: #2ecc71; } /* Vert clair - Très bien */
-        .smiley-c { color: #f39c12; } /* Orange - Bien */
+        .smiley-c { color: {{ ecole.couleur_avertissement|default:'#f39c12' }}; } /* Orange - Bien */
         .smiley-d { color: #e67e22; } /* Orange foncé - Passable */
-        .smiley-e { color: #e74c3c; } /* Rouge - Insuffisant */
+        .smiley-e { color: {{ ecole.couleur_danger|default:'#e74c3c' }}; } /* Rouge - Insuffisant */
     </style>
 </head>
 <body>

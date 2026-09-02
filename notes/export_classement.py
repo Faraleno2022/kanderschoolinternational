@@ -19,6 +19,7 @@ from reportlab.pdfbase import pdfmetrics
 
 from .models import ClasseNote, MatiereNote, NoteMensuelle, CompositionNote
 from eleves.models import Eleve, Classe as ClasseEleve
+from ecole_moderne.theme import get_school_palette
 from .calculs_moyennes import calculer_moyenne_generale_eleve, calculer_classement_classe, detecter_niveau_scolaire
 
 
@@ -93,6 +94,7 @@ def exporter_classement_classe(request):
     
     # Récupérer la classe
     classe_note = get_object_or_404(ClasseNote, pk=classe_id)
+    palette = get_school_palette(classe_note.ecole)
     
     # Récupérer la classe élève correspondante avec mapping spécial (même logique que les autres vues)
     try:
@@ -198,7 +200,7 @@ def exporter_classement_classe(request):
     ws.title = "Classement"
     
     # Styles
-    header_fill = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
+    header_fill = PatternFill(start_color=palette['primary'].lstrip('#'), end_color=palette['primary'].lstrip('#'), fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True, size=12)
     border = Border(
         left=Side(style='thin'),
@@ -344,7 +346,7 @@ def exporter_classement_classe(request):
         stats_title = ws[f'A{stats_row}']
         stats_title.value = "STATISTIQUES DE LA CLASSE"
         stats_title.font = Font(bold=True, size=12, color='FFFFFF')
-        stats_title.fill = PatternFill(start_color='2C3E50', end_color='2C3E50', fill_type='solid')
+        stats_title.fill = PatternFill(start_color=palette['primary'].lstrip('#'), end_color=palette['primary'].lstrip('#'), fill_type='solid')
         stats_title.alignment = Alignment(horizontal='center')
 
         stats_data = [
@@ -689,6 +691,9 @@ def _draw_school_header_classement(c, ecole, *, y_start, margin, page_width):
 
 def _draw_watermark(c, ecole, page_width, page_height):
     """Dessine le logo en filigrane au centre de la page"""
+    if ecole is not None and not getattr(ecole, 'afficher_filigrane', True):
+        return
+    palette = get_school_palette(ecole)
     logo_path = None
     try:
         if hasattr(ecole, 'logo') and getattr(ecole.logo, 'path', None) and os.path.exists(ecole.logo.path):
@@ -704,7 +709,7 @@ def _draw_watermark(c, ecole, page_width, page_height):
             y = (page_height - watermark_size) / 2
             
             c.saveState()
-            c.setFillAlpha(0.08)  # Transparence
+            c.setFillAlpha(palette['watermark_opacity'])
             c.drawImage(logo_path, x, y, width=watermark_size, height=watermark_size, 
                        preserveAspectRatio=True, mask='auto')
             c.restoreState()
@@ -728,6 +733,7 @@ def exporter_classement_classe_pdf(request):
     
     # Récupérer la classe
     classe_note = get_object_or_404(ClasseNote, pk=classe_id)
+    palette = get_school_palette(classe_note.ecole)
     
     # Récupérer la classe élève correspondante avec mapping spécial (même logique que les autres vues)
     try:
@@ -879,7 +885,7 @@ def exporter_classement_classe_pdf(request):
         col_x.append(col_x[-1] + w)
 
     # Fond gris pour les en-têtes
-    c.setFillColorRGB(0.2, 0.3, 0.4)
+    c.setFillColor(colors.HexColor(palette['primary']))
     c.rect(margin, y-15, sum(col_widths), 15, fill=1, stroke=0)
 
     # Texte des en-têtes (adapter selon le niveau)
@@ -911,7 +917,7 @@ def exporter_classement_classe_pdf(request):
             y -= 20
             
             # Redessiner les en-têtes
-            c.setFillColorRGB(0.2, 0.3, 0.4)
+            c.setFillColor(colors.HexColor(palette['primary']))
             c.rect(margin, y-15, sum(col_widths), 15, fill=1, stroke=0)
             c.setFillColorRGB(1, 1, 1)
             c.setFont('Helvetica-Bold', 10)
@@ -1079,7 +1085,7 @@ def exporter_classement_classe_pdf(request):
 
         y -= 8
         c.setFont('Helvetica-Bold', 9)
-        c.setFillColorRGB(0.2, 0.3, 0.4)
+        c.setFillColor(colors.HexColor(palette['primary']))
         for stat in [
             f"Moyenne de classe : {moyenne_classe:.2f}{base_note}",
             f"Note maximale : {note_max:.2f}{base_note}   |   Note minimale : {note_min:.2f}{base_note}",
@@ -1120,7 +1126,7 @@ def exporter_classement_classe_pdf(request):
 
     # Titre de section
     c.setFont('Helvetica-Bold', 9)
-    c.setFillColorRGB(0.2, 0.3, 0.4)
+    c.setFillColor(colors.HexColor(palette['primary']))
     c.drawString(margin, sig_y + 22, "VISA ET SIGNATURE :")
     c.setFillColorRGB(0, 0, 0)
 

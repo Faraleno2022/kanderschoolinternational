@@ -10,7 +10,7 @@
     {# SEO : description par défaut, écrasable par les pages via le bloc meta_description #}
     <meta name="description" content="{% block meta_description %}Kinder School International — Crèche, Garderie et Maternelle bilingue (français-anglais) à Conakry, pour les enfants à partir de 3 mois.{% endblock %}">
     <meta name="robots" content="{% block meta_robots %}index,follow{% endblock %}">
-    <meta name="theme-color" content="#3563AE">
+    <meta name="theme-color" content="{{ charte_graphique.primary|default:'#3563AE' }}">
     <link rel="canonical" href="{% block canonical_url %}{{ request.build_absolute_uri }}{% endblock %}">
 
     {# Open Graph (Facebook, WhatsApp, LinkedIn, etc.) #}
@@ -69,37 +69,60 @@
     <style>
         /* ===== Charte graphique Kinder School International ===== */
         :root {
-            --kinder-blue: #3563AE;
-            --kinder-blue-dark: #244A8A;
-            --kinder-blue-light: #5B86D6;
-            --kinder-yellow: #FFC83D;
-            --kinder-green: #5BB94B;
-            --kinder-orange: #F5933B;
-            --kinder-pink: #EC6B9D;
-            --kinder-cyan: #2FB7E6;
-            /* Surcharge des variables Bootstrap */
-            --bs-primary: #3563AE;
-            --bs-primary-rgb: 53, 99, 174;
-            --bs-link-color: #3563AE;
-            --bs-link-color-rgb: 53, 99, 174;
-            --bs-link-hover-color: #244A8A;
+            --school-primary: {{ charte_graphique.primary|default:'#3563AE' }};
+            --school-primary-dark: {{ charte_graphique.primary_dark|default:'#244A8A' }};
+            --school-secondary: {{ charte_graphique.secondary|default:'#244A8A' }};
+            --school-accent: {{ charte_graphique.accent|default:'#FFC83D' }};
+            --school-light: {{ charte_graphique.light|default:'#EEF4FF' }};
+            --school-text: {{ charte_graphique.text|default:'#1F2937' }};
+            --school-success: {{ charte_graphique.success|default:'#198754' }};
+            --school-warning: {{ charte_graphique.warning|default:'#F59E0B' }};
+            --school-danger: {{ charte_graphique.danger|default:'#DC3545' }};
+            --school-eleves: {{ charte_graphique.eleves|default:'#3563AE' }};
+            --school-paiements: {{ charte_graphique.paiements|default:'#198754' }};
+            --school-notes: {{ charte_graphique.notes|default:'#7C3AED' }};
+            --school-salaires: {{ charte_graphique.salaires|default:'#F59E0B' }};
+            --school-bus: {{ charte_graphique.bus|default:'#0EA5E9' }};
+            --school-cantine: {{ charte_graphique.cantine|default:'#EC4899' }};
+            --school-depenses: {{ charte_graphique.depenses|default:'#DC3545' }};
+            --module-color: var(--school-primary);
+            --kinder-blue: var(--school-primary);
+            --kinder-blue-dark: var(--school-primary-dark);
+            --kinder-blue-light: var(--school-secondary);
+            --kinder-yellow: var(--school-accent);
+            --kinder-green: var(--school-success);
+            --kinder-orange: var(--school-warning);
+            --kinder-pink: var(--school-cantine);
+            --kinder-cyan: var(--school-bus);
+            --bs-primary: var(--school-primary);
+            --bs-primary-rgb: {{ charte_graphique.rgb.primary|default:'53, 99, 174' }};
+            --bs-link-color: var(--school-primary);
+            --bs-link-color-rgb: {{ charte_graphique.rgb.primary|default:'53, 99, 174' }};
+            --bs-link-hover-color: var(--school-primary-dark);
         }
-        .bg-primary { background-color: var(--kinder-blue) !important; }
-        .text-primary { color: var(--kinder-blue) !important; }
-        .border-primary { border-color: var(--kinder-blue) !important; }
+        body.module-eleves { --module-color: var(--school-eleves); }
+        body.module-paiements { --module-color: var(--school-paiements); }
+        body.module-notes { --module-color: var(--school-notes); }
+        body.module-salaires { --module-color: var(--school-salaires); }
+        body.module-bus { --module-color: var(--school-bus); }
+        body.module-cantine { --module-color: var(--school-cantine); }
+        body.module-depenses { --module-color: var(--school-depenses); }
+        .bg-primary { background-color: var(--school-primary) !important; }
+        .text-primary { color: var(--school-primary) !important; }
+        .border-primary { border-color: var(--school-primary) !important; }
         .btn-primary {
-            --bs-btn-bg: #3563AE; --bs-btn-border-color: #3563AE;
-            --bs-btn-hover-bg: #2c5396; --bs-btn-hover-border-color: #274d8c;
-            --bs-btn-active-bg: #244A8A; --bs-btn-active-border-color: #244A8A;
-            --bs-btn-disabled-bg: #3563AE; --bs-btn-disabled-border-color: #3563AE;
+            --bs-btn-bg: var(--school-primary); --bs-btn-border-color: var(--school-primary);
+            --bs-btn-hover-bg: var(--school-primary-dark); --bs-btn-hover-border-color: var(--school-primary-dark);
+            --bs-btn-active-bg: var(--school-secondary); --bs-btn-active-border-color: var(--school-secondary);
+            --bs-btn-disabled-bg: var(--school-primary); --bs-btn-disabled-border-color: var(--school-primary);
         }
         .btn-outline-primary {
-            --bs-btn-color: #3563AE; --bs-btn-border-color: #3563AE;
-            --bs-btn-hover-bg: #3563AE; --bs-btn-hover-border-color: #3563AE;
-            --bs-btn-active-bg: #244A8A; --bs-btn-active-border-color: #244A8A;
+            --bs-btn-color: var(--school-primary); --bs-btn-border-color: var(--school-primary);
+            --bs-btn-hover-bg: var(--school-primary); --bs-btn-hover-border-color: var(--school-primary);
+            --bs-btn-active-bg: var(--school-secondary); --bs-btn-active-border-color: var(--school-secondary);
         }
-        .card-stats { border-left-color: var(--kinder-blue) !important; }
-        a { color: var(--kinder-blue); }
+        .stat-card, .card-stats { border-left-color: var(--module-color) !important; }
+        a { color: var(--school-primary); }
         body { padding-top: 70px; }
         .navbar-brand {
             font-weight: bold;
@@ -175,16 +198,16 @@
             min-height: calc(100vh - 56px);
         }
         .card-stats {
-            border-left: 4px solid #007bff;
+            border-left: 4px solid var(--module-color);
         }
         .card-stats.success {
-            border-left-color: #28a745;
+            border-left-color: var(--school-success) !important;
         }
         .card-stats.warning {
-            border-left-color: #ffc107;
+            border-left-color: var(--school-warning) !important;
         }
         .card-stats.danger {
-            border-left-color: #dc3545;
+            border-left-color: var(--school-danger) !important;
         }
 
         /* Tables avec défilement vertical limité à 15 éléments */
@@ -252,15 +275,16 @@
 
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body class="module-{{ request.resolver_match.app_name|default:'general' }}">
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{% url 'home' %}">
-                <img src="{% static_versioned 'logos/logo.png' %}" alt="Logo Kinder School International" width="40" height="40" loading="eager" decoding="async" fetchpriority="high">
+                {% if user_ecole.logo %}<img src="{{ user_ecole.logo.url }}" alt="Logo {{ user_ecole.nom }}" width="40" height="40" loading="eager">{% else %}<img src="{% static_versioned 'logos/logo.png' %}" alt="Logo Kinder School International" width="40" height="40" loading="eager" decoding="async" fetchpriority="high">{% endif %}
                 <span class="brand-text d-flex flex-column">
-                    <span>Kinder School</span>
-                    <small>INTERNATIONAL</small>
+                    {% if user_ecole %}<span>{{ user_ecole.nom|truncatechars:28 }}</span>
+                    <small>ESPACE SCOLAIRE</small>{% else %}<span>Kinder School</span>
+                    <small>INTERNATIONAL</small>{% endif %}
                 </span>
             </a>
 
@@ -550,6 +574,13 @@
                                 </a></li>
                                 {% endif %}
                                 {% endwith %}
+                                {% endif %}
+
+                                {% if is_admin %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{% url 'eleves:charte_graphique' %}">
+                                    <i class="fas fa-palette me-1"></i>Charte graphique
+                                </a></li>
                                 {% endif %}
 
                                 {% if user.is_superuser or user.is_staff %}

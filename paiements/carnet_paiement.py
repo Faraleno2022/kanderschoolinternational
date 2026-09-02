@@ -18,6 +18,7 @@ from reportlab.lib.units import cm
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from ecole_moderne.security_decorators import require_school_object
+from ecole_moderne.theme import get_school_palette
 from rapports.utils import _draw_header_and_watermark, _get_logo_path
 from utilisateurs.utils import filter_by_user_school
 
@@ -114,6 +115,7 @@ def _construire_donnees_carnet(paiement):
 
 
 def _decorer_page(canvas, doc, *, ecole):
+    palette = get_school_palette(ecole)
     _draw_header_and_watermark(
         canvas,
         doc,
@@ -123,7 +125,7 @@ def _decorer_page(canvas, doc, *, ecole):
     canvas.saveState()
     try:
         canvas.setFont('Helvetica', 8)
-        canvas.setFillColor(colors.HexColor('#64748b'))
+        canvas.setFillColor(colors.HexColor(palette['secondary']))
         canvas.drawRightString(
             A4[0] - 1.2 * cm,
             0.7 * cm,
@@ -153,6 +155,7 @@ def generer_carnet_paiement_pdf(request, paiement_id):
 
     donnees = _construire_donnees_carnet(paiement)
     ecole = donnees['ecole']
+    palette = get_school_palette(ecole)
     eleve = paiement.eleve
     classe = donnees['classe']
 
@@ -170,16 +173,16 @@ def generer_carnet_paiement_pdf(request, paiement_id):
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
         'CarnetTitle', parent=styles['Title'], fontName='Helvetica-Bold',
-        fontSize=18, leading=22, textColor=colors.HexColor('#0d47a1'),
+        fontSize=18, leading=22, textColor=colors.HexColor(palette['primary']),
         alignment=TA_CENTER, spaceAfter=8,
     )
     label_style = ParagraphStyle(
         'CarnetLabel', parent=styles['Normal'], fontName='Helvetica-Bold',
-        fontSize=9, leading=12, textColor=colors.HexColor('#334155'),
+        fontSize=9, leading=12, textColor=colors.HexColor(palette['secondary']),
     )
     value_style = ParagraphStyle(
         'CarnetValue', parent=styles['Normal'], fontName='Helvetica',
-        fontSize=9, leading=12, textColor=colors.HexColor('#0f172a'),
+        fontSize=9, leading=12, textColor=colors.HexColor(palette['text']),
     )
     center_style = ParagraphStyle(
         'CarnetCenter', parent=value_style, alignment=TA_CENTER, leading=11,
@@ -223,9 +226,9 @@ def generer_carnet_paiement_pdf(request, paiement_id):
         colWidths=[2.5 * cm, 7.4 * cm, 7.2 * cm],
     )
     identite.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#eff6ff')),
-        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#93c5fd')),
-        ('INNERGRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#bfdbfe')),
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(palette['light'])),
+        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor(palette['primary'])),
+        ('INNERGRID', (0, 0), (-1, -1), 0.35, colors.HexColor(palette['primary_soft'])),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('LEFTPADDING', (0, 0), (-1, -1), 8),
         ('RIGHTPADDING', (0, 0), (-1, -1), 8),
@@ -253,10 +256,10 @@ def generer_carnet_paiement_pdf(request, paiement_id):
         colWidths=[4.25 * cm] * 4,
     )
     resume.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d47a1')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(palette['primary'])),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#f8fafc')),
-        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#0d47a1')),
+        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor(palette['primary'])),
         ('INNERGRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#cbd5e1')),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
@@ -291,8 +294,8 @@ def generer_carnet_paiement_pdf(request, paiement_id):
         hAlign='CENTER',
     )
     historique.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#dbeafe')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#0d47a1')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(palette['primary_soft'])),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor(palette['primary'])),
         ('BOX', (0, 0), (-1, -1), 0.9, colors.HexColor('#64748b')),
         ('INNERGRID', (0, 0), (-1, -1), 0.45, colors.HexColor('#94a3b8')),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),

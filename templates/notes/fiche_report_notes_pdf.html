@@ -37,7 +37,7 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            opacity: 0.08;
+            opacity: {{ ecole.opacite_filigrane_css|default:'0.08' }};
             z-index: -1;
             pointer-events: none;
         }
@@ -52,7 +52,7 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 8px;
-            border-bottom: 2px solid #1a5276;
+            border-bottom: 2px solid {{ ecole.couleur_principale|default:'#1a5276' }};
             padding-bottom: 5px;
         }
         
@@ -68,7 +68,7 @@
         
         .header-center h1 {
             font-size: 18px;
-            color: #1a5276;
+            color: {{ ecole.couleur_principale|default:'#1a5276' }};
             margin-bottom: 2px;
         }
         
@@ -91,7 +91,7 @@
         
         .info-row span {
             padding: 2px 5px;
-            background: #e8f4f8;
+            background: {{ ecole.couleur_fond_clair|default:'#e8f4f8' }};
             border-radius: 3px;
         }
         
@@ -109,7 +109,7 @@
         }
         
         th {
-            background: #1a5276;
+            background: {{ ecole.couleur_principale|default:'#1a5276' }};
             color: white;
             font-weight: bold;
             font-size: 8px;
@@ -148,19 +148,19 @@
         th.col-matiere {
             min-width: 25px;
             max-width: 40px;
-            background: #2c3e50;
+            background: {{ ecole.couleur_secondaire|default:'#2c3e50' }};
         }
         
         th.col-moyenne {
             min-width: 30px;
-            background: #27ae60;
+            background: {{ ecole.couleur_succes|default:'#27ae60' }};
             writing-mode: horizontal-tb;
             height: auto;
         }
         
         th.col-rang {
             min-width: 25px;
-            background: #e74c3c;
+            background: {{ ecole.couleur_danger|default:'#e74c3c' }};
             writing-mode: horizontal-tb;
             height: auto;
         }
@@ -218,7 +218,7 @@
 </head>
 <body>
     <!-- Filigrane avec le logo de l'école -->
-    {% if logo_base64 %}
+    {% if logo_base64 and ecole.afficher_filigrane %}
     <div class="watermark">
         <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">
     </div>

@@ -1,10 +1,15 @@
 from django.db import models, transaction
 from django.contrib.auth.models import User
-from django.core.validators import RegexValidator
+from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from decimal import Decimal
 import unicodedata
 from synchronisation.mixins import SyncTrackedModel
 from eleves.validators import validate_photo_size, validate_logo_size
+
+HEX_COLOR_VALIDATOR = RegexValidator(
+    regex=r'^#[0-9A-Fa-f]{6}$',
+    message='Saisissez une couleur hexadécimale valide, par exemple #3563AE.',
+)
 
 class Ecole(SyncTrackedModel):
     """Modèle pour représenter une école"""
@@ -54,6 +59,30 @@ class Ecole(SyncTrackedModel):
     ire = models.CharField(max_length=100, blank=True, null=True, verbose_name="IRE")
     dpe = models.CharField(max_length=100, blank=True, null=True, verbose_name="DPE")
     desee = models.CharField(max_length=100, blank=True, null=True, verbose_name="DESEE")
+
+    # Charte graphique utilisée par l'interface, les bulletins et les exports.
+    couleur_principale = models.CharField(max_length=7, default='#3563AE', validators=[HEX_COLOR_VALIDATOR], verbose_name='Couleur principale')
+    couleur_secondaire = models.CharField(max_length=7, default='#244A8A', validators=[HEX_COLOR_VALIDATOR], verbose_name='Couleur secondaire')
+    couleur_accent = models.CharField(max_length=7, default='#FFC83D', validators=[HEX_COLOR_VALIDATOR], verbose_name="Couleur d'accent")
+    couleur_fond_clair = models.CharField(max_length=7, default='#EEF4FF', validators=[HEX_COLOR_VALIDATOR], verbose_name='Fond clair des documents')
+    couleur_texte = models.CharField(max_length=7, default='#1F2937', validators=[HEX_COLOR_VALIDATOR], verbose_name='Couleur du texte')
+    couleur_succes = models.CharField(max_length=7, default='#198754', validators=[HEX_COLOR_VALIDATOR], verbose_name='Succès / favorable')
+    couleur_avertissement = models.CharField(max_length=7, default='#F59E0B', validators=[HEX_COLOR_VALIDATOR], verbose_name='Avertissement / attention')
+    couleur_danger = models.CharField(max_length=7, default='#DC3545', validators=[HEX_COLOR_VALIDATOR], verbose_name='Danger / défavorable')
+    couleur_carte_eleves = models.CharField(max_length=7, default='#3563AE', validators=[HEX_COLOR_VALIDATOR], verbose_name='Cartes Élèves')
+    couleur_carte_paiements = models.CharField(max_length=7, default='#198754', validators=[HEX_COLOR_VALIDATOR], verbose_name='Cartes Paiements')
+    couleur_carte_notes = models.CharField(max_length=7, default='#7C3AED', validators=[HEX_COLOR_VALIDATOR], verbose_name='Cartes Notes')
+    couleur_carte_salaires = models.CharField(max_length=7, default='#F59E0B', validators=[HEX_COLOR_VALIDATOR], verbose_name='Cartes Salaires')
+    couleur_carte_bus = models.CharField(max_length=7, default='#0EA5E9', validators=[HEX_COLOR_VALIDATOR], verbose_name='Cartes Bus')
+    couleur_carte_cantine = models.CharField(max_length=7, default='#EC4899', validators=[HEX_COLOR_VALIDATOR], verbose_name='Cartes Cantine')
+    couleur_carte_depenses = models.CharField(max_length=7, default='#DC3545', validators=[HEX_COLOR_VALIDATOR], verbose_name='Cartes Dépenses')
+    afficher_filigrane = models.BooleanField(default=True, verbose_name='Afficher le logo en filigrane sur les documents')
+    opacite_filigrane = models.FloatField(
+        default=0.08,
+        validators=[MinValueValidator(0.0), MaxValueValidator(0.25)],
+        verbose_name='Opacité du filigrane',
+        help_text='Valeur comprise entre 0 et 0,25. Recommandé : 0,08.',
+    )
     date_creation = models.DateTimeField(auto_now_add=True)
     etat = models.CharField(max_length=20, choices=ETAT_CHOICES, default="BROUILLON", db_index=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='ecoles_creees')
@@ -83,6 +112,12 @@ class Ecole(SyncTrackedModel):
         from synchronisation.context import mute_sync
         with mute_sync():
             return super().delete(*args, **kwargs)
+
+    @property
+    def opacite_filigrane_css(self):
+        """Opacité sérialisée avec un point, y compris en locale française."""
+        value = max(0.0, min(0.25, float(self.opacite_filigrane or 0)))
+        return f"{value:.2f}".rstrip("0").rstrip(".")
 
     @property
     def tous_telephones(self):

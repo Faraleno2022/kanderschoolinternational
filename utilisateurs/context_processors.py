@@ -1,6 +1,7 @@
 import os
 from .models import Profil
 from .permissions import get_user_permissions, check_comptable_restrictions
+from ecole_moderne.theme import get_school_palette
 
 def user_context(request):
     """
@@ -15,6 +16,7 @@ def user_context(request):
         'user_restrictions': {},
         'annee_active': None,
         'nouvelle_annee_status': {'due': False},
+        'charte_graphique': get_school_palette(),
         # Mode hors-ligne : True quand lancé depuis l'exe PyInstaller
         'is_offline': os.environ.get('OFFLINE_MODE', '0') == '1',
     }
@@ -29,6 +31,7 @@ def user_context(request):
                 'is_admin': request.user.is_superuser or profil.role == 'ADMIN',
                 'user_permissions': get_user_permissions(request.user),
                 'user_restrictions': check_comptable_restrictions(request.user),
+                'charte_graphique': get_school_palette(profil.ecole),
             })
             # Ajouter l'année scolaire active au contexte global
             if profil.ecole:
@@ -42,6 +45,7 @@ def user_context(request):
             context.update({
                 'user_permissions': get_user_permissions(request.user),
                 'user_restrictions': check_comptable_restrictions(request.user),
+                'charte_graphique': get_school_palette(profil.ecole),
             })
 
     return context

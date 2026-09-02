@@ -41,7 +41,7 @@
             }
             
             th {
-                background-color: #f0f0f0 !important;
+                background-color: {{ charte_graphique.light|default:'#f0f0f0' }} !important;
                 font-weight: bold !important;
                 font-size: 5pt !important;
                 height: 60px !important;
@@ -131,7 +131,7 @@
         .header {
             text-align: center;
             margin-bottom: 15px;
-            border-bottom: 2px solid #333;
+            border-bottom: 2px solid {{ charte_graphique.primary|default:'#3563AE' }};
             padding-bottom: 10px;
         }
         
@@ -173,7 +173,7 @@
         }
         
         th {
-            background-color: #f0f0f0;
+            background-color: {{ charte_graphique.light|default:'#f0f0f0' }};
             font-weight: bold;
             font-size: 6pt;
             writing-mode: vertical-rl;
@@ -266,7 +266,7 @@
 </head>
 <body>
     <div class="print-button no-print">
-        <button onclick="window.print()" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+        <button onclick="window.print()" style="padding: 10px 20px; background: {{ charte_graphique.primary|default:'#3563AE' }}; color: white; border: none; border-radius: 5px; cursor: pointer;">
             🖨️ Imprimer
         </button>
         <button onclick="window.close()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">
@@ -275,7 +275,7 @@
     </div>
     
     <div class="header">
-        <h1>RÉPUBLIQUE DE GUINÉE</h1>
+        <h1 style='color:{{ charte_graphique.primary|default:'#3563AE' }}'>{% if user_ecole %}{{ user_ecole.nom|upper }}{% else %}RÉPUBLIQUE DE GUINÉE{% endif %}</h1>
         <h2>MINISTÈRE DE L'ÉDUCATION NATIONALE</h2>
         <h3>Tableau des Notes - {{ classe_selectionnee.nom }} - {{ periode_selectionnee }}</h3>
     </div>

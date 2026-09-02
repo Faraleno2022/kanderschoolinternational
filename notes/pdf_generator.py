@@ -12,6 +12,8 @@ from io import BytesIO
 from django.http import HttpResponse
 import os
 from .calculs_moyennes import detecter_niveau_scolaire
+from ecole_moderne.pdf_utils import draw_logo_watermark
+from ecole_moderne.theme import get_school_palette
 
 
 def generer_bulletin_pdf(eleve_data, classe, periode, periode_libelle):
@@ -21,6 +23,8 @@ def generer_bulletin_pdf(eleve_data, classe, periode, periode_libelle):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1*cm, bottomMargin=1*cm)
     elements = []
+    ecole = getattr(classe, 'ecole', None)
+    palette = get_school_palette(ecole)
     
     # Styles
     styles = getSampleStyleSheet()
@@ -28,7 +32,7 @@ def generer_bulletin_pdf(eleve_data, classe, periode, periode_libelle):
         'CustomTitle',
         parent=styles['Heading1'],
         fontSize=16,
-        textColor=colors.HexColor('#007bff'),
+        textColor=colors.HexColor(palette['primary']),
         spaceAfter=12,
         alignment=1  # Center
     )
@@ -37,7 +41,7 @@ def generer_bulletin_pdf(eleve_data, classe, periode, periode_libelle):
         'CustomHeader',
         parent=styles['Heading2'],
         fontSize=12,
-        textColor=colors.HexColor('#333333'),
+        textColor=colors.HexColor(palette['text']),
         spaceAfter=6
     )
     
@@ -57,8 +61,8 @@ def generer_bulletin_pdf(eleve_data, classe, periode, periode_libelle):
     
     info_table = Table(info_data, colWidths=[3*cm, 6*cm, 3*cm, 6*cm])
     info_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#e9ecef')),
-        ('BACKGROUND', (2, 0), (2, -1), colors.HexColor('#e9ecef')),
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor(palette['light'])),
+        ('BACKGROUND', (2, 0), (2, -1), colors.HexColor(palette['light'])),
         ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
@@ -152,7 +156,7 @@ def generer_bulletin_pdf(eleve_data, classe, periode, periode_libelle):
     notes_table = Table(notes_data, colWidths=[7*cm, 2*cm, 3*cm, 3*cm, 3*cm])
     notes_table.setStyle(TableStyle([
         # En-tête
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#007bff')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(palette['primary'])),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 11),
@@ -166,7 +170,7 @@ def generer_bulletin_pdf(eleve_data, classe, periode, periode_libelle):
         ('ALIGN', (1, 1), (-1, -2), 'CENTER'),
         
         # Ligne de total
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f8f9fa')),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor(palette['light'])),
         ('TEXTCOLOR', (0, -1), (-1, -1), colors.black),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
         ('FONTSIZE', (0, -1), (-1, -1), 11),
@@ -191,7 +195,10 @@ def generer_bulletin_pdf(eleve_data, classe, periode, periode_libelle):
     elements.append(Spacer(1, 2*cm))
     
     # Construire le PDF
-    doc.build(elements)
+    on_page = lambda canvas, document: draw_logo_watermark(
+        canvas, document.pagesize[0], document.pagesize[1], ecole=ecole
+    )
+    doc.build(elements, onFirstPage=on_page, onLaterPages=on_page)
     buffer.seek(0)
     return buffer
 
@@ -203,6 +210,7 @@ def generer_bulletins_classe_pdf(eleves_avec_notes, classe, periode, periode_lib
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1*cm, bottomMargin=1*cm)
     elements = []
+    ecole = getattr(classe, 'ecole', None)
     
     # Ajouter le total d'élèves à chaque élève_data
     total_eleves = len(eleves_avec_notes)
@@ -219,7 +227,10 @@ def generer_bulletins_classe_pdf(eleves_avec_notes, classe, periode, periode_lib
             elements.append(PageBreak())
     
     # Construire le PDF
-    doc.build(elements)
+    on_page = lambda canvas, document: draw_logo_watermark(
+        canvas, document.pagesize[0], document.pagesize[1], ecole=ecole
+    )
+    doc.build(elements, onFirstPage=on_page, onLaterPages=on_page)
     buffer.seek(0)
     return buffer
 
@@ -229,6 +240,7 @@ def generer_elements_bulletin(eleve_data, classe, periode, periode_libelle):
     Génère les éléments d'un bulletin (sans créer de document)
     """
     elements = []
+    palette = get_school_palette(getattr(classe, 'ecole', None))
     
     # Styles
     styles = getSampleStyleSheet()
@@ -236,7 +248,7 @@ def generer_elements_bulletin(eleve_data, classe, periode, periode_libelle):
         'CustomTitle',
         parent=styles['Heading1'],
         fontSize=16,
-        textColor=colors.HexColor('#007bff'),
+        textColor=colors.HexColor(palette['primary']),
         spaceAfter=12,
         alignment=1  # Center
     )
@@ -245,7 +257,7 @@ def generer_elements_bulletin(eleve_data, classe, periode, periode_libelle):
         'CustomHeader',
         parent=styles['Heading2'],
         fontSize=12,
-        textColor=colors.HexColor('#333333'),
+        textColor=colors.HexColor(palette['text']),
         spaceAfter=6
     )
     
@@ -265,8 +277,8 @@ def generer_elements_bulletin(eleve_data, classe, periode, periode_libelle):
     
     info_table = Table(info_data, colWidths=[3*cm, 6*cm, 3*cm, 6*cm])
     info_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#e9ecef')),
-        ('BACKGROUND', (2, 0), (2, -1), colors.HexColor('#e9ecef')),
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor(palette['light'])),
+        ('BACKGROUND', (2, 0), (2, -1), colors.HexColor(palette['light'])),
         ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
@@ -360,7 +372,7 @@ def generer_elements_bulletin(eleve_data, classe, periode, periode_libelle):
     notes_table = Table(notes_data, colWidths=[7*cm, 2*cm, 3*cm, 3*cm, 3*cm])
     notes_table.setStyle(TableStyle([
         # En-tête
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#007bff')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(palette['primary'])),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 11),
@@ -374,7 +386,7 @@ def generer_elements_bulletin(eleve_data, classe, periode, periode_libelle):
         ('ALIGN', (1, 1), (-1, -2), 'CENTER'),
         
         # Ligne de total
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f8f9fa')),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor(palette['light'])),
         ('TEXTCOLOR', (0, -1), (-1, -1), colors.black),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
         ('FONTSIZE', (0, -1), (-1, -1), 11),

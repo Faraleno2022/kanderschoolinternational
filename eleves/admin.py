@@ -1,11 +1,13 @@
+from django import forms
 from django.contrib import admin
 from django.utils.html import format_html
+from .forms_charte import COLOR_FIELDS
 from .models import Ecole, Classe, Eleve, EleveCorbeille, GrilleTarifaire
 
 
 @admin.register(Ecole)
 class EcoleAdmin(admin.ModelAdmin):
-    list_display = ("nom", "etat", "code_prefixe", "telephone", "email", "directeur", "censeur", "created_by", "logo_mini")
+    list_display = ("nom", "etat", "code_prefixe", "telephone", "email", "directeur", "censeur", "created_by", "charte_apercu", "logo_mini")
     list_filter = ("etat",)
     search_fields = ("nom", "directeur", "censeur", "telephone", "email")
     readonly_fields = ("logo_preview", "image_preview")
@@ -24,8 +26,38 @@ class EcoleAdmin(admin.ModelAdmin):
             "fields": ("logo", "logo_preview", "image", "image_preview"),
             "description": "Logo pour filigrane et en-tetes. Photo de l'ecole pour le livret scolaire."
         }),
+        ("Charte graphique", {
+            "fields": (
+                "couleur_principale", "couleur_secondaire", "couleur_accent",
+                "couleur_fond_clair", "couleur_texte",
+                "couleur_succes", "couleur_avertissement", "couleur_danger",
+                "couleur_carte_eleves", "couleur_carte_paiements",
+                "couleur_carte_notes", "couleur_carte_salaires",
+                "couleur_carte_bus", "couleur_carte_cantine",
+                "couleur_carte_depenses", "afficher_filigrane", "opacite_filigrane",
+            ),
+            "description": "Palette appliquee aux tableaux de bord, bulletins et documents PDF/Excel.",
+        }),
     )
     actions = ("valider_ecoles", "rejeter_ecoles")
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name in COLOR_FIELDS and formfield:
+            formfield.widget = forms.TextInput(attrs={
+                "type": "color",
+                "style": "width:72px;height:42px;padding:3px;",
+            })
+        return formfield
+
+    @admin.display(description="Charte")
+    def charte_apercu(self, obj):
+        return format_html(
+            '<span title="Principale" style="display:inline-block;width:20px;height:20px;border-radius:50%;background:{};border:1px solid #aaa"></span> '
+            '<span title="Secondaire" style="display:inline-block;width:20px;height:20px;border-radius:50%;background:{};border:1px solid #aaa"></span> '
+            '<span title="Accent" style="display:inline-block;width:20px;height:20px;border-radius:50%;background:{};border:1px solid #aaa"></span>',
+            obj.couleur_principale, obj.couleur_secondaire, obj.couleur_accent,
+        )
 
     def delete_queryset(self, request, queryset):
         """Suppression en masse : passer par delete() de chaque instance pour

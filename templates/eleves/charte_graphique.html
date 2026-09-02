@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+
+{% block title %}Charte graphique — {{ ecole.nom }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .theme-shell { max-width: 1220px; margin: 0 auto; }
+    .theme-section { border: 0; border-radius: 18px; box-shadow: 0 8px 30px rgba(15, 23, 42, .08); }
+    .theme-section .card-header { background: transparent; border: 0; padding: 1.25rem 1.25rem .25rem; }
+    .color-field { display: grid; grid-template-columns: 54px 1fr; gap: .75rem; align-items: center; }
+    .color-field input[type="color"] { width: 54px; height: 44px; padding: .2rem; border-radius: 10px; }
+    .color-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; color: #64748b; }
+    .preview-document { background: white; border-radius: 14px; border: 1px solid #dbe3ef; overflow: hidden; min-height: 310px; }
+    .preview-header { background: var(--preview-primary); color: var(--preview-primary-text); padding: 1rem 1.25rem; }
+    .preview-band { background: var(--preview-light); border-left: 5px solid var(--preview-accent); padding: .8rem 1rem; }
+    .preview-table { width: 100%; border-collapse: collapse; }
+    .preview-table th { background: var(--preview-secondary); color: var(--preview-secondary-text); }
+    .preview-table th, .preview-table td { padding: .55rem; border: 1px solid #dbe3ef; font-size: .82rem; }
+    .module-chip { color: #fff; border-radius: 10px; padding: .65rem .75rem; font-weight: 700; min-height: 62px; display: flex; align-items: center; justify-content: center; text-align: center; }
+    .logo-preview { max-height: 72px; max-width: 190px; object-fit: contain; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 theme-shell">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <p class="text-uppercase small fw-bold mb-1" style="color:var(--school-primary)">Personnalisation de l'établissement</p>
+            <h1 class="h3 mb-1"><i class="fas fa-palette me-2"></i>Charte graphique</h1>
+            <p class="text-muted mb-0">Couleurs des cartes, bulletins, rapports et documents PDF de {{ ecole.nom }}.</p>
+        </div>
+        {% if ecole.logo %}<img class="logo-preview" src="{{ ecole.logo.url }}" alt="Logo de {{ ecole.nom }}">{% endif %}
+    </div>
+
+    {% if ecoles %}
+    <form method="get" class="card theme-section mb-4">
+        <div class="card-body d-flex flex-wrap align-items-end gap-3">
+            <div class="flex-grow-1">
+                <label class="form-label fw-semibold" for="ecole-select">École à personnaliser</label>
+                <select class="form-select" id="ecole-select" name="ecole">
+                    {% for item in ecoles %}<option value="{{ item.pk }}"{% if item.pk == ecole.pk %} selected{% endif %}>{{ item.nom }}</option>{% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-outline-primary" type="submit">Afficher</button>
+        </div>
+    </form>
+    {% endif %}
+
+    <form method="post" id="theme-form">
+        {% csrf_token %}
+        <input type="hidden" name="ecole_id" value="{{ ecole.pk }}">
+        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+        <div class="row g-4">
+            <div class="col-xl-7">
+                <section class="card theme-section mb-4">
+                    <div class="card-header"><h2 class="h5 mb-1">Identité visuelle</h2><p class="text-muted small">Palette principale des écrans et documents.</p></div>
+                    <div class="card-body row g-4">
+                        {% for field in form %}
+                            {% if field.name == 'couleur_principale' or field.name == 'couleur_secondaire' or field.name == 'couleur_accent' or field.name == 'couleur_fond_clair' or field.name == 'couleur_texte' %}
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                <div class="color-field">{{ field }}<div><span class="color-code" data-value-for="{{ field.id_for_label }}">{{ field.value }}</span>{% if field.errors %}<div class="text-danger small">{{ field.errors|striptags }}</div>{% endif %}</div></div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <section class="card theme-section mb-4">
+                    <div class="card-header"><h2 class="h5 mb-1">Couleurs d'état</h2><p class="text-muted small">Utilisées pour les résultats favorables, alertes et anomalies.</p></div>
+                    <div class="card-body row g-4">
+                        {% for field in form %}
+                            {% if field.name == 'couleur_succes' or field.name == 'couleur_avertissement' or field.name == 'couleur_danger' %}
+                            <div class="col-md-4"><label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label><div class="color-field">{{ field }}<span class="color-code" data-value-for="{{ field.id_for_label }}">{{ field.value }}</span></div>{% if field.errors %}<div class="text-danger small">{{ field.errors|striptags }}</div>{% endif %}</div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <section class="card theme-section mb-4">
+                    <div class="card-header"><h2 class="h5 mb-1">Cartes par module</h2><p class="text-muted small">Chaque tableau de bord conserve sa propre couleur tout en respectant la charte.</p></div>
+                    <div class="card-body row g-4">
+                        {% for field in form %}
+                            {% if 'couleur_carte_' in field.name %}
+                            <div class="col-md-6"><label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label><div class="color-field">{{ field }}<span class="color-code" data-value-for="{{ field.id_for_label }}">{{ field.value }}</span></div>{% if field.errors %}<div class="text-danger small">{{ field.errors|striptags }}</div>{% endif %}</div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <section class="card theme-section mb-4">
+                    <div class="card-header"><h2 class="h5 mb-1">Logo en filigrane</h2></div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">{{ form.afficher_filigrane }}<label class="form-check-label fw-semibold" for="{{ form.afficher_filigrane.id_for_label }}">{{ form.afficher_filigrane.label }}</label></div>
+                        <label class="form-label fw-semibold" for="{{ form.opacite_filigrane.id_for_label }}">{{ form.opacite_filigrane.label }}</label>
+                        {{ form.opacite_filigrane }}
+                        <div class="form-text">0 = invisible ; 0,08 = discret ; maximum autorisé : 0,25.</div>
+                        {% if form.opacite_filigrane.errors %}<div class="text-danger small">{{ form.opacite_filigrane.errors|striptags }}</div>{% endif %}
+                    </div>
+                </section>
+            </div>
+
+            <div class="col-xl-5">
+                <div class="position-sticky" style="top:88px">
+                    <section class="card theme-section mb-4">
+                        <div class="card-header"><h2 class="h5">Aperçu en direct</h2></div>
+                        <div class="card-body">
+                            <div class="preview-document" id="theme-preview">
+                                <div class="preview-header"><strong>{{ ecole.nom }}</strong><br><small>Bulletin / rapport officiel</small></div>
+                                <div class="p-3">
+                                    <div class="preview-band mb-3"><strong>Élève :</strong> Exemple de présentation<br><small>Année scolaire et classe</small></div>
+                                    <table class="preview-table"><thead><tr><th>Matière</th><th>Note</th></tr></thead><tbody><tr><td>Français</td><td>16 / 20</td></tr><tr><td>Mathématiques</td><td>15 / 20</td></tr></tbody></table>
+                                </div>
+                            </div>
+                            <div class="row g-2 mt-2" id="module-preview">
+                                <div class="col-4"><div class="module-chip" data-module="eleves">Élèves</div></div><div class="col-4"><div class="module-chip" data-module="paiements">Paiements</div></div><div class="col-4"><div class="module-chip" data-module="notes">Notes</div></div>
+                                <div class="col-4"><div class="module-chip" data-module="salaires">Salaires</div></div><div class="col-4"><div class="module-chip" data-module="bus">Bus</div></div><div class="col-4"><div class="module-chip" data-module="cantine">Cantine</div></div>
+                            </div>
+                        </div>
+                    </section>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-lg" type="submit" name="action" value="save"><i class="fas fa-save me-2"></i>Enregistrer et appliquer</button>
+                        <button class="btn btn-outline-primary" type="submit" name="action" value="extract_logo"><i class="fas fa-wand-magic-sparkles me-2"></i>Extraire les couleurs du logo</button>
+                        <button class="btn btn-outline-secondary" type="submit" name="action" value="reset" onclick="return confirm('Restaurer la palette par défaut ?')"><i class="fas fa-rotate-left me-2"></i>Restaurer les couleurs par défaut</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+    const value = name => document.getElementById(`id_${name}`)?.value || '#3563AE';
+    const contrast = hex => {
+        const rgb = hex.replace('#', '').match(/.{2}/g).map(x => parseInt(x, 16) / 255).map(x => x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4));
+        return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2] > .45 ? '#111827' : '#FFFFFF';
+    };
+    const refresh = () => {
+        const preview = document.getElementById('theme-preview');
+        const primary = value('couleur_principale'), secondary = value('couleur_secondaire');
+        preview.style.setProperty('--preview-primary', primary);
+        preview.style.setProperty('--preview-primary-text', contrast(primary));
+        preview.style.setProperty('--preview-secondary', secondary);
+        preview.style.setProperty('--preview-secondary-text', contrast(secondary));
+        preview.style.setProperty('--preview-accent', value('couleur_accent'));
+        preview.style.setProperty('--preview-light', value('couleur_fond_clair'));
+        document.querySelectorAll('.school-color-input').forEach(input => {
+            const output = document.querySelector(`[data-value-for="${input.id}"]`);
+            if (output) output.textContent = input.value.toUpperCase();
+        });
+        document.querySelectorAll('[data-module]').forEach(card => {
+            card.style.background = value(`couleur_carte_${card.dataset.module}`);
+            card.style.color = contrast(value(`couleur_carte_${card.dataset.module}`));
+        });
+    };
+    document.querySelectorAll('.school-color-input').forEach(input => input.addEventListener('input', refresh));
+    refresh();
+})();
+</script>
+{% endblock %}

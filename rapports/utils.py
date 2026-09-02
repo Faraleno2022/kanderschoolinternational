@@ -21,6 +21,7 @@ from salaires.models import Enseignant, EtatSalaire
 from utilisateurs.utils import user_is_admin, user_is_superadmin, user_school
 from django.contrib.staticfiles import finders
 from django.conf import settings
+from ecole_moderne.theme import get_school_palette
 
 
 def _remises_par_categorie(paiements_qs):
@@ -84,11 +85,13 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
     except (TypeError, ValueError):
         width, height = A4
     logo_path = _get_logo_path(ecole)
+    palette = get_school_palette(ecole)
+    filigrane_actif = not ecole or getattr(ecole, 'afficher_filigrane', True)
 
     c.saveState()
     try:
         # Filigrane
-        if logo_path:
+        if logo_path and filigrane_actif:
             # Taille ~500%: on couvre 1.5x la largeur de page (grand watermark)
             wm_width = width * 1.5
             wm_height = wm_width  # carré approximatif, preserveAspectRatio activera le ratio réel
@@ -97,7 +100,7 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
 
             # Opacité visible mais discrète (comme dans les reçus de paiement)
             try:
-                c.setFillAlpha(0.15)
+                c.setFillAlpha(palette['watermark_opacity'])
             except Exception:
                 # Certaines versions de reportlab ne supportent pas l'alpha, on continue sans transparence
                 pass
@@ -129,7 +132,7 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
             c.drawImage(logo_path, margin_x, height - margin_y - 30, width=60, height=30, preserveAspectRatio=True, mask='auto')
 
         # Titre à droite du logo avec taille réduite
-        c.setFillColor(colors.HexColor('#0d47a1'))
+        c.setFillColor(colors.HexColor(palette['primary']))
         c.setFont('Helvetica-Bold', 12)
         school_name = (getattr(ecole, 'nom', None) or "").strip() or "Rapport"
         # Si un titre explicite est fourni par l'appelant, l'afficher à droite
@@ -139,7 +142,7 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
         c.drawString(margin_x + 70, height - margin_y - 10, header_text)
 
         # Ligne de séparation
-        c.setStrokeColor(colors.HexColor('#0d47a1'))
+        c.setStrokeColor(colors.HexColor(palette['primary']))
         c.setLineWidth(0.7)
         c.line(margin_x, height - margin_y - 38, width - margin_x, height - margin_y - 38)
     finally:
