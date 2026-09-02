@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from . import views_sante
 from . import views_evaluation
+from . import views_charte
 from .views_import import (
     importer_eleves, telecharger_template_eleves, exporter_eleves_classe,
     exporter_tous_eleves_modele,
@@ -43,6 +44,9 @@ urlpatterns = [
     path('annees/changer/', changer_annee_active, name='changer_annee_active'),
     path('nouvelle-annee/', nouvelle_annee_apercu, name='nouvelle_annee_apercu'),
     path('nouvelle-annee/creer/', nouvelle_annee_creer, name='nouvelle_annee_creer'),
+
+    # Charte graphique de l'école
+    path('ecoles/charte-graphique/', views_charte.charte_graphique, name='charte_graphique'),
 
     # Création d'école (hors admin)
     path('ecoles/creer/', views.creer_ecole, name='creer_ecole'),

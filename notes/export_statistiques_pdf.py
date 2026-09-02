@@ -17,6 +17,8 @@ from django.http import HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404
 from utilisateurs.permissions import can_manage_notes
+from ecole_moderne.pdf_utils import draw_logo_watermark
+from ecole_moderne.theme import get_school_palette
 
 
 # ── Libellés lisibles pour les codes de période ────────────────────────────
@@ -498,6 +500,7 @@ def exporter_statistiques_pdf(request):
         return HttpResponse("Veuillez sélectionner une classe", status=400)
 
     ecole = _get_ecole(request)
+    palette = get_school_palette(ecole)
 
     # Sécurité : filtrer par école de l'utilisateur
     if ecole:
@@ -523,6 +526,7 @@ def exporter_statistiques_pdf(request):
     
     # Fonction pour dessiner l'en-tête
     def dessiner_entete(y_pos):
+        draw_logo_watermark(c, width, height, ecole=ecole)
         # Logo et nom de l'école
         c.setFont("Helvetica-Bold", 14)
         if ecole:
@@ -538,13 +542,13 @@ def exporter_statistiques_pdf(request):
         
         # Titre du rapport
         c.setFont("Helvetica-Bold", 16)
-        c.setFillColor(colors.HexColor('#2C3E50'))
+        c.setFillColor(colors.HexColor(palette['secondary']))
         c.drawCentredString(width/2, y_pos, "RAPPORT STATISTIQUE D'ÉVOLUTION DU NIVEAU")
         y_pos -= 0.6*cm
         
         # Sous-titre
         c.setFont("Helvetica-Bold", 12)
-        c.setFillColor(colors.HexColor('#3498DB'))
+        c.setFillColor(colors.HexColor(palette['primary']))
         periode_libelle = periode.replace('_', ' ').title()
         c.drawCentredString(width/2, y_pos, f"Classe: {classe_note.nom} - Période: {periode_libelle}")
         y_pos -= 0.4*cm
@@ -555,7 +559,7 @@ def exporter_statistiques_pdf(request):
         y_pos -= 0.8*cm
         
         # Ligne de séparation
-        c.setStrokeColor(colors.HexColor('#3498DB'))
+        c.setStrokeColor(colors.HexColor(palette['primary']))
         c.setLineWidth(2)
         c.line(margin, y_pos, width - margin, y_pos)
         y_pos -= 0.5*cm
@@ -568,7 +572,7 @@ def exporter_statistiques_pdf(request):
     
     # Section 1: Statistiques générales
     c.setFont("Helvetica-Bold", 12)
-    c.setFillColor(colors.HexColor('#2C3E50'))
+    c.setFillColor(colors.HexColor(palette['secondary']))
     c.drawString(margin, y, "1. STATISTIQUES GÉNÉRALES")
     y -= 0.6*cm
     
@@ -590,15 +594,15 @@ def exporter_statistiques_pdf(request):
 
     table = Table(stats_data, colWidths=[8*cm, 4*cm])
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498DB')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(palette['primary'])),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, -1), 10),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#ECF0F1')),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor(palette['light'])),
         ('GRID', (0, 0), (-1, -1), 1, colors.white),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#ECF0F1')]),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(palette['light'])]),
     ]))
     
     table_width, table_height = table.wrap(0, 0)
@@ -610,7 +614,7 @@ def exporter_statistiques_pdf(request):
         graph_repartition = _generer_graphique_repartition(stats)
         if graph_repartition:
             c.setFont("Helvetica-Bold", 12)
-            c.setFillColor(colors.HexColor('#2C3E50'))
+            c.setFillColor(colors.HexColor(palette['secondary']))
             c.drawString(margin, y, "2. RÉPARTITION DES MOYENNES")
             y -= 0.4*cm
             
@@ -628,7 +632,7 @@ def exporter_statistiques_pdf(request):
     # Section 3: Élèves en difficulté
     eleves_diff = stats.get('eleves_en_difficulte', [])
     c.setFont("Helvetica-Bold", 12)
-    c.setFillColor(colors.HexColor('#E74C3C'))
+    c.setFillColor(colors.HexColor(palette['danger']))
     c.drawString(margin, y, f"3. ÉLÈVES EN DIFFICULTÉ ({len(eleves_diff)} élève(s) - Moyenne < {seuil_reussite}/{note_max})")
     y -= 0.6*cm
     
@@ -646,14 +650,14 @@ def exporter_statistiques_pdf(request):
         
         table = Table(eleves_data, colWidths=[1.5*cm, 3*cm, 6*cm, 2.5*cm, 2*cm])
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#E74C3C')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(palette['danger'])),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, -1), 9),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.gray),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FADBD8')]),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(palette['danger_soft'])]),
         ]))
         
         table_width, table_height = table.wrap(0, 0)
@@ -665,14 +669,14 @@ def exporter_statistiques_pdf(request):
         y -= table_height + 0.8*cm
     else:
         c.setFont("Helvetica", 10)
-        c.setFillColor(colors.HexColor('#27AE60'))
+        c.setFillColor(colors.HexColor(palette['success']))
         c.drawString(margin, y, "✓ Aucun élève en difficulté pour cette période. Félicitations !")
         y -= 0.8*cm
     
     # Section 4: Élèves à surveiller
     eleves_suivre = stats.get('eleves_a_suivre', [])
     c.setFont("Helvetica-Bold", 12)
-    c.setFillColor(colors.HexColor('#F39C12'))
+    c.setFillColor(colors.HexColor(palette['warning']))
     c.drawString(margin, y, f"4. ÉLÈVES À SURVEILLER ({len(eleves_suivre)} élève(s) - Moyenne {seuil_reussite}-{seuil_reussite + 2}/{note_max})")
     y -= 0.6*cm
     
@@ -688,13 +692,13 @@ def exporter_statistiques_pdf(request):
         
         table = Table(eleves_data, colWidths=[1.5*cm, 3*cm, 7*cm, 2.5*cm])
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F39C12')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(palette['warning'])),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, -1), 9),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.gray),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FCF3CF')]),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(palette['warning_soft'])]),
         ]))
         
         table_width, table_height = table.wrap(0, 0)
@@ -713,7 +717,7 @@ def exporter_statistiques_pdf(request):
     # Section 5: Recommandations
     recommandations = _generer_recommandations(stats)
     c.setFont("Helvetica-Bold", 12)
-    c.setFillColor(colors.HexColor('#2C3E50'))
+    c.setFillColor(colors.HexColor(palette['secondary']))
     c.drawString(margin, y, "5. RECOMMANDATIONS ET MESURES À PRENDRE")
     y -= 0.6*cm
     
@@ -725,11 +729,11 @@ def exporter_statistiques_pdf(request):
         
         # Couleur selon le type
         if reco['type'] == 'DANGER':
-            couleur = colors.HexColor('#E74C3C')
+            couleur = colors.HexColor(palette['danger'])
         elif reco['type'] == 'WARNING':
-            couleur = colors.HexColor('#F39C12')
+            couleur = colors.HexColor(palette['warning'])
         else:
-            couleur = colors.HexColor('#27AE60')
+            couleur = colors.HexColor(palette['success'])
         
         # Titre de la recommandation
         c.setFont("Helvetica-Bold", 10)
@@ -759,7 +763,7 @@ def exporter_statistiques_pdf(request):
         
         # Actions
         c.setFont("Helvetica-Oblique", 8)
-        c.setFillColor(colors.HexColor('#7F8C8D'))
+        c.setFillColor(colors.HexColor(palette['text']))
         for action in reco.get('actions', [])[:4]:
             c.drawString(margin + 1*cm, y, f"→ {action}")
             y -= 0.3*cm
@@ -773,7 +777,7 @@ def exporter_statistiques_pdf(request):
         y = dessiner_entete(y)
     
     c.setFont("Helvetica-Bold", 12)
-    c.setFillColor(colors.HexColor('#9B59B6'))
+    c.setFillColor(colors.HexColor(palette['accent']))
     c.drawString(margin, y, "6. ASTUCES POUR REHAUSSER LE NIVEAU DES ÉLÈVES")
     y -= 0.6*cm
     
@@ -785,7 +789,7 @@ def exporter_statistiques_pdf(request):
             y = dessiner_entete(y)
         
         c.setFont("Helvetica-Bold", 9)
-        c.setFillColor(colors.HexColor('#8E44AD'))
+        c.setFillColor(colors.HexColor(palette['secondary']))
         c.drawString(margin, y, f"▸ {cat['categorie']}")
         y -= 0.35*cm
         
@@ -1168,6 +1172,7 @@ def exporter_conseils_pdf(request):
         return HttpResponse("Paramètres manquants (classe_id et periode requis)", status=400)
 
     ecole = _get_ecole(request)
+    palette = get_school_palette(ecole)
 
     # Sécurité : filtrer par école de l'utilisateur
     if ecole:
@@ -1193,16 +1198,16 @@ def exporter_conseils_pdf(request):
     margin = 1.5*cm
     
     # Couleurs
-    BLEU_FONCE = colors.HexColor('#1a5276')
-    VERT = colors.HexColor('#27AE60')
-    ORANGE = colors.HexColor('#F39C12')
-    ROUGE = colors.HexColor('#E74C3C')
-    VIOLET = colors.HexColor('#8E44AD')
-    GRIS = colors.HexColor('#7F8C8D')
+    BLEU_FONCE = colors.HexColor(palette['primary'])
+    VERT = colors.HexColor(palette['success'])
+    ORANGE = colors.HexColor(palette['warning'])
+    ROUGE = colors.HexColor(palette['danger'])
+    VIOLET = colors.HexColor(palette['secondary'])
+    GRIS = colors.HexColor(palette['text'])
     
     def dessiner_filigrane():
         """Dessine le logo de l'école en filigrane au centre de la page"""
-        if ecole and hasattr(ecole, 'logo') and ecole.logo:
+        if ecole and getattr(ecole, 'afficher_filigrane', True) and hasattr(ecole, 'logo') and ecole.logo:
             try:
                 c.saveState()
                 # Position centrale
@@ -1212,8 +1217,8 @@ def exporter_conseils_pdf(request):
                 y_center = (height - logo_height) / 2
                 
                 # Appliquer transparence (opacité faible pour filigrane)
-                c.setFillAlpha(0.08)
-                c.setStrokeAlpha(0.08)
+                c.setFillAlpha(palette['watermark_opacity'])
+                c.setStrokeAlpha(palette['watermark_opacity'])
                 
                 # Dessiner le logo en filigrane
                 logo = ImageReader(ecole.logo.path)
@@ -1242,7 +1247,7 @@ def exporter_conseils_pdf(request):
         c.drawCentredString(width/2, y_pos - 0.5*cm, titre_page)
         
         c.setFont("Helvetica-Bold", 10)
-        c.setFillColor(colors.HexColor('#2C3E50'))
+        c.setFillColor(colors.HexColor(palette['secondary']))
         c.drawCentredString(width/2, y_pos - 1.0*cm, f"Classe: {classe_note.nom} - Période: {_libelle_periode(periode)}")
         
         c.setFont("Helvetica", 8)
@@ -1340,7 +1345,7 @@ def exporter_conseils_pdf(request):
                 ('ALIGN', (0, 0), (0, -1), 'CENTER'),
                 ('ALIGN', (2, 0), (2, -1), 'CENTER'),
                 ('GRID', (0, 0), (-1, -1), 0.4, colors.gray),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F4F8FB')]),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(palette['light'])]),
             ]))
 
             table_w, table_h = table.wrap(width - 2*margin, height)
@@ -1523,7 +1528,7 @@ def exporter_conseils_pdf(request):
             ('FONTSIZE', (0, 1), (-1, -1), 8),
             ('ALIGN', (1, 0), (1, -1), 'CENTER'),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.gray),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FFEBEE')]),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(palette['danger_soft'])]),
         ]))
         
         table_w, table_h = table.wrap(width - 2*margin, height)
@@ -1854,7 +1859,7 @@ def exporter_conseils_pdf(request):
             
             # Espace engagement élève
             c.setStrokeColor(ORANGE)
-            c.setFillColor(colors.HexColor('#FFF8E1'))
+            c.setFillColor(colors.HexColor(palette['warning_soft']))
             c.rect(margin + 0.3*cm, y - 2.5*cm, width - 2*margin - 0.6*cm, 2.5*cm, fill=1, stroke=1)
             
             c.setFont("Helvetica-Bold", 9)

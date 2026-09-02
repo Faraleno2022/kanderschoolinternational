@@ -5,19 +5,27 @@
 
 {% block extra_css %}
 <style>
+    :root {
+        --bulletin-primary: {{ ecole.couleur_principale|default:"#3563AE" }};
+        --bulletin-secondary: {{ ecole.couleur_secondaire|default:"#244A8A" }};
+        --bulletin-light: {{ ecole.couleur_fond_clair|default:"#EEF4FF" }};
+        --bulletin-success: {{ ecole.couleur_succes|default:"#198754" }};
+        --bulletin-warning: {{ ecole.couleur_avertissement|default:"#F59E0B" }};
+        --bulletin-danger: {{ ecole.couleur_danger|default:"#DC3545" }};
+    }
     @page {
         size: A4;
         margin: 8mm 6mm 15mm 6mm;
     }
-    
+
     @media print {
         .no-print { display: none !important; }
-        body { 
-            margin: 0; 
+        body {
+            margin: 0;
             padding: 0;
             background: white;
         }
-        .bulletin-container { 
+        .bulletin-container {
             box-shadow: none !important;
             margin: 0 !important;
             padding: 3mm 2mm 8mm 2mm !important;
@@ -47,7 +55,7 @@
             font-size: 8px !important;
             margin: 1px 0 !important;
         }
-        
+
         /* Optimisation pour une seule page */
         .notes-table {
             font-size: 12pt !important;
@@ -81,7 +89,7 @@
             font-size: 6px !important;
             margin: 2px 0 !important;
         }
-        
+
         .devise-nationale {
             font-size: 8px !important;
         }
@@ -174,16 +182,16 @@
         }
         /* Conserver le filigrane même à l'impression */
         .watermark {
-            opacity: 0.06 !important;  /* Légèrement réduit pour l'impression */
+            opacity: {{ ecole.opacite_filigrane_css|default:"0.08" }} !important;
             filter: grayscale(100%) !important;
         }
     }
-    
+
     body {
         font-family: 'Arial', sans-serif;
         background: #f5f5f5;
     }
-    
+
     .bulletin-container {
         background: white;
         width: 210mm;
@@ -195,14 +203,14 @@
         position: relative;
         overflow: visible;
     }
-    
+
     /* Filigrane amélioré */
     .watermark {
         position: absolute;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%) rotate(-30deg);
-        opacity: 0.08;  /* Augmenté pour meilleure visibilité tout en restant discret */
+        opacity: {{ ecole.opacite_filigrane_css|default:"0.08" }};
         width: 450px;
         height: 450px;
         z-index: 0;
@@ -210,7 +218,7 @@
         filter: grayscale(100%);  /* Effet noir et blanc pour le filigrane */
         mix-blend-mode: multiply;  /* Meilleur mélange avec le fond */
     }
-    
+
     /* En-tête */
     .header-section {
         position: relative;
@@ -220,7 +228,7 @@
         padding-bottom: 8px;
         margin-bottom: 10px;
     }
-    
+
     .logo-left {
         position: absolute;
         top: 0;
@@ -229,7 +237,7 @@
         height: 60px;
         object-fit: contain;
     }
-    
+
     .photo-right {
         position: absolute;
         top: 0;
@@ -239,7 +247,7 @@
         border: 2px solid #333;
         object-fit: cover;
     }
-    
+
     /* Drapeau guinéen */
     .drapeau-guinee {
         position: absolute;
@@ -250,29 +258,29 @@
         display: flex;
         border: 1px solid #ccc;
     }
-    
+
     .drapeau-rouge {
         width: 33.33%;
         background-color: #CE1126;
     }
-    
+
     .drapeau-jaune {
         width: 33.33%;
         background-color: #FCD116;
     }
-    
+
     .drapeau-vert {
         width: 33.33%;
         background-color: #009460;
     }
-    
+
     .header-section h1 {
         font-size: 16px;
         margin: 0;
         font-weight: bold;
         color: #000;
     }
-    
+
     /* Devise nationale avec couleurs */
     .devise-nationale {
         font-size: 11px;
@@ -280,26 +288,26 @@
         margin: 2px 0;
         letter-spacing: 1px;
     }
-    
+
     .devise-rouge {
         color: #CE1126;
     }
-    
+
     .devise-jaune {
         color: #FCD116;
     }
-    
+
     .devise-vert {
         color: #009460;
     }
-    
+
     .ministere-education {
         font-size: 10px;
         font-weight: bold;
         color: #333;
         margin: 2px 0;
     }
-    
+
     .nom-ecole {
         font-size: 12px;
         font-weight: bold;
@@ -307,19 +315,19 @@
         margin: 3px 0;
         text-transform: uppercase;
     }
-    
+
     .header-section h2 {
         font-size: 14px;
         margin: 5px 0;
         color: #333;
     }
-    
+
     .header-section p {
         font-size: 10px;
         margin: 2px 0;
         color: #666;
     }
-    
+
     /* Informations élève */
     .info-grid {
         display: grid;
@@ -330,21 +338,21 @@
         position: relative;
         z-index: 1;
     }
-    
+
     .info-item {
         background: #f9f9f9;
         padding: 5px 8px;
         border-radius: 3px;
-        border-left: 3px solid #007bff;
+        border-left: 3px solid var(--bulletin-primary);
     }
-    
+
     .info-item strong {
-        color: #007bff;
+        color: var(--bulletin-primary);
         display: block;
         font-size: 9px;
         margin-bottom: 2px;
     }
-    
+
     /* Tableau des notes */
     .notes-table {
         width: 100%;
@@ -355,12 +363,12 @@
         z-index: 1;
         table-layout: auto; /* Permet au tableau de s'ajuster automatiquement après masquage de colonnes */
     }
-    
+
     .notes-table thead {
         background: linear-gradient(135deg, #64b5f6 0%, #42a5f5 100%);
         color: white;
     }
-    
+
     .notes-table th {
         padding: 10px 6px;
         text-align: center;
@@ -368,35 +376,35 @@
         border: 1px solid rgba(255,255,255,0.2);
         font-size: 16px;
     }
-    
+
     .notes-table td {
         padding: 8px;
         text-align: center;
         border: 1px solid #ddd;
         font-size: 16px;
     }
-    
+
     .notes-table tbody tr:nth-child(even) {
         background: #f9f9f9;
     }
-    
+
     .notes-table tbody tr:hover {
-        background: #e3f2fd;
+        background: var(--bulletin-light);
     }
-    
+
     .notes-table .matiere-col {
         text-align: left;
         font-weight: 700;
         padding-left: 12px;
         font-size: 17px;
     }
-    
+
     .notes-table tfoot {
         background: #333;
         color: white;
         font-weight: bold;
     }
-    
+
     /* Résultats */
     .resultats-section {
         display: grid;
@@ -406,30 +414,30 @@
         position: relative;
         z-index: 1;
     }
-    
+
     .resultat-card {
-        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-        color: #1565c0;
+        background: linear-gradient(135deg, var(--bulletin-light) 0%, #bbdefb 100%);
+        color: var(--bulletin-primary);
         padding: 6px;
         border-radius: 6px;
         text-align: center;
         border: 1px solid #90caf9;
     }
-    
+
     .resultat-card h3 {
         font-size: 10px;
         margin: 0 0 5px 0;
         opacity: 0.9;
         font-weight: bold;
     }
-    
+
     .resultat-card .value {
         font-size: 18px;
         font-weight: bold;
         margin: 5px 0;
-        color: #0d47a1;
+        color: var(--bulletin-primary);
     }
-    
+
     /* Mentions */
     .mention-badge {
         display: inline-block;
@@ -439,39 +447,39 @@
         font-size: 11px;
         margin-top: 5px;
     }
-    
-    .mention-excellent { background: #146c43; color: white; }
-    .mention-tres-bien { background: #28a745; color: white; }
-    .mention-bien { background: #17a2b8; color: white; }
-    .mention-assez-bien { background: #ffc107; color: #000; }
-    .mention-passable { background: #fd7e14; color: white; }
-    .mention-faible { background: #e55353; color: white; }
-    .mention-insuffisant { background: #dc3545; color: white; }
-    
+
+    .mention-excellent { background: var(--bulletin-success); color: white; }
+    .mention-tres-bien { background: var(--bulletin-success); color: white; }
+    .mention-bien { background: var(--bulletin-secondary); color: white; }
+    .mention-assez-bien { background: var(--bulletin-warning); color: #000; }
+    .mention-passable { background: var(--bulletin-warning); color: white; }
+    .mention-faible { background: var(--bulletin-danger); color: white; }
+    .mention-insuffisant { background: var(--bulletin-danger); color: white; }
+
     /* Appréciation */
     .appreciation-section {
         background: #fff3cd;
-        border-left: 3px solid #ffc107;
+        border-left: 3px solid var(--bulletin-warning);
         padding: 6px;
         margin: 6px 0;
         border-radius: 4px;
         position: relative;
         z-index: 1;
     }
-    
+
     .appreciation-section h3 {
         font-size: 11px;
         margin: 0 0 5px 0;
-        color: #856404;
+        color: var(--bulletin-warning);
     }
-    
+
     .appreciation-section p {
         font-size: 10px;
         margin: 0;
         color: #333;
         min-height: 40px;
     }
-    
+
     /* Signatures */
     .signatures-section {
         display: grid;
@@ -482,24 +490,24 @@
         z-index: 1;
         padding: 0 40px;
     }
-    
+
     .signature-box {
         text-align: center;
         font-size: 8px;
     }
-    
+
     .signature-box .title {
         font-weight: bold;
         margin-bottom: 3px;
         color: #333;
     }
-    
+
     .signature-box .space {
         height: 35px;
         border-bottom: 1px solid #333;
         margin: 3px 0;
     }
-    
+
     /* Footer */
     .footer-section {
         text-align: center;
@@ -511,7 +519,7 @@
         position: relative;
         z-index: 1;
     }
-    
+
     /* Formulaire */
     .form-section {
         background: white;
@@ -520,20 +528,20 @@
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         margin-bottom: 20px;
     }
-    
+
     .form-row {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 15px;
         margin-bottom: 15px;
     }
-    
+
     .btn-group {
         display: flex;
         gap: 10px;
         justify-content: center;
     }
-    
+
     /* Styles pour le bouton WhatsApp */
     .btn-whatsapp {
         background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
@@ -542,14 +550,14 @@
         box-shadow: 0 4px 6px rgba(37, 211, 102, 0.3);
         transition: all 0.3s ease;
     }
-    
+
     .btn-whatsapp:hover {
         background: linear-gradient(135deg, #128C7E 0%, #075E54 100%);
         transform: translateY(-2px);
         box-shadow: 0 6px 12px rgba(37, 211, 102, 0.4);
         color: white;
     }
-    
+
     .btn-whatsapp:disabled {
         background: #6c757d;
         cursor: not-allowed;
@@ -587,7 +595,7 @@
     <!-- Formulaire de sélection -->
     <div class="form-section no-print">
         <h2 class="mb-4"><i class="fas fa-graduation-cap me-2"></i>Bulletin Dynamique</h2>
-        
+
         {% if messages %}
         <div class="alert-container mb-3">
             {% for message in messages %}
@@ -598,7 +606,7 @@
             {% endfor %}
         </div>
         {% endif %}
-        
+
         <form method="get">
             <div class="form-row">
                 <div>
@@ -612,7 +620,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                
+
                 {% if classe_selectionnee %}
                 <div>
                     <label class="form-label">Système</label>
@@ -624,7 +632,7 @@
                         <option value="annuel_semestriel" {% if system_type == 'annuel_semestriel' %}selected{% endif %}>Annuel (S1+S2)/2</option>
                     </select>
                 </div>
-                
+
                 <div>
                     <label class="form-label">Période</label>
                     <select name="periode" class="form-select" onchange="this.form.submit()" required>
@@ -636,7 +644,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                
+
                 <div>
                     <label class="form-label">Élève</label>
                     <select name="eleve_id" class="form-select" onchange="this.form.submit()" required>
@@ -650,7 +658,7 @@
                 </div>
                 {% endif %}
             </div>
-            
+
         </form>
     </div>
 
@@ -658,9 +666,9 @@
     {% if not classes %}
     <div class="alert alert-info no-print">
         <i class="fas fa-info-circle me-2"></i>
-        <strong>Aucune classe disponible.</strong> 
+        <strong>Aucune classe disponible.</strong>
         <p class="mb-0 mt-2">
-            Pour créer des classes, accédez au menu 
+            Pour créer des classes, accédez au menu
             <a href="{% url 'notes:gerer_classes' %}" class="alert-link">
                 <i class="fas fa-arrow-right me-1"></i>Gestion des Classes
             </a>
@@ -692,19 +700,19 @@
     <div class="text-center mb-3 no-print btn-group">
         <!-- Bouton PDF individuel -->
         {% if est_maternelle %}
-        <a href="{% url 'notes:bulletin_maternelle_v2_pdf' eleve_selectionne.id classe_selectionnee.id periode_selectionnee %}" 
+        <a href="{% url 'notes:bulletin_maternelle_v2_pdf' eleve_selectionne.id classe_selectionnee.id periode_selectionnee %}"
            class="btn btn-lg btn-danger" target="_blank"
            title="Télécharger le bulletin maternelle de cet élève en PDF">
             <i class="fas fa-file-pdf me-2"></i>PDF Individuel
         </a>
         {% else %}
-        <a href="{% url 'notes:bulletin_intelligent_pdf' eleve_selectionne.id classe_selectionnee.id periode_selectionnee %}" 
+        <a href="{% url 'notes:bulletin_intelligent_pdf' eleve_selectionne.id classe_selectionnee.id periode_selectionnee %}"
            class="btn btn-lg btn-danger" target="_blank"
            title="Télécharger le bulletin de cet élève en PDF">
             <i class="fas fa-file-pdf me-2"></i>PDF Individuel
         </a>
         {% endif %}
-        
+
         <!-- Bouton PDF de toute la classe -->
         {% if est_maternelle %}
         <div class="btn-group">
@@ -722,15 +730,15 @@
             </ul>
         </div>
         {% else %}
-        <a href="{% url 'notes:bulletins_classe_pdf' classe_selectionnee.id periode_selectionnee %}" 
+        <a href="{% url 'notes:bulletins_classe_pdf' classe_selectionnee.id periode_selectionnee %}"
            class="btn btn-lg btn-primary" target="_blank"
            title="Télécharger tous les bulletins de la classe en PDF">
             <i class="fas fa-users me-2"></i>PDF Classe Entière
         </a>
         {% endif %}
-        
+
         <!-- Bouton WhatsApp -->
-        <button class="btn btn-lg btn-whatsapp" 
+        <button class="btn btn-lg btn-whatsapp"
                 onclick="envoyerBulletinWhatsApp()"
                 title="Envoyer le bulletin par WhatsApp au parent">
             <i class="fab fa-whatsapp me-2"></i>Envoyer par WhatsApp
@@ -755,7 +763,7 @@
             </ul>
         </div>
         {% else %}
-        <a href="{% url 'notes:bulletins_classe_pdf' classe_selectionnee.id periode_selectionnee %}" 
+        <a href="{% url 'notes:bulletins_classe_pdf' classe_selectionnee.id periode_selectionnee %}"
            class="btn btn-lg btn-primary" target="_blank"
            title="Télécharger tous les bulletins de la classe en PDF">
             <i class="fas fa-users me-2"></i>PDF Tous les Bulletins
@@ -773,27 +781,27 @@
          data-system-type="{{ system_type }}"
          data-eleve-nom="{{ bulletin_data.eleve.prenom }} {{ bulletin_data.eleve.nom }}">
         <!-- Filigrane -->
-        {% if ecole.logo %}
+        {% if ecole.logo and ecole.afficher_filigrane %}
         <img src="{{ ecole.logo.url }}" class="watermark" alt="Filigrane">
         {% endif %}
-        
+
         <!-- En-tête -->
         <div class="header-section">
             {% if ecole.logo %}
             <img src="{{ ecole.logo.url }}" class="logo-left" alt="Logo">
             {% endif %}
-            
+
             {% if bulletin_data.eleve.photo %}
             <img src="{{ bulletin_data.eleve.photo.url }}" class="photo-right" alt="Photo">
             {% endif %}
-            
+
             <!-- Drapeau Guinéen -->
             <div class="drapeau-guinee">
                 <div class="drapeau-rouge"></div>
                 <div class="drapeau-jaune"></div>
                 <div class="drapeau-vert"></div>
             </div>
-            
+
             <h1>RÉPUBLIQUE DE GUINÉE</h1>
             <div class="devise-nationale">
                 <span class="devise-rouge">Travail</span>-<span class="devise-jaune">Justice</span>-<span class="devise-vert">Solidarité</span>
@@ -803,7 +811,7 @@
             <h2>BULLETIN DE NOTES - {{ bulletin_data.titre_periode|upper }}</h2>
             <p>Année Scolaire {{ annee_scolaire }}</p>
         </div>
-        
+
         <!-- Informations élève -->
         <div class="info-grid">
             <div class="info-item">
@@ -831,13 +839,13 @@
                 {{ bulletin_data.effectif }} élèves
             </div>
         </div>
-        
+
         <!-- Tableau des notes / appréciations -->
         {% if niveau_enseignement == 'MATERNELLE' or est_maternelle %}
         <!-- BULLETIN MATERNELLE: Tableau des appréciations -->
         <table class="notes-table" style="font-size: 11px;">
             <thead>
-                <tr style="background: linear-gradient(135deg, #4a90d9 0%, #667eea 100%);">
+                <tr style="background: linear-gradient(135deg, var(--bulletin-primary) 0%, var(--bulletin-secondary) 100%);">
                     <th style="width: 35%; padding: 10px; font-size: 12px; font-weight: bold; color: white;">DOMAINE D'ACTIVITÉ</th>
                     <th style="width: 25%; padding: 10px; font-size: 12px; font-weight: bold; color: white;">APPRÉCIATION</th>
                     <th style="width: 40%; padding: 10px; font-size: 12px; font-weight: bold; color: white;">OBSERVATIONS</th>
@@ -852,19 +860,19 @@
                             <span style="color: red; font-weight: bold; font-size: 11px;">ABSENT</span>
                         {% elif matiere_note.appreciation %}
                             {% if matiere_note.appreciation == 'A+' %}
-                                <span style="background: #28a745; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">A+ Excellent</span>
+                                <span style="background: var(--bulletin-success); color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">A+ Excellent</span>
                             {% elif matiere_note.appreciation == 'A' %}
-                                <span style="background: #007bff; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">A Très bien</span>
+                                <span style="background: var(--bulletin-primary); color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">A Très bien</span>
                             {% elif matiere_note.appreciation == 'B+' %}
-                                <span style="background: #17a2b8; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">B+ Bien</span>
+                                <span style="background: var(--bulletin-secondary); color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">B+ Bien</span>
                             {% elif matiere_note.appreciation == 'B' %}
                                 <span style="background: #6c757d; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">B Assez bien</span>
                             {% elif matiere_note.appreciation == 'B-' %}
-                                <span style="background: #ffc107; color: #212529; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">B- Moyen</span>
+                                <span style="background: var(--bulletin-warning); color: #212529; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">B- Moyen</span>
                             {% elif matiere_note.appreciation == 'C' %}
-                                <span style="background: #fd7e14; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">C Passable</span>
+                                <span style="background: var(--bulletin-warning); color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">C Passable</span>
                             {% elif matiere_note.appreciation == 'D' %}
-                                <span style="background: #dc3545; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">D Difficultés</span>
+                                <span style="background: var(--bulletin-danger); color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 10px;">D Difficultés</span>
                             {% else %}
                                 <span style="color: #999;">-</span>
                             {% endif %}
@@ -876,21 +884,21 @@
                         {% if matiere_note.commentaire %}
                             {{ matiere_note.commentaire }}
                         {% elif matiere_note.absent %}
-                            <span style="color: #dc3545;">Absent(e) lors de l'évaluation</span>
+                            <span style="color: var(--bulletin-danger);">Absent(e) lors de l'évaluation</span>
                         {% elif matiere_note.appreciation == 'A+' %}
-                            <span style="color: #28a745;">Excellent travail, continue ainsi !</span>
+                            <span style="color: var(--bulletin-success);">Excellent travail, continue ainsi !</span>
                         {% elif matiere_note.appreciation == 'A' %}
-                            <span style="color: #007bff;">Très bon niveau, félicitations !</span>
+                            <span style="color: var(--bulletin-primary);">Très bon niveau, félicitations !</span>
                         {% elif matiere_note.appreciation == 'B+' %}
-                            <span style="color: #17a2b8;">Bon travail, continue tes efforts !</span>
+                            <span style="color: var(--bulletin-secondary);">Bon travail, continue tes efforts !</span>
                         {% elif matiere_note.appreciation == 'B' %}
                             <span style="color: #6c757d;">Assez bon niveau, quelques progrès à faire</span>
                         {% elif matiere_note.appreciation == 'B-' %}
-                            <span style="color: #856404;">Niveau moyen, des efforts nécessaires</span>
+                            <span style="color: var(--bulletin-warning);">Niveau moyen, des efforts nécessaires</span>
                         {% elif matiere_note.appreciation == 'C' %}
-                            <span style="color: #fd7e14;">Passable, un accompagnement est conseillé</span>
+                            <span style="color: var(--bulletin-warning);">Passable, un accompagnement est conseillé</span>
                         {% elif matiere_note.appreciation == 'D' %}
-                            <span style="color: #dc3545;">Éprouve des difficultés, aide nécessaire</span>
+                            <span style="color: var(--bulletin-danger);">Éprouve des difficultés, aide nécessaire</span>
                         {% else %}
                             <span style="color: #999;">-</span>
                         {% endif %}
@@ -987,7 +995,7 @@
                     {% if niveau_enseignement != 'PRIMAIRE' and niveau_enseignement != 'MATERNELLE' %}
                     <td>{{ matiere_note.coefficient }}</td>
                     {% endif %}
-                    
+
                     {% if system_type == 'mensuel' %}
                         <!-- Affichage mensuel classique -->
                         <td>
@@ -1008,7 +1016,7 @@
                                         {% if moy_mens.absent %}
                                             <span style="color: red; font-weight: bold;">ABS</span>
                                         {% elif moy_mens.moyenne is not None %}
-                                            <span style="color: #2c5aa0; font-weight: bold;">{{ moy_mens.moyenne|floatformat:2 }}</span>
+                                            <span style="color: var(--bulletin-primary); font-weight: bold;">{{ moy_mens.moyenne|floatformat:2 }}</span>
                                         {% else %}
                                             <span style="color: #999;">-</span>
                                         {% endif %}
@@ -1026,9 +1034,9 @@
                                     {% endif %}
                                 {% endif %}
                             {% endif %}
-                            
+
                             <!-- Moyenne continue calculée -->
-                            <td style="background: #e8f4fd; font-weight: bold;">
+                            <td style="background: var(--bulletin-light); font-weight: bold;">
                                 {% if matiere_note.moyenne_continue %}
                                     {{ matiere_note.moyenne_continue|floatformat:2 }}
                                 {% else %}
@@ -1036,7 +1044,7 @@
                                 {% endif %}
                             </td>
                         {% endif %}
-                        
+
                         <!-- Composition (toujours affichée) -->
                         <td style="background: #fff3cd; font-weight: bold;">
                             {% if matiere_note.note_composition %}
@@ -1049,11 +1057,11 @@
                         <!-- Affichage bulletin annuel: moyennes par période -->
                         {% if matiere_note.moyennes_mensuelles %}
                             {% for moy_periode in matiere_note.moyennes_mensuelles %}
-                                <td style="background: #e8f4fd;">
+                                <td style="background: var(--bulletin-light);">
                                     {% if moy_periode.absent %}
                                         <span style="color: red; font-weight: bold;">-</span>
                                     {% elif moy_periode.moyenne is not None %}
-                                        <span style="color: #2c5aa0; font-weight: bold;">{{ moy_periode.moyenne|floatformat:2 }}</span>
+                                        <span style="color: var(--bulletin-primary); font-weight: bold;">{{ moy_periode.moyenne|floatformat:2 }}</span>
                                     {% else %}
                                         <span style="color: #999;">-</span>
                                     {% endif %}
@@ -1068,8 +1076,8 @@
                             {% endif %}
                         {% endif %}
                     {% endif %}
-                    
-                    <td style="background: #d4edda; font-weight: bold; color: #155724;">
+
+                    <td style="background: #d4edda; font-weight: bold; color: var(--bulletin-success);">
                         {% if matiere_note.moyenne %}
                             {{ matiere_note.moyenne|floatformat:2 }}
                         {% else %}
@@ -1077,7 +1085,7 @@
                         {% endif %}
                     </td>
                     {% if niveau_enseignement != 'PRIMAIRE' and niveau_enseignement != 'MATERNELLE' %}
-                    <td style="background: #f8d7da; font-weight: bold; color: #721c24;">
+                    <td style="background: #f8d7da; font-weight: bold; color: var(--bulletin-danger);">
                         {% if matiere_note.points %}
                             {{ matiere_note.points|floatformat:2 }}
                         {% else %}
@@ -1103,10 +1111,10 @@
                     <td style="font-weight: bold; color: #495057; text-align: left;">
                         <i class="fas fa-calculator"></i> TOTAUX
                     </td>
-                    
+
                     {% if niveau_enseignement != 'PRIMAIRE' and niveau_enseignement != 'MATERNELLE' %}
                     <!-- Colonne COEF: Total des coefficients -->
-                    <td style="background: #e3f2fd; text-align: center; font-weight: bold; color: #1565c0;">
+                    <td style="background: var(--bulletin-light); text-align: center; font-weight: bold; color: var(--bulletin-primary);">
                         {% if bulletin_data.total_coefficients %}
                             {{ bulletin_data.total_coefficients|floatformat:0 }}
                         {% else %}
@@ -1114,33 +1122,33 @@
                         {% endif %}
                     </td>
                     {% endif %}
-                    
+
                     {% if system_type == 'mensuel' %}
                         <!-- Mensuel: colonne NOTE -->
                         <td style="background: #f1f3f4; text-align: center; font-size: 10px; color: #666;">-</td>
-                        
+
                     {% elif system_type == 'trimestre' %}
                         {% if has_notes_mensuelles %}
                         <!-- Avec notes mensuelles: afficher colonnes mois + Moy.C -->
                         {% if periode == 'TRIMESTRE_1' %}
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.octobre %}{{ bulletin_data.totaux_colonnes.octobre|floatformat:2 }}{% else %}-{% endif %}
                         </td>
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.novembre %}{{ bulletin_data.totaux_colonnes.novembre|floatformat:2 }}{% else %}-{% endif %}
                         </td>
                         {% elif periode == 'TRIMESTRE_2' %}
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.janvier %}{{ bulletin_data.totaux_colonnes.janvier|floatformat:2 }}{% else %}-{% endif %}
                         </td>
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.fevrier %}{{ bulletin_data.totaux_colonnes.fevrier|floatformat:2 }}{% else %}-{% endif %}
                         </td>
                         {% elif periode == 'TRIMESTRE_3' %}
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.avril %}{{ bulletin_data.totaux_colonnes.avril|floatformat:2 }}{% else %}-{% endif %}
                         </td>
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.mai %}{{ bulletin_data.totaux_colonnes.mai|floatformat:2 }}{% else %}-{% endif %}
                         </td>
                         {% endif %}
@@ -1149,34 +1157,34 @@
                         </td>
                         {% endif %}
                         <!-- Composition (toujours affichée) -->
-                        <td style="background: #d4edda; text-align: center; font-weight: bold; color: #155724; font-size: 10px;">
+                        <td style="background: #d4edda; text-align: center; font-weight: bold; color: var(--bulletin-success); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.composition %}{{ bulletin_data.totaux_colonnes.composition|floatformat:2 }}{% else %}-{% endif %}
                         </td>
-                        
+
                     {% elif system_type == 'semestre' %}
                         {% if has_notes_mensuelles %}
                         <!-- Avec notes mensuelles: afficher colonnes mois + Moy.C -->
                         {% if periode == 'SEMESTRE_1' %}
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.octobre %}{{ bulletin_data.totaux_colonnes.octobre|floatformat:2 }}{% else %}-{% endif %}
                         </td>
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.novembre %}{{ bulletin_data.totaux_colonnes.novembre|floatformat:2 }}{% else %}-{% endif %}
                         </td>
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.decembre %}{{ bulletin_data.totaux_colonnes.decembre|floatformat:2 }}{% else %}-{% endif %}
                         </td>
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.janvier %}{{ bulletin_data.totaux_colonnes.janvier|floatformat:2 }}{% else %}-{% endif %}
                         </td>
                         {% elif periode == 'SEMESTRE_2' %}
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.mars %}{{ bulletin_data.totaux_colonnes.mars|floatformat:2 }}{% else %}-{% endif %}
                         </td>
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.avril %}{{ bulletin_data.totaux_colonnes.avril|floatformat:2 }}{% else %}-{% endif %}
                         </td>
-                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: #856404; font-size: 10px;">
+                        <td style="background: #fff3cd; text-align: center; font-weight: bold; color: var(--bulletin-warning); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.mai %}{{ bulletin_data.totaux_colonnes.mai|floatformat:2 }}{% else %}-{% endif %}
                         </td>
                         {% endif %}
@@ -1185,21 +1193,21 @@
                         </td>
                         {% endif %}
                         <!-- Composition (toujours affichée) -->
-                        <td style="background: #d4edda; text-align: center; font-weight: bold; color: #155724; font-size: 10px;">
+                        <td style="background: #d4edda; text-align: center; font-weight: bold; color: var(--bulletin-success); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.composition %}{{ bulletin_data.totaux_colonnes.composition|floatformat:2 }}{% else %}-{% endif %}
                         </td>
-                        
+
                     {% elif system_type == 'annuel_trimestriel' %}
                         <!-- Bulletin annuel trimestriel: colonnes vides pour T1, T2, T3 -->
-                        <td style="background: #e8f4fd; text-align: center; font-weight: bold; color: #2c5aa0; font-size: 10px;">-</td>
-                        <td style="background: #e8f4fd; text-align: center; font-weight: bold; color: #2c5aa0; font-size: 10px;">-</td>
-                        <td style="background: #e8f4fd; text-align: center; font-weight: bold; color: #2c5aa0; font-size: 10px;">-</td>
-                        
+                        <td style="background: var(--bulletin-light); text-align: center; font-weight: bold; color: var(--bulletin-primary); font-size: 10px;">-</td>
+                        <td style="background: var(--bulletin-light); text-align: center; font-weight: bold; color: var(--bulletin-primary); font-size: 10px;">-</td>
+                        <td style="background: var(--bulletin-light); text-align: center; font-weight: bold; color: var(--bulletin-primary); font-size: 10px;">-</td>
+
                     {% elif system_type == 'annuel_semestriel' %}
                         <!-- Bulletin annuel semestriel: colonnes vides pour S1, S2 -->
-                        <td style="background: #e8f4fd; text-align: center; font-weight: bold; color: #2c5aa0; font-size: 10px;">-</td>
-                        <td style="background: #e8f4fd; text-align: center; font-weight: bold; color: #2c5aa0; font-size: 10px;">-</td>
-                        
+                        <td style="background: var(--bulletin-light); text-align: center; font-weight: bold; color: var(--bulletin-primary); font-size: 10px;">-</td>
+                        <td style="background: var(--bulletin-light); text-align: center; font-weight: bold; color: var(--bulletin-primary); font-size: 10px;">-</td>
+
                     {% elif system_type == 'annuel' %}
                         <!-- Annuel: afficher les totaux pour chaque semestre -->
                         <td style="background: #d1ecf1; text-align: center; font-weight: bold; color: #0c5460; font-size: 10px;">
@@ -1209,7 +1217,7 @@
                                 -
                             {% endif %}
                         </td>
-                        <td style="background: #d4edda; text-align: center; font-weight: bold; color: #155724; font-size: 10px;">
+                        <td style="background: #d4edda; text-align: center; font-weight: bold; color: var(--bulletin-success); font-size: 10px;">
                             {% if bulletin_data.totaux_colonnes.composition %}
                                 S2: {{ bulletin_data.totaux_colonnes.composition|floatformat:2 }}
                             {% else %}
@@ -1217,9 +1225,9 @@
                             {% endif %}
                         </td>
                     {% endif %}
-                    
+
                     <!-- Colonne MOY/Moy. Ann.: Somme des moyennes ou tiret pour annuel -->
-                    <td style="background: #e3f2fd; text-align: center; font-weight: bold; color: #1565c0;">
+                    <td style="background: var(--bulletin-light); text-align: center; font-weight: bold; color: var(--bulletin-primary);">
                         {% if system_type == 'annuel_trimestriel' or system_type == 'annuel_semestriel' %}
                             <!-- Pour bulletin annuel: afficher tiret (pas de somme des moyennes) -->
                             -
@@ -1229,10 +1237,10 @@
                             -
                         {% endif %}
                     </td>
-                    
+
                     {% if niveau_enseignement != 'PRIMAIRE' and niveau_enseignement != 'MATERNELLE' %}
                     <!-- Colonne PTS: Total des points -->
-                    <td style="background: #e3f2fd; text-align: center; font-weight: bold; color: #1565c0;">
+                    <td style="background: var(--bulletin-light); text-align: center; font-weight: bold; color: var(--bulletin-primary);">
                         {% if bulletin_data.total_points %}
                             {{ bulletin_data.total_points|floatformat:2 }}
                         {% else %}
@@ -1245,14 +1253,14 @@
         </table>
         {% endif %}
         <!-- Fin du bloc conditionnel MATERNELLE/STANDARD -->
-        
+
         <!-- NOUVEAU: Légende pour les bulletins trimestriels et semestriels (pas pour maternelle) -->
         {% if system_type in 'trimestre,semestre' and bulletin_data.eleve and not est_maternelle %}
         <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 8px; margin: 10px 0; font-size: 9px;">
             <div style="font-weight: bold; margin-bottom: 4px; color: #495057;">📊 LÉGENDE DU TABLEAU :</div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 5px;">
-                <div><span style="color: #2c5aa0; font-weight: bold;">■</span> Notes mensuelles</div>
-                <div><span style="background: #e8f4fd; padding: 1px 3px;">■</span> Moyenne continue</div>
+                <div><span style="color: var(--bulletin-primary); font-weight: bold;">■</span> Notes mensuelles</div>
+                <div><span style="background: var(--bulletin-light); padding: 1px 3px;">■</span> Moyenne continue</div>
                 <div><span style="background: #fff3cd; padding: 1px 3px;">■</span> Composition</div>
                 <div><span style="background: #d4edda; padding: 1px 3px;">■</span> Moyenne finale</div>
                 {% if niveau_enseignement != 'PRIMAIRE' and niveau_enseignement != 'MATERNELLE' %}
@@ -1261,17 +1269,17 @@
                 <div><span style="color: red; font-weight: bold;">ABS</span> = Absent</div>
             </div>
             <div style="margin-top: 4px; font-style: italic; color: #6c757d;">
-                💡 La moyenne continue est calculée à partir des notes mensuelles disponibles. 
+                💡 La moyenne continue est calculée à partir des notes mensuelles disponibles.
                 La moyenne finale = 40% moyenne continue + 60% composition (primaire : composition seule)
             </div>
         </div>
         {% endif %}
-        
+
         <!-- Résultats -->
         {% if niveau_enseignement == 'MATERNELLE' or est_maternelle %}
         <!-- Section résultats pour la maternelle -->
         <div class="resultats-section">
-            <div class="resultat-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+            <div class="resultat-card" style="background: linear-gradient(135deg, var(--bulletin-success) 0%, #20c997 100%);">
                 <h3 style="color: white; font-weight: bold;">TAUX D'ACQUISITION</h3>
                 <div class="value" style="color: white; font-weight: bold; font-size: 1.8em;">
                     {% if bulletin_data.moyenne_generale is not None %}
@@ -1281,7 +1289,7 @@
                     {% endif %}
                 </div>
             </div>
-            <div class="resultat-card" style="background: linear-gradient(135deg, #007bff 0%, #6610f2 100%);">
+            <div class="resultat-card" style="background: linear-gradient(135deg, var(--bulletin-primary) 0%, #6610f2 100%);">
                 <h3 style="color: white; font-weight: bold;">RANG</h3>
                 <div class="value" style="color: white; font-weight: bold; font-size: 1.8em;">
                     {% if bulletin_data.rang %}
@@ -1291,7 +1299,7 @@
                     {% endif %}
                 </div>
             </div>
-            <div class="resultat-card" style="background: linear-gradient(135deg, #fd7e14 0%, #e83e8c 100%);">
+            <div class="resultat-card" style="background: linear-gradient(135deg, var(--bulletin-warning) 0%, #e83e8c 100%);">
                 <h3 style="color: white; font-weight: bold;">APPRÉCIATION</h3>
                 <div class="value" style="color: white; font-weight: bold; font-size: 1.4em;">
                     {% if bulletin_data.mention %}
@@ -1314,11 +1322,11 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Section Analyse du travail de l'enfant (Maternelle) -->
         {% if bulletin_data.analyses_selectionnees %}
-        <div style="margin: 15px 0; padding: 12px; background: #e8f4fd; border-left: 4px solid #007bff; border-radius: 5px;">
-            <h4 style="margin: 0 0 10px 0; color: #007bff; font-size: 12px;">
+        <div style="margin: 15px 0; padding: 12px; background: var(--bulletin-light); border-left: 4px solid var(--bulletin-primary); border-radius: 5px;">
+            <h4 style="margin: 0 0 10px 0; color: var(--bulletin-primary); font-size: 12px;">
                 <i class="fas fa-clipboard-check" style="margin-right: 5px;"></i>ANALYSE DU TRAVAIL DE L'ENFANT
             </h4>
             <ul style="margin: 0; padding-left: 20px; font-size: 10px; color: #333;">
@@ -1328,11 +1336,11 @@
             </ul>
         </div>
         {% endif %}
-        
+
         <!-- Section Recommandations de la monitrice (Maternelle) -->
         {% if bulletin_data.recommandations_selectionnees %}
-        <div style="margin: 15px 0; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 5px;">
-            <h4 style="margin: 0 0 10px 0; color: #856404; font-size: 12px;">
+        <div style="margin: 15px 0; padding: 12px; background: #fff3cd; border-left: 4px solid var(--bulletin-warning); border-radius: 5px;">
+            <h4 style="margin: 0 0 10px 0; color: var(--bulletin-warning); font-size: 12px;">
                 <i class="fas fa-lightbulb" style="margin-right: 5px;"></i>RECOMMANDATIONS DE LA COORDINATRICE
             </h4>
             <ul style="margin: 0; padding-left: 20px; font-size: 10px; color: #333;">
@@ -1361,13 +1369,13 @@
             </div>
         </div>
         {% endif %}
-        
+
         <!-- Appréciation -->
         <div class="appreciation-section">
             <h3><i class="fas fa-comment-dots me-2"></i>APPRÉCIATION DU CONSEIL DE CLASSE</h3>
             <p>{{ bulletin_data.appreciation|default:"Bon travail. Continuez vos efforts." }}</p>
         </div>
-        
+
         <!-- Signatures -->
         <div class="signatures-section">
             <div class="signature-box">
@@ -1381,11 +1389,11 @@
                 <div>Signature</div>
             </div>
         </div>
-        
+
         <!-- Bloc Explicatif du Système de Calcul (pas pour maternelle) -->
         {% if not est_maternelle %}
         <div class="calcul-explanation-section">
-            <h4 style="font-size: 9px; margin: 5px 0 3px 0; padding: 3px; background: #f0f0f0; border-left: 3px solid #0066cc; color: #333;">
+            <h4 style="font-size: 9px; margin: 5px 0 3px 0; padding: 3px; background: #f0f0f0; border-left: 3px solid var(--bulletin-primary); color: #333;">
                 <i class="fas fa-info-circle" style="margin-right: 3px;"></i>
                 MÉTHODE DE CALCUL DES NOTES - SYSTÈME {{ system_type|upper }}
             </h4>
@@ -1454,32 +1462,32 @@
                     </p>
                 {% endif %}
                 <p style="margin: 3px 0 2px 0; color: #333; border-top: 1px dashed #ccc; padding-top: 2px;">
-                    <strong>📋 Mentions :</strong> 
+                    <strong>📋 Mentions :</strong>
                     {% if est_primaire %}
-                    <span style="color: #146c43;">Excellent ≥9</span> | 
-                    <span style="color: #28a745;">Très bien ≥8</span> | 
-                    <span style="color: #17a2b8;">Bien ≥7</span> | 
-                    <span style="color: #ffc107;">Assez bien ≥6</span> | 
-                    <span style="color: #fd7e14;">Passable ≥5</span> | 
-                    <span style="color: #dc3545;">Insuffisant ≥4</span> | 
-                    <span style="color: #e55353;">Faible ≥3</span> | 
-                    <span style="color: #8b0000;">Très faible <3</span>
+                    <span style="color: var(--bulletin-success);">Excellent ≥9</span> |
+                    <span style="color: var(--bulletin-success);">Très bien ≥8</span> |
+                    <span style="color: var(--bulletin-secondary);">Bien ≥7</span> |
+                    <span style="color: var(--bulletin-warning);">Assez bien ≥6</span> |
+                    <span style="color: var(--bulletin-warning);">Passable ≥5</span> |
+                    <span style="color: var(--bulletin-danger);">Insuffisant ≥4</span> |
+                    <span style="color: var(--bulletin-danger);">Faible ≥3</span> |
+                    <span style="color: var(--bulletin-danger);">Très faible <3</span>
                     {% else %}
-                    <span style="color: #146c43;">Excellent ≥18</span> | 
-                    <span style="color: #28a745;">Très bien ≥16</span> | 
-                    <span style="color: #17a2b8;">Bien ≥14</span> | 
-                    <span style="color: #ffc107;">Assez bien ≥12</span> | 
-                    <span style="color: #fd7e14;">Passable ≥10</span> | 
-                    <span style="color: #dc3545;">Insuffisant ≥8</span> | 
-                    <span style="color: #e55353;">Faible ≥6</span> | 
-                    <span style="color: #8b0000;">Très faible <6</span>
+                    <span style="color: var(--bulletin-success);">Excellent ≥18</span> |
+                    <span style="color: var(--bulletin-success);">Très bien ≥16</span> |
+                    <span style="color: var(--bulletin-secondary);">Bien ≥14</span> |
+                    <span style="color: var(--bulletin-warning);">Assez bien ≥12</span> |
+                    <span style="color: var(--bulletin-warning);">Passable ≥10</span> |
+                    <span style="color: var(--bulletin-danger);">Insuffisant ≥8</span> |
+                    <span style="color: var(--bulletin-danger);">Faible ≥6</span> |
+                    <span style="color: var(--bulletin-danger);">Très faible <6</span>
                     {% endif %}
                 </p>
             </div>
         </div>
         {% endif %}
         <!-- Fin bloc explicatif -->
-        
+
         <!-- Footer personnalisé avec infos dynamiques de l'école -->
         <div class="footer-section" style="border-top: 1px solid #ddd; margin-top: 5px; padding-top: 3px; font-size: 7px; text-align: center;">
             <p style="margin: 0; color: #666;">
@@ -1531,7 +1539,7 @@ let currentBulletinData = {};
 
 document.addEventListener('DOMContentLoaded', function() {
     whatsappModal = new bootstrap.Modal(document.getElementById('whatsappModal'));
-    
+
     // Récupérer les données du bulletin depuis les attributs data
     const bulletinContainer = document.getElementById('bulletin');
     if (bulletinContainer) {
@@ -1548,7 +1556,7 @@ document.addEventListener('DOMContentLoaded', function() {
 function envoyerBulletinWhatsApp() {
     console.log('Bouton WhatsApp cliqué');
     console.log('Données bulletin:', currentBulletinData);
-    
+
     // Si les données ne sont pas encore chargées, les récupérer maintenant
     if (!currentBulletinData.eleve_id) {
         const bulletinContainer = document.getElementById('bulletin');
@@ -1563,15 +1571,15 @@ function envoyerBulletinWhatsApp() {
             console.log('Données récupérées:', currentBulletinData);
         }
     }
-    
+
     if (!currentBulletinData.eleve_id) {
         alert('Erreur: Veuillez d\'abord sélectionner un élève pour afficher son bulletin.');
         return;
     }
-    
+
     // Afficher la modal
     whatsappModal.show();
-    
+
     // Charger l'aperçu du message
     chargerApercuWhatsApp();
 }
@@ -1579,7 +1587,7 @@ function envoyerBulletinWhatsApp() {
 function chargerApercuWhatsApp() {
     const content = document.getElementById('whatsappContent');
     const btnConfirmer = document.getElementById('btnConfirmerEnvoi');
-    
+
     // Réinitialiser
     btnConfirmer.disabled = true;
     content.innerHTML = `
@@ -1590,7 +1598,7 @@ function chargerApercuWhatsApp() {
             <p class="mt-2">Préparation du message...</p>
         </div>
     `;
-    
+
     // Appel AJAX pour l'aperçu (inclut classe_id pour générer le lien PDF)
     fetch(`{% url 'notes:apercu_message_whatsapp' %}?eleve_id=${currentBulletinData.eleve_id}&classe_id=${currentBulletinData.classe_id}&periode=${currentBulletinData.periode}&system_type=${currentBulletinData.system_type}`)
         .then(response => response.json())
@@ -1610,10 +1618,10 @@ function chargerApercuWhatsApp() {
 
 function afficherApercuWhatsApp(data) {
     const content = document.getElementById('whatsappContent');
-    
+
     // Stocker le lien WhatsApp pour l'utiliser lors de la confirmation
     window.currentWhatsAppLink = data.whatsapp_link;
-    
+
     content.innerHTML = `
         <div class="row">
             <div class="col-md-6">
@@ -1630,7 +1638,7 @@ function afficherApercuWhatsApp(data) {
                         ` : ''}
                     </div>
                 </div>
-                
+
                 ${data.pdf_url ? `
                 <div class="alert alert-success mt-3">
                     <i class="fas fa-file-pdf me-2"></i>
@@ -1638,7 +1646,7 @@ function afficherApercuWhatsApp(data) {
                     <small>Le lien de téléchargement du bulletin PDF sera inclus dans le message WhatsApp.</small>
                 </div>
                 ` : ''}
-                
+
                 ${!data.telephone ? `
                 <div class="alert alert-warning mt-3">
                     <i class="fas fa-exclamation-triangle me-2"></i>
@@ -1653,7 +1661,7 @@ function afficherApercuWhatsApp(data) {
                 </div>
                 `}
             </div>
-            
+
             <div class="col-md-6">
                 <h6><i class="fab fa-whatsapp me-2"></i>Aperçu du message</h6>
                 <div class="card">
@@ -1664,7 +1672,7 @@ function afficherApercuWhatsApp(data) {
             </div>
         </div>
     `;
-    
+
     // Activer/désactiver le bouton selon la disponibilité du téléphone
     const btnConfirmer = document.getElementById('btnConfirmerEnvoi');
     if (!data.telephone || !data.whatsapp_link) {
@@ -1676,7 +1684,7 @@ function afficherApercuWhatsApp(data) {
 
 function afficherErreurWhatsApp(erreur) {
     const content = document.getElementById('whatsappContent');
-    
+
     content.innerHTML = `
         <div class="alert alert-danger">
             <i class="fas fa-exclamation-circle me-2"></i>
@@ -1691,13 +1699,13 @@ document.getElementById('btnConfirmerEnvoi').addEventListener('click', function(
         alert('Erreur: Lien WhatsApp non disponible');
         return;
     }
-    
+
     // Ouvrir WhatsApp Web dans un nouvel onglet
     window.open(window.currentWhatsAppLink, '_blank');
-    
+
     // Fermer la modal
     whatsappModal.hide();
-    
+
     // Afficher un message de confirmation
     const alertDiv = document.createElement('div');
     alertDiv.className = 'alert alert-success alert-dismissible fade show';
@@ -1707,7 +1715,7 @@ document.getElementById('btnConfirmerEnvoi').addEventListener('click', function(
         Le message a été pré-rempli. Cliquez sur "Envoyer" dans WhatsApp pour transmettre le bulletin.
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
-    
+
     // Insérer l'alerte en haut de la page
     const container = document.querySelector('.container-fluid');
     if (container) {

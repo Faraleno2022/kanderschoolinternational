@@ -7,7 +7,7 @@ except Exception:  # pragma: no cover
     A4 = (595.27, 841.89)
 
 
-def draw_logo_watermark(c, width=None, height=None, *, opacity=0.04, rotate=30, scale=1.5, ecole=None):
+def draw_logo_watermark(c, width=None, height=None, *, opacity=None, rotate=30, scale=1.5, ecole=None):
     """
     Dessine un filigrane (logo) discret et centré sur la page courante du canvas ReportLab.
 
@@ -20,6 +20,14 @@ def draw_logo_watermark(c, width=None, height=None, *, opacity=0.04, rotate=30, 
     """
     if width is None or height is None:
         width, height = A4
+
+    if ecole is not None and not getattr(ecole, 'afficher_filigrane', True):
+        return
+    if ecole is not None:
+        from ecole_moderne.theme import get_school_palette
+        opacity = get_school_palette(ecole)['watermark_opacity']
+    elif opacity is None:
+        opacity = 0.04
 
     # 1) Préférence pour le logo spécifique à l'école s'il est fourni et disponible
     logo_path = None

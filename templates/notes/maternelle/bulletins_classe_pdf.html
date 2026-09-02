@@ -27,7 +27,7 @@
             min-height: 277mm;
             margin: 0 auto;
             padding: 6mm;
-            border: 2px solid #2c3e50;
+            border: 2px solid {{ ecole.couleur_principale|default:'#2c3e50' }};
             position: relative;
             page-break-after: always;
         }
@@ -41,7 +41,7 @@
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 10px;
-            border-bottom: 2px solid #3498db;
+            border-bottom: 2px solid {{ ecole.couleur_secondaire|default:'#3498db' }};
             padding-bottom: 8px;
         }
         
@@ -65,7 +65,7 @@
         .republique {
             font-size: 12pt;
             font-weight: bold;
-            color: #2c3e50;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
         }
         
         .devise {
@@ -78,14 +78,14 @@
         .ecole-nom {
             font-size: 11pt;
             font-weight: bold;
-            color: #2c3e50;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
             text-transform: uppercase;
         }
         
         .bulletin-titre {
             font-size: 13pt;
             font-weight: bold;
-            color: #e74c3c;
+            color: {{ ecole.couleur_danger|default:'#e74c3c' }};
         }
         
         .photo-section {
@@ -113,11 +113,11 @@
         }
         
         .eleve-info {
-            background: #f8f9fa;
+            background: {{ ecole.couleur_fond_clair|default:'#f8f9fa' }};
             padding: 6px 10px;
             border-radius: 5px;
             margin-bottom: 10px;
-            border-left: 3px solid #3498db;
+            border-left: 3px solid {{ ecole.couleur_secondaire|default:'#3498db' }};
             font-size: 9pt;
         }
         
@@ -145,7 +145,7 @@
         }
         
         .section-title {
-            background: linear-gradient(90deg, #2c3e50, #34495e);
+            background: linear-gradient(90deg, {{ ecole.couleur_principale|default:'#2c3e50' }}, #34495e);
             color: white;
             padding: 5px 10px;
             font-size: 9pt;
@@ -167,9 +167,9 @@
         }
         
         .notes-table thead th {
-            background: #ecf0f1;
+            background: {{ ecole.couleur_fond_clair|default:'#ecf0f1' }};
             font-weight: bold;
-            color: #2c3e50;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
         }
         
         .notes-table tbody td:first-child {
@@ -178,7 +178,7 @@
         }
         
         .notes-table tfoot {
-            background: #f8f9fa;
+            background: {{ ecole.couleur_fond_clair|default:'#f8f9fa' }};
             font-weight: bold;
         }
         
@@ -191,13 +191,13 @@
             color: white;
         }
         
-        .lettre-a-plus, .lettre-a { background: #27ae60; }
-        .lettre-b-plus, .lettre-b { background: #3498db; }
-        .lettre-b-minus, .lettre-c { background: #f39c12; }
-        .lettre-d { background: #e74c3c; }
+        .lettre-a-plus, .lettre-a { background: {{ ecole.couleur_succes|default:'#27ae60' }}; }
+        .lettre-b-plus, .lettre-b { background: {{ ecole.couleur_secondaire|default:'#3498db' }}; }
+        .lettre-b-minus, .lettre-c { background: {{ ecole.couleur_avertissement|default:'#f39c12' }}; }
+        .lettre-d { background: {{ ecole.couleur_danger|default:'#e74c3c' }}; }
         
         .resultat-box {
-            background: linear-gradient(135deg, #2c3e50, #34495e);
+            background: linear-gradient(135deg, {{ ecole.couleur_principale|default:'#2c3e50' }}, #34495e);
             color: white;
             padding: 8px;
             border-radius: 5px;
@@ -213,7 +213,7 @@
         .moyenne-display {
             display: inline-block;
             background: white;
-            color: #2c3e50;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
             padding: 5px 15px;
             border-radius: 5px;
             margin: 3px;
@@ -239,13 +239,13 @@
             margin-top: 5px;
         }
         
-        .mention-excellent { background: #27ae60; }
+        .mention-excellent { background: {{ ecole.couleur_succes|default:'#27ae60' }}; }
         .mention-tres-bien { background: #2ecc71; }
-        .mention-bien { background: #3498db; }
+        .mention-bien { background: {{ ecole.couleur_secondaire|default:'#3498db' }}; }
         .mention-assez-bien { background: #17a2b8; }
-        .mention-moyen { background: #f39c12; }
+        .mention-moyen { background: {{ ecole.couleur_avertissement|default:'#f39c12' }}; }
         .mention-passable { background: #e67e22; }
-        .mention-eprouve-des-difficultes { background: #e74c3c; }
+        .mention-eprouve-des-difficultes { background: {{ ecole.couleur_danger|default:'#e74c3c' }}; }
         
         .analyse-section, .recommandations-section {
             margin-bottom: 8px;
@@ -286,13 +286,13 @@
             content: "✓";
             position: absolute;
             left: 0;
-            color: #27ae60;
+            color: {{ ecole.couleur_succes|default:'#27ae60' }};
             font-size: 8pt;
         }
         
         .recommandations-section .item-list li:before {
             content: "→";
-            color: #f39c12;
+            color: {{ ecole.couleur_avertissement|default:'#f39c12' }};
         }
         
         .signatures {
@@ -333,7 +333,7 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            opacity: 0.08;
+            opacity: {{ ecole.opacite_filigrane_css|default:'0.08' }};
             pointer-events: none;
             z-index: -1;
         }
@@ -349,7 +349,7 @@
     {% for bulletin in bulletins %}
     <div class="bulletin-page">
         <!-- Filigrane logo -->
-        {% if logo_base64 %}
+        {% if logo_base64 and ecole.afficher_filigrane %}
         <div class="watermark-logo">
             <img src="data:image/png;base64,{{ logo_base64 }}" alt="">
         </div>
@@ -442,7 +442,7 @@
                     <td style="font-weight:500;font-size:9pt;">{{ note.matiere.nom }}</td>
                     <td style="text-align:center;">
                         {% if note.lettre == 'A+' %}
-                        <span style="display:inline-block;width:14px;height:14px;border:2px solid #27ae60;background:#27ae60;"></span>
+                        <span style="display:inline-block;width:14px;height:14px;border:2px solid {{ ecole.couleur_succes|default:'#27ae60' }};background:{{ ecole.couleur_succes|default:'#27ae60' }};"></span>
                         {% else %}
                         <span style="display:inline-block;width:14px;height:14px;border:2px solid #333;"></span>
                         {% endif %}
@@ -456,7 +456,7 @@
                     </td>
                     <td style="text-align:center;">
                         {% if note.lettre == 'B+' %}
-                        <span style="display:inline-block;width:14px;height:14px;border:2px solid #3498db;background:#3498db;"></span>
+                        <span style="display:inline-block;width:14px;height:14px;border:2px solid {{ ecole.couleur_secondaire|default:'#3498db' }};background:{{ ecole.couleur_secondaire|default:'#3498db' }};"></span>
                         {% else %}
                         <span style="display:inline-block;width:14px;height:14px;border:2px solid #333;"></span>
                         {% endif %}
@@ -470,7 +470,7 @@
                     </td>
                     <td style="text-align:center;">
                         {% if note.lettre == 'B-' %}
-                        <span style="display:inline-block;width:14px;height:14px;border:2px solid #f39c12;background:#f39c12;"></span>
+                        <span style="display:inline-block;width:14px;height:14px;border:2px solid {{ ecole.couleur_avertissement|default:'#f39c12' }};background:{{ ecole.couleur_avertissement|default:'#f39c12' }};"></span>
                         {% else %}
                         <span style="display:inline-block;width:14px;height:14px;border:2px solid #333;"></span>
                         {% endif %}
@@ -484,7 +484,7 @@
                     </td>
                     <td style="text-align:center;">
                         {% if note.lettre == 'D' %}
-                        <span style="display:inline-block;width:14px;height:14px;border:2px solid #e74c3c;background:#e74c3c;"></span>
+                        <span style="display:inline-block;width:14px;height:14px;border:2px solid {{ ecole.couleur_danger|default:'#e74c3c' }};background:{{ ecole.couleur_danger|default:'#e74c3c' }};"></span>
                         {% else %}
                         <span style="display:inline-block;width:14px;height:14px;border:2px solid #333;"></span>
                         {% endif %}
@@ -529,7 +529,7 @@
         <!-- Profil de l'enfant -->
         <table class="total-profil-table" style="width:100%;margin-top:15px;border-collapse:collapse;border:1px solid #333;">
             <tr>
-                <td colspan="2" style="padding:8px;border:1px solid #333;font-weight:bold;background:#f8f9fa;font-size:10pt;">Profil de l'enfant</td>
+                <td colspan="2" style="padding:8px;border:1px solid #333;font-weight:bold;background:{{ ecole.couleur_fond_clair|default:'#f8f9fa' }};font-size:10pt;">Profil de l'enfant</td>
             </tr>
             <tr>
                 <td colspan="2" style="padding:15px;border:1px solid #333;font-size:9pt;">

@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 from .models import ClasseNote, MatiereNote, NoteMensuelle, CompositionNote, AppreciationMaternelle
 from eleves.models import Eleve, Classe as ClasseEleve
+from ecole_moderne.pdf_utils import draw_logo_watermark
+from ecole_moderne.theme import get_school_palette
 
 
 def get_notes_eleves_par_matiere(classe, periode, eleves, matieres, est_maternelle=False):
@@ -130,6 +132,7 @@ def exporter_notes_complet_excel(request):
     
     try:
         classe = get_object_or_404(ClasseNote, pk=classe_id)
+        palette = get_school_palette(classe.ecole)
         matieres = list(MatiereNote.objects.filter(classe=classe, actif=True).order_by('nom'))
         
         # Récupérer les élèves
@@ -158,8 +161,8 @@ def exporter_notes_complet_excel(request):
         
         # Styles
         header_font = Font(bold=True, color="FFFFFF", size=10)
-        header_fill = PatternFill(start_color="007BFF", end_color="007BFF", fill_type="solid")
-        matiere_fill = PatternFill(start_color="28A745", end_color="28A745", fill_type="solid")
+        header_fill = PatternFill(start_color=palette['primary'].lstrip('#'), end_color=palette['primary'].lstrip('#'), fill_type="solid")
+        matiere_fill = PatternFill(start_color=palette['success'].lstrip('#'), end_color=palette['success'].lstrip('#'), fill_type="solid")
         center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
         left_align = Alignment(horizontal="left", vertical="center")
         thin_border = Border(
@@ -175,7 +178,7 @@ def exporter_notes_complet_excel(request):
         ws.merge_cells('A1:' + get_column_letter(5 + len(matieres)) + '1')
         nom_ecole = ecole.nom.upper() if ecole else "ÉCOLE"
         ws['A1'] = nom_ecole
-        ws['A1'].font = Font(bold=True, size=14, color="007BFF")
+        ws['A1'].font = Font(bold=True, size=14, color=palette['primary'].lstrip('#'))
         ws['A1'].alignment = center_align
         
         # Titre
@@ -347,6 +350,7 @@ def exporter_notes_complet_pdf(request):
     
     try:
         classe = get_object_or_404(ClasseNote, pk=classe_id)
+        palette = get_school_palette(classe.ecole)
         matieres = list(MatiereNote.objects.filter(classe=classe, actif=True).order_by('nom'))
         
         # Récupérer les élèves
@@ -392,7 +396,7 @@ def exporter_notes_complet_pdf(request):
             'Title',
             parent=styles['Heading1'],
             fontSize=14,
-            textColor=colors.HexColor('#007bff'),
+            textColor=colors.HexColor(palette['primary']),
             alignment=TA_CENTER,
             spaceAfter=4
         )
@@ -500,7 +504,7 @@ def exporter_notes_complet_pdf(request):
         
         # Styles du tableau
         style_commands = [
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#007bff')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(palette['primary'])),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -510,7 +514,7 @@ def exporter_notes_complet_pdf(request):
             ('TOPPADDING', (0, 0), (-1, -1), 3),
             ('BOTTOMPADDING', (0, 1), (-1, -1), 3),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(palette['light'])]),
             ('ALIGN', (2, 1), (2, -1), 'LEFT'),  # Nom complet aligné à gauche
         ]
         
@@ -544,7 +548,10 @@ def exporter_notes_complet_pdf(request):
             elements.append(Paragraph(stats_text, styles['Normal']))
         
         # Construire le PDF
-        doc.build(elements)
+        on_page = lambda canvas, document: draw_logo_watermark(
+            canvas, document.pagesize[0], document.pagesize[1], ecole=ecole
+        )
+        doc.build(elements, onFirstPage=on_page, onLaterPages=on_page)
         buffer.seek(0)
         
         nom_clean = re.sub(r'[^\w\s-]', '', classe.nom).replace(' ', '_')

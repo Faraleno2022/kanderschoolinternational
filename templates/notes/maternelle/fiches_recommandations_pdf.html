@@ -28,7 +28,7 @@
             min-height: 277mm;
             margin: 0 auto;
             padding: 8mm;
-            border: 2px solid #2c3e50;
+            border: 2px solid {{ ecole.couleur_principale|default:'#2c3e50' }};
             position: relative;
             page-break-after: always;
         }
@@ -40,7 +40,7 @@
         .header {
             text-align: center;
             margin-bottom: 12px;
-            border-bottom: 2px solid #3498db;
+            border-bottom: 2px solid {{ ecole.couleur_secondaire|default:'#3498db' }};
             padding-bottom: 8px;
         }
         
@@ -54,7 +54,7 @@
         .republique {
             font-size: 11pt;
             font-weight: bold;
-            color: #2c3e50;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
         }
         
         .devise {
@@ -69,14 +69,14 @@
         .ecole-nom {
             font-size: 12pt;
             font-weight: bold;
-            color: #2c3e50;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
             text-transform: uppercase;
         }
         
         .fiche-titre {
             font-size: 14pt;
             font-weight: bold;
-            color: #e74c3c;
+            color: {{ ecole.couleur_danger|default:'#e74c3c' }};
             margin-top: 5px;
         }
         
@@ -86,11 +86,11 @@
         }
         
         .eleve-info {
-            background: #f8f9fa;
+            background: {{ ecole.couleur_fond_clair|default:'#f8f9fa' }};
             padding: 10px 15px;
             border-radius: 8px;
             margin-bottom: 15px;
-            border-left: 4px solid #3498db;
+            border-left: 4px solid {{ ecole.couleur_secondaire|default:'#3498db' }};
         }
         
         .eleve-info table {
@@ -115,11 +115,11 @@
         }
         
         .section-title.analyse {
-            background: linear-gradient(90deg, #17a2b8, #138496);
+            background: linear-gradient(90deg, {{ ecole.couleur_accent|default:'#17a2b8' }}, #138496);
         }
         
         .section-title.recommandations {
-            background: linear-gradient(90deg, #ffc107, #e0a800);
+            background: linear-gradient(90deg, {{ ecole.couleur_avertissement|default:'#ffc107' }}, #e0a800);
             color: #333;
         }
         

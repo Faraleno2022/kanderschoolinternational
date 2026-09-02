@@ -27,7 +27,7 @@
             max-height: 287mm;
             margin: 0 auto;
             padding: 4mm;
-            border: 1px solid #2c3e50;
+            border: 1px solid {{ ecole.couleur_principale|default:'#2c3e50' }};
             position: relative;
             overflow: hidden;
         }
@@ -38,7 +38,7 @@
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 6px;
-            border-bottom: 1px solid #3498db;
+            border-bottom: 1px solid {{ ecole.couleur_secondaire|default:'#3498db' }};
             padding-bottom: 4px;
         }
         
@@ -62,7 +62,7 @@
         .republique {
             font-size: 10pt;
             font-weight: bold;
-            color: #2c3e50;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
             margin-bottom: 1px;
         }
         
@@ -77,7 +77,7 @@
         .ecole-nom {
             font-size: 10pt;
             font-weight: bold;
-            color: #2c3e50;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
             text-transform: uppercase;
             margin-bottom: 2px;
         }
@@ -85,7 +85,7 @@
         .bulletin-titre {
             font-size: 11pt;
             font-weight: bold;
-            color: #e74c3c;
+            color: {{ ecole.couleur_danger|default:'#e74c3c' }};
             margin-top: 2px;
         }
         
@@ -115,11 +115,11 @@
         
         /* Infos élève */
         .eleve-info {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            background: linear-gradient(135deg, {{ ecole.couleur_fond_clair|default:'#f8f9fa' }} 0%, #e9ecef 100%);
             padding: 4px 8px;
             border-radius: 4px;
             margin-bottom: 6px;
-            border-left: 3px solid #3498db;
+            border-left: 3px solid {{ ecole.couleur_secondaire|default:'#3498db' }};
         }
         
         .eleve-info table {
@@ -138,7 +138,7 @@
         }
         
         .eleve-info .value {
-            color: #2c3e50;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
         }
         
         /* Tableau des notes */
@@ -147,7 +147,7 @@
         }
         
         .section-title {
-            background: linear-gradient(90deg, #2c3e50, #34495e);
+            background: linear-gradient(90deg, {{ ecole.couleur_principale|default:'#2c3e50' }}, #34495e);
             color: white;
             padding: 4px 8px;
             font-size: 9pt;
@@ -170,9 +170,9 @@
         }
         
         .notes-table thead th {
-            background: #ecf0f1;
+            background: {{ ecole.couleur_fond_clair|default:'#ecf0f1' }};
             font-weight: bold;
-            color: #2c3e50;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
         }
         
         .notes-table tbody td:first-child {
@@ -181,7 +181,7 @@
         }
         
         .notes-table tfoot {
-            background: #f8f9fa;
+            background: {{ ecole.couleur_fond_clair|default:'#f8f9fa' }};
             font-weight: bold;
         }
         
@@ -194,10 +194,10 @@
             font-size: 8pt;
         }
         
-        .lettre-A-plus, .lettre-A { background: #27ae60; color: white; }
-        .lettre-B-plus, .lettre-B { background: #3498db; color: white; }
-        .lettre-B-minus, .lettre-C { background: #f39c12; color: white; }
-        .lettre-D { background: #e74c3c; color: white; }
+        .lettre-A-plus, .lettre-A { background: {{ ecole.couleur_succes|default:'#27ae60' }}; color: white; }
+        .lettre-B-plus, .lettre-B { background: {{ ecole.couleur_secondaire|default:'#3498db' }}; color: white; }
+        .lettre-B-minus, .lettre-C { background: {{ ecole.couleur_avertissement|default:'#f39c12' }}; color: white; }
+        .lettre-D { background: {{ ecole.couleur_danger|default:'#e74c3c' }}; color: white; }
         
         /* Section analyse */
         .analyse-section, .recommandations-section {
@@ -238,28 +238,28 @@
             content: "✓";
             position: absolute;
             left: 0;
-            color: #27ae60;
+            color: {{ ecole.couleur_succes|default:'#27ae60' }};
             font-weight: bold;
         }
         
         .recommandations-section .item-list li:before {
             content: "→";
-            color: #f39c12;
+            color: {{ ecole.couleur_avertissement|default:'#f39c12' }};
         }
         
         .commentaire-box {
-            background: #f8f9fa;
+            background: {{ ecole.couleur_fond_clair|default:'#f8f9fa' }};
             padding: 4px;
             border-radius: 3px;
             margin-top: 4px;
             font-style: italic;
             font-size: 9pt;
-            border-left: 2px solid #3498db;
+            border-left: 2px solid {{ ecole.couleur_secondaire|default:'#3498db' }};
         }
         
         /* Résultat général */
         .resultat-general {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            background: linear-gradient(135deg, {{ ecole.couleur_principale|default:'#2c3e50' }} 0%, #34495e 100%);
             color: white;
             padding: 8px;
             border-radius: 5px;
@@ -275,7 +275,7 @@
         .moyenne-box {
             display: inline-block;
             background: white;
-            color: #2c3e50;
+            color: {{ ecole.couleur_principale|default:'#2c3e50' }};
             padding: 4px 15px;
             border-radius: 5px;
             margin: 2px;
@@ -300,13 +300,13 @@
             margin-top: 4px;
         }
         
-        .mention-excellent { background: #27ae60; }
+        .mention-excellent { background: {{ ecole.couleur_succes|default:'#27ae60' }}; }
         .mention-tresbien { background: #2ecc71; }
-        .mention-bien { background: #3498db; }
+        .mention-bien { background: {{ ecole.couleur_secondaire|default:'#3498db' }}; }
         .mention-assezbien { background: #17a2b8; }
-        .mention-moyen { background: #f39c12; }
+        .mention-moyen { background: {{ ecole.couleur_avertissement|default:'#f39c12' }}; }
         .mention-passable { background: #e67e22; }
-        .mention-difficultes { background: #e74c3c; }
+        .mention-difficultes { background: {{ ecole.couleur_danger|default:'#e74c3c' }}; }
         
         /* Signatures */
         .signatures {
@@ -336,7 +336,7 @@
         
         /* Barème */
         .bareme {
-            background: #f8f9fa;
+            background: {{ ecole.couleur_fond_clair|default:'#f8f9fa' }};
             padding: 3px;
             border-radius: 3px;
             margin-bottom: 5px;
@@ -354,7 +354,7 @@
             text-align: center;
             font-size: 9pt;
             color: #7f8c8d;
-            border-top: 1px solid #ecf0f1;
+            border-top: 1px solid {{ ecole.couleur_fond_clair|default:'#ecf0f1' }};
             padding-top: 3px;
         }
         
@@ -364,7 +364,7 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            opacity: 0.08;
+            opacity: {{ ecole.opacite_filigrane_css|default:'0.08' }};
             pointer-events: none;
             z-index: -1;
         }
@@ -379,7 +379,7 @@
 <body>
     <div class="bulletin-container">
         <!-- Filigrane logo -->
-        {% if logo_base64 %}
+        {% if logo_base64 and ecole.afficher_filigrane %}
         <div class="watermark-logo">
             <img src="data:image/png;base64,{{ logo_base64 }}" alt="">
         </div>
@@ -483,7 +483,7 @@
                         <td style="font-weight:500;">{{ note.matiere.nom }}</td>
                         <td style="text-align:center;">
                             {% if note.lettre == 'A+' %}
-                            <span style="display:inline-block;width:12px;height:12px;border:2px solid #27ae60;background:#27ae60;"></span>
+                            <span style="display:inline-block;width:12px;height:12px;border:2px solid {{ ecole.couleur_succes|default:'#27ae60' }};background:{{ ecole.couleur_succes|default:'#27ae60' }};"></span>
                             {% else %}
                             <span style="display:inline-block;width:12px;height:12px;border:1px solid #ccc;"></span>
                             {% endif %}
@@ -497,7 +497,7 @@
                         </td>
                         <td style="text-align:center;">
                             {% if note.lettre == 'B+' %}
-                            <span style="display:inline-block;width:12px;height:12px;border:2px solid #3498db;background:#3498db;"></span>
+                            <span style="display:inline-block;width:12px;height:12px;border:2px solid {{ ecole.couleur_secondaire|default:'#3498db' }};background:{{ ecole.couleur_secondaire|default:'#3498db' }};"></span>
                             {% else %}
                             <span style="display:inline-block;width:12px;height:12px;border:1px solid #ccc;"></span>
                             {% endif %}
@@ -511,7 +511,7 @@
                         </td>
                         <td style="text-align:center;">
                             {% if note.lettre == 'B-' %}
-                            <span style="display:inline-block;width:12px;height:12px;border:2px solid #f39c12;background:#f39c12;"></span>
+                            <span style="display:inline-block;width:12px;height:12px;border:2px solid {{ ecole.couleur_avertissement|default:'#f39c12' }};background:{{ ecole.couleur_avertissement|default:'#f39c12' }};"></span>
                             {% else %}
                             <span style="display:inline-block;width:12px;height:12px;border:1px solid #ccc;"></span>
                             {% endif %}
@@ -525,7 +525,7 @@
                         </td>
                         <td style="text-align:center;">
                             {% if note.lettre == 'D' %}
-                            <span style="display:inline-block;width:12px;height:12px;border:2px solid #e74c3c;background:#e74c3c;"></span>
+                            <span style="display:inline-block;width:12px;height:12px;border:2px solid {{ ecole.couleur_danger|default:'#e74c3c' }};background:{{ ecole.couleur_danger|default:'#e74c3c' }};"></span>
                             {% else %}
                             <span style="display:inline-block;width:12px;height:12px;border:1px solid #ccc;"></span>
                             {% endif %}

@@ -17,7 +17,7 @@
     /* ── En-tête compact ── */
     .header {
         width: 100%;
-        border-bottom: 3px solid #1a6fc4;
+        border-bottom: 3px solid {{ ecole.couleur_principale|default:'#1a6fc4' }};
         padding-bottom: 5px;
         margin-bottom: 6px;
         overflow: hidden;
@@ -31,14 +31,14 @@
     .header-logo img { width: 40px; height: 40px; object-fit: contain; }
     .school-name    { font-size: 13px; font-weight: 700; color: #1a1a2e; }
     .school-details { font-size: 8px; color: #666; }
-    .annee { font-size: 11px; font-weight: 600; color: #1a6fc4; }
+    .annee { font-size: 11px; font-weight: 600; color: {{ ecole.couleur_principale|default:'#1a6fc4' }}; }
     .date  { font-size: 8px; color: #777; }
 
     /* ── Titre ── */
     .main-title { text-align: center; margin-bottom: 8px; }
     .main-title h1 {
         font-size: 16px; font-weight: 800;
-        color: #1a6fc4; text-transform: uppercase; letter-spacing: 2px;
+        color: {{ ecole.couleur_principale|default:'#1a6fc4' }}; text-transform: uppercase; letter-spacing: 2px;
     }
     .subtitle { font-size: 9px; color: #666; margin-top: 2px; }
 
@@ -56,7 +56,7 @@
 
     /* ── Badge carte paysage ── */
     .badge-card {
-        border: 2px solid #1a6fc4;
+        border: 2px solid {{ ecole.couleur_principale|default:'#1a6fc4' }};
         border-radius: 12px;
         overflow: hidden;
         background: #fff;
@@ -92,7 +92,7 @@
         width: 115px;
         height: 145px;
         overflow: hidden;
-        background: linear-gradient(135deg, #4a90d9 0%, #1a6fc4 50%, #0d3b8c 100%);
+        background: linear-gradient(135deg, {{ ecole.couleur_secondaire|default:'#4a90d9' }} 0%, {{ ecole.couleur_principale|default:'#1a6fc4' }} 50%, {{ ecole.couleur_secondaire|default:'#0d3b8c' }} 100%);
         position: relative;
     }
     .badge-photo img {
@@ -129,7 +129,7 @@
     .rang-gold   { background: linear-gradient(135deg, #ffd700, #d4a017); color: #333; }
     .rang-silver { background: linear-gradient(135deg, #d4d4d4, #8a8a8a); color: #333; }
     .rang-bronze { background: linear-gradient(135deg, #cd7f32, #b87333); }
-    .rang-other  { background: #1a6fc4; }
+    .rang-other  { background: {{ ecole.couleur_principale|default:'#1a6fc4' }}; }
 
     /* ── Infos élève à droite ── */
     .badge-niveau {
@@ -143,8 +143,8 @@
         margin-bottom: 5px;
         letter-spacing: 0.5px;
     }
-    .niveau-maternelle  { background: #28a745; }
-    .niveau-primaire    { background: #1a6fc4; }
+    .niveau-maternelle  { background: {{ ecole.couleur_succes|default:'#28a745' }}; }
+    .niveau-primaire    { background: {{ ecole.couleur_principale|default:'#1a6fc4' }}; }
     .niveau-secondaire  { background: #6c757d; }
 
     .badge-name {
@@ -158,7 +158,7 @@
     }
     .badge-classe {
         font-size: 9px;
-        color: #1a6fc4;
+        color: {{ ecole.couleur_principale|default:'#1a6fc4' }};
         font-weight: 600;
         margin-bottom: 8px;
     }
@@ -178,7 +178,7 @@
     }
     .stat-pill:last-child { margin-right: 0; }
 
-    .stat-pill-moyenne { background: #eef4ff; border: 1px solid #c7deff; }
+    .stat-pill-moyenne { background: {{ ecole.couleur_fond_clair|default:'#eef4ff' }}; border: 1px solid #c7deff; }
     .stat-pill-rang    { background: #eefbf0; border: 1px solid #b8e6c0; }
 
     .stat-pill .label {
@@ -193,8 +193,8 @@
         font-size: 11px;
         font-weight: 800;
     }
-    .stat-pill-moyenne .value { color: #1a6fc4; }
-    .stat-pill-rang .value    { color: #28a745; }
+    .stat-pill-moyenne .value { color: {{ ecole.couleur_principale|default:'#1a6fc4' }}; }
+    .stat-pill-rang .value    { color: {{ ecole.couleur_succes|default:'#28a745' }}; }
 
     /* ── Ruban décoratif diagonal pour le top 3 ── */
     .badge-ribbon {
@@ -215,7 +215,7 @@
     .footer {
         margin-top: 8px;
         padding-top: 5px;
-        border-top: 2px solid #1a6fc4;
+        border-top: 2px solid {{ ecole.couleur_principale|default:'#1a6fc4' }};
         overflow: hidden;
         font-size: 8px;
     }
@@ -228,9 +228,12 @@
         width: 130px;
         display: inline-block;
     }
+    .watermark-logo { position: fixed; inset: 20% 15%; opacity: {{ ecole.opacite_filigrane_css|default:'0.08' }}; z-index: -1; text-align: center; }
+    .watermark-logo img { width: 420px; max-height: 420px; object-fit: contain; }
 </style>
 </head>
 <body>
+{% if logo_base64 and ecole.afficher_filigrane %}<div class='watermark-logo'><img src='data:image/png;base64,{{ logo_base64 }}' alt=''></div>{% endif %}
 <div class="page-container">
 
     <!-- En-tête -->
