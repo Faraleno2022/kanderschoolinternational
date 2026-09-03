@@ -49,19 +49,16 @@
     </script>
     {% endblock %}
 
-    {% if is_offline %}
-    <!-- Mode offline : fichiers locaux -->
+    <!-- Bootstrap local : le menu reste utilisable même si le CDN est indisponible. -->
     <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
+    {% if is_offline %}
+    <!-- Mode offline : icônes locales -->
     <link href="{% static 'vendor/fontawesome/all.min.css' %}" rel="stylesheet">
     {% else %}
     <!-- Resource Hints for faster connections -->
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
 
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     {% endif %}
@@ -181,13 +178,58 @@
         .navbar-nav .dropdown-menu {
             font-size: 0.9rem;
         }
-        @media (max-width: 991.98px) {
-            .navbar-nav .nav-item {
+        @media (max-width: 1399.98px) {
+            .app-navbar .container-fluid {
+                flex-wrap: wrap;
+            }
+            .app-navbar .navbar-brand {
+                max-width: calc(100% - 64px);
+                min-width: 0;
+            }
+            .app-navbar .brand-text,
+            .app-navbar .brand-text > span {
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .app-navbar .navbar-toggler {
+                min-width: 44px;
+                min-height: 44px;
+                padding: .5rem;
+                touch-action: manipulation;
+            }
+            .app-navbar .navbar-collapse {
+                flex-basis: 100%;
+                width: 100%;
+                max-height: calc(100vh - 70px);
+                max-height: calc(100dvh - 70px);
+                overflow-x: hidden;
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                padding: .65rem 0 1rem;
+                scrollbar-gutter: stable;
+            }
+            .app-navbar .navbar-nav .nav-item {
                 display: block;
             }
-            .navbar-nav .nav-link {
-                font-size: 0.9rem;
+            .app-navbar .navbar-nav .nav-link,
+            .app-navbar .navbar-nav .btn-link.dropdown-toggle {
+                width: 100%;
+                min-height: 44px;
+                justify-content: flex-start;
+                padding: .7rem .8rem;
+                font-size: .9rem;
                 white-space: normal;
+            }
+            .app-navbar .navbar-nav .dropdown-menu {
+                position: static !important;
+                inset: auto !important;
+                transform: none !important;
+                width: 100%;
+                min-width: 0;
+                margin: .15rem 0 .5rem;
+                max-height: none;
             }
         }
         .sidebar {
@@ -277,7 +319,7 @@
 </head>
 <body class="module-{{ request.resolver_match.app_name|default:'general' }}">
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top">
+    <nav class="navbar navbar-expand-xxl navbar-dark bg-primary fixed-top app-navbar">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{% url 'home' %}">
                 {% if user_ecole.logo %}<img src="{{ user_ecole.logo.url }}" alt="Logo {{ user_ecole.nom }}" width="40" height="40" loading="eager">{% else %}<img src="{% static_versioned 'logos/logo.png' %}" alt="Logo Kinder School International" width="40" height="40" loading="eager" decoding="async" fetchpriority="high">{% endif %}
@@ -288,7 +330,9 @@
                 </span>
             </a>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#navbarNav" aria-controls="navbarNav"
+                    aria-expanded="false" aria-label="Afficher ou masquer le menu principal">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
@@ -758,12 +802,47 @@
         </div>
     </footer>
 
-    <!-- Bootstrap JS -->
-    {% if is_offline %}
+    <!-- Bootstrap local : évite un hamburger inactif en cas de CDN bloqué. -->
     <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
-    {% else %}
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    {% endif %}
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const toggler = document.querySelector('.app-navbar .navbar-toggler');
+        const menu = document.getElementById('navbarNav');
+        if (!toggler || !menu) return;
+
+        const syncState = function () {
+            toggler.setAttribute(
+                'aria-expanded',
+                menu.classList.contains('show') ? 'true' : 'false'
+            );
+        };
+        menu.addEventListener('shown.bs.collapse', syncState);
+        menu.addEventListener('hidden.bs.collapse', syncState);
+
+        // Secours léger si Bootstrap n'a pas pu s'initialiser.
+        if (!window.bootstrap || !window.bootstrap.Collapse) {
+            toggler.addEventListener('click', function () {
+                menu.classList.toggle('show');
+                syncState();
+            });
+        }
+
+        // Sur une navigation interne, refermer le panneau pour libérer l'écran.
+        menu.querySelectorAll('a.nav-link, a.dropdown-item').forEach(function (link) {
+            link.addEventListener('click', function () {
+                if (window.innerWidth >= 1400 || !menu.classList.contains('show')) return;
+                if (window.bootstrap && window.bootstrap.Collapse) {
+                    window.bootstrap.Collapse.getOrCreateInstance(
+                        menu, { toggle: false }
+                    ).hide();
+                } else {
+                    menu.classList.remove('show');
+                    syncState();
+                }
+            });
+        });
+    });
+    </script>
 
     <!-- Global phone normalization (+224) -->
     <script>
