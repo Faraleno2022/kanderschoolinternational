@@ -264,7 +264,12 @@ class ActiviteJournaliereForm(forms.ModelForm):
             'eleve': forms.Select(attrs={'class': 'form-select', 'id': 'id_eleve'}),
             'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'type_activite': forms.Select(attrs={'class': 'form-select'}),
-            'titre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': "Titre de l'activité"}),
+            'titre': forms.Textarea(attrs={
+                'class': 'form-control activity-title-input',
+                'rows': 2,
+                'maxlength': 500,
+                'placeholder': "Saisissez un titre détaillé pour l'activité...",
+            }),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Description ou observation...'}),
             'appreciation': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: Très bien, Bien, À améliorer...'}),
         }

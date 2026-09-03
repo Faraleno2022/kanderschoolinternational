@@ -6,7 +6,7 @@
 {% block extra_css %}
 <style>
     .form-container {
-        max-width: 800px;
+        max-width: 1100px;
         margin: 0 auto;
     }
     .form-card {
@@ -49,6 +49,32 @@
         object-fit: cover;
         border-radius: 8px;
         border: 2px solid #e0e0e0;
+    }
+    .activity-title-input {
+        min-height: 76px;
+        resize: vertical;
+        width: 100%;
+    }
+    .title-character-counter {
+        flex: 0 0 auto;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    @media (max-width: 575.98px) {
+        .form-card {
+            padding: 1rem;
+        }
+        .page-header-form {
+            padding: 1rem;
+        }
+        .form-actions {
+            align-items: stretch;
+            flex-direction: column-reverse;
+            gap: .75rem;
+        }
+        .form-actions .btn {
+            width: 100%;
+        }
     }
 </style>
 {% endblock %}
@@ -121,11 +147,15 @@
                 </div>
 
                 <!-- Titre -->
-                <div class="col-12">
+                <div class="col-12 activity-title-field">
                     <label for="{{ form.titre.id_for_label }}" class="form-label fw-bold">
-                        <i class="fas fa-heading me-1"></i> Titre
+                        <i class="fas fa-heading me-1"></i> Titre de l'activité
                     </label>
                     {{ form.titre }}
+                    <div class="form-text d-flex flex-wrap justify-content-between gap-2">
+                        <span>Vous pouvez saisir un titre détaillé, jusqu'à 500 caractères maximum.</span>
+                        <span id="title-character-counter" class="title-character-counter" aria-live="polite">0 / 500</span>
+                    </div>
                 </div>
 
                 <!-- Description -->
@@ -197,7 +227,7 @@
             </div>
 
             <hr>
-            <div class="d-flex justify-content-between">
+            <div class="form-actions d-flex justify-content-between">
                 <a href="{% url 'notes:liste_activites' %}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left me-1"></i> Annuler
                 </a>
@@ -217,6 +247,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const classeSelect = document.getElementById('id_classe');
     const eleveSelect = document.getElementById('id_eleve');
     const loadingDiv = document.getElementById('eleve-loading');
+    const titleInput = document.getElementById('id_titre');
+    const titleCounter = document.getElementById('title-character-counter');
+
+    function updateTitleCounter() {
+        if (!titleInput || !titleCounter) return;
+        titleCounter.textContent = `${titleInput.value.length} / 500`;
+    }
+
+    if (titleInput) {
+        titleInput.addEventListener('input', updateTitleCounter);
+        updateTitleCounter();
+    }
 
     // Chargement AJAX des élèves quand la classe change
     if (classeSelect) {

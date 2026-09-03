@@ -857,7 +857,7 @@ class ActiviteJournaliere(SyncTrackedModel):
     eleve = models.ForeignKey('eleves.Eleve', on_delete=models.CASCADE, related_name='activites_journalieres')
     date = models.DateField(verbose_name="Date de l'activité")
     type_activite = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Type d'observation")
-    titre = models.CharField(max_length=200, verbose_name="Titre de l'activité")
+    titre = models.CharField(max_length=500, verbose_name="Titre de l'activité")
     description = models.TextField(blank=True, verbose_name="Description / Observation")
     appreciation = models.CharField(max_length=100, blank=True, verbose_name="Appréciation")
 
