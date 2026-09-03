@@ -52,3 +52,9 @@ class ResponsiveNavigationTemplateTests(SimpleTestCase):
         self.assertIn('overflow-y: auto', self.template)
         self.assertIn("menu.classList.toggle('show')", self.template)
         self.assertIn('Collapse.getOrCreateInstance', self.template)
+
+    def test_pied_de_page_ne_deborde_pas_sur_les_petits_ecrans(self):
+        self.assertIn('.site-footer [class*="col-"]', self.template)
+        self.assertIn('.site-footer a,', self.template)
+        self.assertIn('overflow-wrap: anywhere', self.template)
+        self.assertIn('@media (max-width: 767.98px)', self.template)

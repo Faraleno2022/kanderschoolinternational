@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block page_actions %}
-    <div>
+    <div class="payments-page-actions d-flex flex-wrap gap-2">
         <a href="{% url 'paiements:ajouter_paiement' %}" class="btn btn-primary">
             <i class="fas fa-plus me-1"></i>Nouveau Paiement
         </a>
@@ -144,8 +144,17 @@
     .category-card-header {
         align-items: center;
         display: flex;
+        flex-wrap: wrap;
         gap: 12px;
+        min-width: 0;
         padding: 18px 18px 12px;
+    }
+    .category-card-header > div:not(.category-icon) {
+        min-width: 0;
+    }
+    .category-card-header h5,
+    .category-card-header small {
+        overflow-wrap: anywhere;
     }
     .category-icon {
         align-items: center;
@@ -197,13 +206,60 @@
         grid-template-columns: repeat(4, minmax(0, 1fr));
         border-top: 1px solid #eef1f4;
     }
-    .audit-period { padding: 14px 16px; border-right: 1px solid #eef1f4; }
+    .audit-period { min-width: 0; padding: 14px 16px; border-right: 1px solid #eef1f4; }
     .audit-period:last-child { border-right: 0; }
     .audit-line { display: flex; justify-content: space-between; gap: 8px; font-size: .84rem; margin-top: 5px; }
+    .audit-line > * { min-width: 0; overflow-wrap: anywhere; }
+    .audit-line strong { text-align: right; }
+    .audit-card-header > .d-flex {
+        flex: 1 1 22rem;
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+    .audit-card-header > .btn {
+        flex: 0 1 auto;
+        max-width: 100%;
+        white-space: normal;
+    }
+    .payment-entry-row,
+    .overdue-entry-row,
+    .overdue-summary-row,
+    .payment-mode-row {
+        gap: .75rem;
+        min-width: 0;
+    }
+    .payment-entry-row > *,
+    .overdue-entry-row > *,
+    .overdue-summary-row > *,
+    .payment-mode-row > * {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
     @media (max-width: 991px) {
         .audit-period-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .audit-period:nth-child(2) { border-right: 0; }
         .audit-period:nth-child(-n+2) { border-bottom: 1px solid #eef1f4; }
+    }
+    @media (max-width: 575.98px) {
+        .payments-page-actions .btn { width: 100%; }
+        .category-period-grid,
+        .audit-period-grid { grid-template-columns: minmax(0, 1fr); }
+        .category-period,
+        .category-period:nth-child(odd),
+        .audit-period {
+            border-bottom: 1px solid #eef1f4;
+            border-right: 0;
+        }
+        .category-period:last-child,
+        .audit-period:last-child { border-bottom: 0; }
+        .audit-card-header { align-items: stretch !important; }
+        .audit-card-header > .btn { width: 100%; }
+        .audit-line { align-items: flex-start; flex-direction: column; gap: .15rem; }
+        .audit-line strong { text-align: left; }
+        .payment-entry-row,
+        .overdue-entry-row,
+        .overdue-summary-row,
+        .payment-mode-row { flex-wrap: wrap; }
     }
     @supports not (background: color-mix(in srgb, red 10%, white)) {
         .category-icon { background: #f1f4f8; }
@@ -299,7 +355,7 @@
                 </div>
                 <div class="p-3 border-top">
                     <div class="overdue-amount"><span id="stats-overdue-amount">{{ stats.montant_en_retard|floatformat:0|intcomma }}</span> <small class="category-currency">GNF</small></div>
-                    <div class="d-flex justify-content-between align-items-center mt-2">
+                    <div class="overdue-summary-row d-flex justify-content-between align-items-center mt-2">
                         <span class="text-muted"><strong id="stats-overdue-students">{{ stats.eleves_en_retard|intcomma }}</strong> élève(s) à relancer</span>
                         <a href="{% url 'paiements:liste_paiements' %}?niveau=RETARD" class="btn btn-sm btn-outline-danger">Voir les retards</a>
                     </div>
@@ -310,7 +366,7 @@
 
     <!-- Impact des corrections, annulations et suppressions -->
     <div class="category-card danger mb-4">
-        <div class="category-card-header d-flex justify-content-between">
+        <div class="category-card-header audit-card-header d-flex justify-content-between">
             <div class="d-flex align-items-center gap-3">
                 <div class="category-icon"><i class="fas fa-file-signature"></i></div>
                 <div>
@@ -434,7 +490,7 @@
                     {% if modes_encaissement %}
                         <div class="list-group">
                             {% for mode in modes_encaissement %}
-                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div class="payment-mode-row list-group-item d-flex justify-content-between align-items-center">
                                 <div>
                                     <strong>{{ mode.mode_paiement__nom|default:"Non précisé" }}</strong>
                                     <br><small class="text-muted">{{ mode.nombre|intcomma }} paiement(s)</small>
@@ -468,7 +524,7 @@
                         <div class="recent-payments">
                             {% for paiement in paiements_recents %}
                                 <div class="payment-item {% if paiement.statut == 'VALIDE' %}validated{% elif paiement.statut == 'EN_ATTENTE' %}pending{% else %}rejected{% endif %}">
-                                    <div class="d-flex justify-content-between align-items-start">
+                                    <div class="payment-entry-row d-flex justify-content-between align-items-start">
                                         <div>
                                             <h6 class="mb-1">
                                                 <a href="{% url 'paiements:detail_paiement' paiement.id %}" class="text-decoration-none">
@@ -522,7 +578,7 @@
                         <div class="list-group list-group-flush">
                             {% for echeancier in eleves_en_retard %}
                                 <div class="list-group-item">
-                                    <div class="d-flex justify-content-between align-items-start">
+                                    <div class="overdue-entry-row d-flex justify-content-between align-items-start">
                                         <div>
                                             <h6 class="mb-1">
                                                 <a href="{% url 'paiements:echeancier_eleve' echeancier.eleve.id %}" class="text-decoration-none">
