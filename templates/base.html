@@ -63,6 +63,21 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     {% endif %}
 
+    <script>
+    (function () {
+        const userAgent = navigator.userAgent || '';
+        const mobilePlatform = /Android|iPhone|iPad|iPod/i.test(userAgent);
+        const iPadDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+        const coarsePointer = window.matchMedia
+            && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+        document.documentElement.classList.add(
+            mobilePlatform || iPadDesktopMode || coarsePointer
+                ? 'touch-navigation'
+                : 'desktop-navigation'
+        );
+    })();
+    </script>
+
     <style>
         /* ===== Charte graphique Kinder School International ===== */
         :root {
@@ -178,59 +193,115 @@
         .navbar-nav .dropdown-menu {
             font-size: 0.9rem;
         }
-        @media (max-width: 1399.98px) {
-            .app-navbar .container-fluid {
-                flex-wrap: wrap;
-            }
-            .app-navbar .navbar-brand {
-                max-width: calc(100% - 64px);
-                min-width: 0;
-            }
-            .app-navbar .brand-text,
-            .app-navbar .brand-text > span {
-                min-width: 0;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .app-navbar .navbar-toggler {
-                min-width: 44px;
-                min-height: 44px;
-                padding: .5rem;
-                touch-action: manipulation;
-            }
-            .app-navbar .navbar-collapse {
-                flex-basis: 100%;
-                width: 100%;
-                max-height: calc(100vh - 70px);
-                max-height: calc(100dvh - 70px);
-                overflow-x: hidden;
-                overflow-y: auto;
-                overscroll-behavior: contain;
-                padding: .65rem 0 1rem;
-                scrollbar-gutter: stable;
-            }
-            .app-navbar .navbar-nav .nav-item {
-                display: block;
-            }
-            .app-navbar .navbar-nav .nav-link,
-            .app-navbar .navbar-nav .btn-link.dropdown-toggle {
-                width: 100%;
-                min-height: 44px;
-                justify-content: flex-start;
-                padding: .7rem .8rem;
-                font-size: .9rem;
-                white-space: normal;
-            }
-            .app-navbar .navbar-nav .dropdown-menu {
-                position: static !important;
-                inset: auto !important;
-                transform: none !important;
-                width: 100%;
-                min-width: 0;
-                margin: .15rem 0 .5rem;
-                max-height: none;
-            }
+        /* Ordinateurs : tous les boutons restent alignés horizontalement. */
+        .desktop-navigation .app-navbar .container-fluid {
+            flex-wrap: nowrap;
+        }
+        .desktop-navigation .app-navbar .navbar-brand {
+            flex: 0 1 auto;
+            min-width: 0;
+            max-width: min(25vw, 310px);
+        }
+        .desktop-navigation .app-navbar .brand-text,
+        .desktop-navigation .app-navbar .brand-text > span {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .desktop-navigation .app-navbar .navbar-toggler {
+            display: none !important;
+        }
+        .desktop-navigation .app-navbar .navbar-collapse {
+            display: flex !important;
+            flex: 1 1 auto;
+            flex-basis: auto;
+            align-items: center;
+            min-width: 0;
+            overflow-x: auto;
+            overflow-y: visible;
+            scrollbar-width: thin;
+        }
+        .desktop-navigation .app-navbar .navbar-nav {
+            flex-direction: row;
+            flex-wrap: nowrap;
+            align-items: center;
+        }
+        .desktop-navigation .app-navbar .navbar-nav .nav-item {
+            flex: 0 0 auto;
+        }
+        .desktop-navigation .app-navbar .navbar-nav .nav-link,
+        .desktop-navigation .app-navbar .navbar-nav .btn-link.dropdown-toggle {
+            min-height: 40px;
+            padding: .5rem clamp(.25rem, .45vw, .55rem);
+            font-size: clamp(.68rem, .72vw, .84rem);
+            white-space: nowrap;
+        }
+
+        /* iOS, Android, téléphones et tablettes tactiles : menu hamburger. */
+        .touch-navigation .app-navbar .container-fluid {
+            flex-wrap: wrap;
+        }
+        .touch-navigation .app-navbar .navbar-brand {
+            max-width: calc(100% - 64px);
+            min-width: 0;
+        }
+        .touch-navigation .app-navbar .brand-text,
+        .touch-navigation .app-navbar .brand-text > span {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .touch-navigation .app-navbar .navbar-toggler {
+            display: block !important;
+            min-width: 44px;
+            min-height: 44px;
+            padding: .5rem;
+            touch-action: manipulation;
+        }
+        .touch-navigation .app-navbar .navbar-collapse.collapse:not(.show) {
+            display: none !important;
+        }
+        .touch-navigation .app-navbar .navbar-collapse.collapsing,
+        .touch-navigation .app-navbar .navbar-collapse.collapse.show {
+            display: block !important;
+        }
+        .touch-navigation .app-navbar .navbar-collapse {
+            flex-basis: 100%;
+            width: 100%;
+            max-height: calc(100vh - 70px);
+            max-height: calc(100dvh - 70px);
+            overflow-x: hidden;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            padding: .65rem 0 1rem;
+            scrollbar-gutter: stable;
+        }
+        .touch-navigation .app-navbar .navbar-nav {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .touch-navigation .app-navbar .navbar-nav .nav-item {
+            display: block;
+        }
+        .touch-navigation .app-navbar .navbar-nav .nav-link,
+        .touch-navigation .app-navbar .navbar-nav .btn-link.dropdown-toggle {
+            width: 100%;
+            min-height: 44px;
+            justify-content: flex-start;
+            padding: .7rem .8rem;
+            font-size: .9rem;
+            white-space: normal;
+        }
+        .touch-navigation .app-navbar .navbar-nav .dropdown-menu {
+            position: static !important;
+            inset: auto !important;
+            transform: none !important;
+            width: 100%;
+            min-width: 0;
+            margin: .15rem 0 .5rem;
+            max-height: none;
         }
         .sidebar {
             min-height: calc(100vh - 56px);
@@ -319,7 +390,7 @@
 </head>
 <body class="module-{{ request.resolver_match.app_name|default:'general' }}">
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-xxl navbar-dark bg-primary fixed-top app-navbar">
+    <nav class="navbar navbar-dark bg-primary fixed-top app-navbar">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{% url 'home' %}">
                 {% if user_ecole.logo %}<img src="{{ user_ecole.logo.url }}" alt="Logo {{ user_ecole.nom }}" width="40" height="40" loading="eager">{% else %}<img src="{% static_versioned 'logos/logo.png' %}" alt="Logo Kinder School International" width="40" height="40" loading="eager" decoding="async" fetchpriority="high">{% endif %}
@@ -830,7 +901,10 @@
         // Sur une navigation interne, refermer le panneau pour libérer l'écran.
         menu.querySelectorAll('a.nav-link, a.dropdown-item').forEach(function (link) {
             link.addEventListener('click', function () {
-                if (window.innerWidth >= 1400 || !menu.classList.contains('show')) return;
+                if (
+                    !document.documentElement.classList.contains('touch-navigation')
+                    || !menu.classList.contains('show')
+                ) return;
                 if (window.bootstrap && window.bootstrap.Collapse) {
                     window.bootstrap.Collapse.getOrCreateInstance(
                         menu, { toggle: false }

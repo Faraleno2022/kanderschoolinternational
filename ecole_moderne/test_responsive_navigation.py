@@ -14,27 +14,43 @@ class ResponsiveNavigationTemplateTests(SimpleTestCase):
 
     def test_bootstrap_local_est_charge_sans_dependre_du_mode_hors_ligne(self):
         self.assertEqual(
-            self.template.count("vendor/bootstrap/bootstrap.bundle.min.js"),
+            self.template.count('vendor/bootstrap/bootstrap.bundle.min.js'),
             1,
         )
         self.assertEqual(
-            self.template.count("vendor/bootstrap/bootstrap.min.css"),
+            self.template.count('vendor/bootstrap/bootstrap.min.css'),
             1,
         )
-        self.assertNotIn(
-            'cdn.jsdelivr.net/npm/bootstrap',
+        self.assertNotIn('cdn.jsdelivr.net/npm/bootstrap', self.template)
+
+    def test_detection_couvre_ios_android_et_les_tablettes_tactiles(self):
+        self.assertIn('Android|iPhone|iPad|iPod', self.template)
+        self.assertIn("navigator.platform === 'MacIntel'", self.template)
+        self.assertIn("'(hover: none) and (pointer: coarse)'", self.template)
+        self.assertIn("'touch-navigation'", self.template)
+        self.assertIn("'desktop-navigation'", self.template)
+
+    def test_ordinateur_aligne_la_navigation_et_masque_le_hamburger(self):
+        self.assertNotIn('navbar-expand-xxl', self.template)
+        self.assertIn(
+            '.desktop-navigation .app-navbar .navbar-toggler',
             self.template,
         )
+        self.assertIn('display: flex !important', self.template)
+        self.assertIn('flex-wrap: nowrap', self.template)
+        self.assertIn('overflow-x: auto', self.template)
 
-    def test_hamburger_est_accessible_et_lie_au_menu(self):
-        self.assertIn('navbar-expand-xxl', self.template)
+    def test_hamburger_tactile_est_accessible_et_lie_au_menu(self):
         self.assertIn('data-bs-target="#navbarNav"', self.template)
         self.assertIn('aria-controls="navbarNav"', self.template)
         self.assertIn('aria-expanded="false"', self.template)
         self.assertIn('id="navbarNav"', self.template)
+        self.assertIn(
+            '.touch-navigation .app-navbar .navbar-toggler',
+            self.template,
+        )
 
-    def test_menu_tablette_est_defilable_et_dispose_d_un_secours_javascript(self):
-        self.assertIn('@media (max-width: 1399.98px)', self.template)
+    def test_menu_tactile_est_defilable_et_dispose_d_un_secours_javascript(self):
         self.assertIn('max-height: calc(100dvh - 70px)', self.template)
         self.assertIn('overflow-y: auto', self.template)
         self.assertIn("menu.classList.toggle('show')", self.template)
