@@ -153,6 +153,11 @@ def generer_carnet_paiement_pdf(request, paiement_id):
         )
         return redirect('paiements:detail_paiement', paiement_id=paiement.pk)
 
+    return _generer_carnet_paiement_pdf(paiement)
+
+
+def _generer_carnet_paiement_pdf(paiement):
+    """Génère le carnet d'un paiement validé déjà autorisé par l'appelant."""
     donnees = _construire_donnees_carnet(paiement)
     ecole = donnees['ecole']
     palette = get_school_palette(ecole)

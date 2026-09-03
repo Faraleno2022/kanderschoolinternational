@@ -7,27 +7,23 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
 
-from utilisateurs.utils import user_is_admin, filter_by_user_school
-from .models import Eleve, VisiteMedicale
+from utilisateurs.utils import filter_by_user_school
+from .models import Classe, Eleve, VisiteMedicale
 from .forms import VisiteMedicaleForm
 
 
 def _eleves_accessibles(request):
     qs = Eleve.objects.filter(statut='ACTIF').select_related('classe', 'classe__ecole')
-    if not user_is_admin(request.user):
-        qs = filter_by_user_school(qs, request.user, 'classe__ecole')
-    return qs
+    return filter_by_user_school(qs, request.user, 'classe__ecole')
 
 
 def _visites_accessibles(request):
     qs = VisiteMedicale.objects.select_related('eleve', 'eleve__classe', 'cree_par')
-    if not user_is_admin(request.user):
-        qs = filter_by_user_school(qs, request.user, 'eleve__classe__ecole')
-    return qs
+    return filter_by_user_school(qs, request.user, 'eleve__classe__ecole')
 
 
 @login_required
@@ -49,15 +45,41 @@ def infirmerie_dashboard(request):
         ).count(),
     }
 
-    # Recherche d'élève
+    # La liste complète reste affichée en permanence ; les filtres ne servent
+    # qu'à la réduire, sans obliger l'infirmière à lancer une recherche.
     recherche = request.GET.get('q', '').strip()
-    resultats_recherche = None
+    classe_id = request.GET.get('classe', '').strip()
+    liste_eleves = eleves
     if recherche:
-        resultats_recherche = eleves.filter(
+        liste_eleves = liste_eleves.filter(
             Q(prenom__icontains=recherche) |
             Q(nom__icontains=recherche) |
             Q(matricule__icontains=recherche)
-        ).order_by('prenom', 'nom')[:20]
+        )
+    if classe_id:
+        liste_eleves = liste_eleves.filter(classe_id=classe_id)
+
+    visites_du_jour = VisiteMedicale.objects.filter(
+        date_visite__date=aujourd_hui,
+    ).order_by('-date_visite')
+    liste_eleves = liste_eleves.prefetch_related(
+        Prefetch(
+            'visites_medicales',
+            queryset=visites_du_jour,
+            to_attr='visites_du_jour',
+        )
+    ).order_by('classe__nom', 'nom', 'prenom')
+    page_eleves = Paginator(liste_eleves, 30).get_page(request.GET.get('eleves_page'))
+
+    classes = filter_by_user_school(
+        Classe.objects.filter(eleves__statut='ACTIF')
+        .select_related('ecole').distinct(),
+        request.user,
+        'ecole',
+    ).order_by('nom')
+
+    params_eleves = request.GET.copy()
+    params_eleves.pop('eleves_page', None)
 
     # Élèves à surveiller (allergies ou maladies chroniques renseignées)
     eleves_a_surveiller = eleves.filter(
@@ -74,8 +96,11 @@ def infirmerie_dashboard(request):
         'titre_page': 'Infirmerie — Suivi santé des élèves',
         'stats': stats,
         'page_visites': page_visites,
+        'page_eleves': page_eleves,
+        'classes': classes,
+        'filtre_classe': classe_id,
+        'eleves_query': params_eleves.urlencode(),
         'recherche': recherche,
-        'resultats_recherche': resultats_recherche,
         'eleves_a_surveiller': eleves_a_surveiller,
     }
     return render(request, 'eleves/infirmerie/dashboard.html', context)
