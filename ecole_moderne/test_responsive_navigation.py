@@ -27,18 +27,15 @@ class ResponsiveNavigationTemplateTests(SimpleTestCase):
         self.assertIn('Android|iPhone|iPad|iPod', self.template)
         self.assertIn("navigator.platform === 'MacIntel'", self.template)
         self.assertIn("'(hover: none) and (pointer: coarse)'", self.template)
-        self.assertIn("'touch-navigation'", self.template)
-        self.assertIn("'desktop-navigation'", self.template)
+        self.assertIn("classList.add('touch-navigation')", self.template)
+        self.assertNotIn("'desktop-navigation'", self.template)
 
-    def test_ordinateur_aligne_la_navigation_et_masque_le_hamburger(self):
-        self.assertNotIn('navbar-expand-xxl', self.template)
-        self.assertIn(
-            '.desktop-navigation .app-navbar .navbar-toggler',
-            self.template,
-        )
-        self.assertIn('display: flex !important', self.template)
-        self.assertIn('flex-wrap: nowrap', self.template)
-        self.assertIn('overflow-x: auto', self.template)
+    def test_ordinateur_retrouve_la_navbar_bootstrap_d_origine(self):
+        self.assertIn('navbar navbar-expand-lg navbar-dark', self.template)
+        self.assertNotIn('.desktop-navigation .app-navbar', self.template)
+        self.assertIn('padding: 0.5rem 0.55rem', self.template)
+        self.assertIn('font-size: 0.84rem', self.template)
+        self.assertIn('@media (max-width: 991.98px)', self.template)
 
     def test_hamburger_tactile_est_accessible_et_lie_au_menu(self):
         self.assertIn('data-bs-target="#navbarNav"', self.template)
