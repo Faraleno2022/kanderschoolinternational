@@ -101,6 +101,15 @@
     .activite-item.type-SORTIE { border-left-color: #0dcaf0; }
     .activite-item.type-AUTRE { border-left-color: #6c757d; }
 
+    .sante-item {
+        border-left: 4px solid #dc3545;
+        padding: .75rem 1rem;
+        margin-bottom: .65rem;
+        background: #fff5f5;
+        border-radius: 0 8px 8px 0;
+    }
+    .acces-rapide .btn { min-width: 165px; }
+
     .btn-download-pdf {
         background: linear-gradient(135deg, #0d6efd, #0a58ca);
         color: #fff;
@@ -165,6 +174,15 @@
 
 <div class="container pb-5">
 
+    <div class="section-card no-print acces-rapide">
+        <div class="d-flex flex-wrap justify-content-center gap-2">
+            <a href="#sante" class="btn btn-outline-danger"><i class="fas fa-heart-pulse me-1"></i>État de santé</a>
+            <a href="#activites" class="btn btn-outline-primary"><i class="fas fa-calendar-day me-1"></i>Activités</a>
+            <a href="#bulletins" class="btn btn-outline-info"><i class="fas fa-file-lines me-1"></i>Bulletins</a>
+            <a href="#paiements" class="btn btn-outline-success"><i class="fas fa-wallet me-1"></i>Paiements</a>
+        </div>
+    </div>
+
     <!-- ═══════════════════════════════════════════ -->
     <!-- INFORMATIONS DE L'ÉLÈVE -->
     <!-- ═══════════════════════════════════════════ -->
@@ -210,6 +228,41 @@
             </div>
             {% endif %}
         </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SUIVI DE SANTÉ -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div id="sante" class="section-card">
+        <div class="section-title" style="color:#dc3545;border-color:#dc3545;">
+            <i class="fas fa-heart-pulse"></i>État de santé et passages à l'infirmerie
+        </div>
+        {% if visites_sante %}
+            {% for visite in visites_sante %}
+            <div class="sante-item">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div>
+                        <strong>{{ visite.motif }}</strong>
+                        <span class="badge {% if visite.statut == 'RETOUR_CLASSE' %}bg-success{% elif visite.statut == 'EN_OBSERVATION' %}bg-warning text-dark{% elif visite.statut == 'RENVOYE_MAISON' %}bg-info text-dark{% else %}bg-danger{% endif %} ms-1">
+                            {{ visite.get_statut_display }}
+                        </span>
+                    </div>
+                    <small class="text-muted">{{ visite.date_visite|date:"d/m/Y à H:i" }}</small>
+                </div>
+                <div class="small mt-2">
+                    {% if visite.temperature %}<span class="me-3"><strong>Température :</strong> {{ visite.temperature }} °C</span>{% endif %}
+                    {% if visite.parent_contacte %}<span class="badge bg-primary">Parent contacté</span>{% endif %}
+                </div>
+                {% if visite.symptomes %}<div class="small mt-1"><strong>Symptômes :</strong> {{ visite.symptomes|linebreaksbr }}</div>{% endif %}
+                {% if visite.soins %}<div class="small mt-1"><strong>Soins :</strong> {{ visite.soins|linebreaksbr }}</div>{% endif %}
+                {% if visite.observations %}<div class="small mt-1"><strong>Observation :</strong> {{ visite.observations|linebreaksbr }}</div>{% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="alert alert-success mb-0">
+                <i class="fas fa-circle-check me-2"></i>Aucun passage à l'infirmerie n'a été enregistré pour cet élève.
+            </div>
+        {% endif %}
     </div>
 
     <!-- ═══════════════════════════════════════════ -->
@@ -349,6 +402,26 @@
     {% endif %}
 
     <!-- ═══════════════════════════════════════════ -->
+    <!-- BULLETINS TÉLÉCHARGEABLES -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div id="bulletins" class="section-card">
+        <div class="section-title" style="color:#0dcaf0;border-color:#0dcaf0;">
+            <i class="fas fa-file-pdf"></i>Bulletins de notes
+        </div>
+        {% if bulletins_disponibles %}
+        <div class="d-flex flex-wrap gap-2">
+            {% for bulletin in bulletins_disponibles %}
+            <a href="{{ bulletin.url }}" class="btn btn-outline-info" target="_blank" rel="noopener">
+                <i class="fas fa-download me-1"></i>{{ bulletin.label }}
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted mb-0"><i class="fas fa-circle-info me-1"></i>Aucun bulletin n'est encore disponible pour cette année scolaire.</p>
+        {% endif %}
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
     <!-- CLASSEMENTS -->
     <!-- ═══════════════════════════════════════════ -->
     {% if classements %}
@@ -379,9 +452,9 @@
     <!-- ═══════════════════════════════════════════ -->
     <!-- ACTIVITÉS JOURNALIÈRES -->
     <!-- ═══════════════════════════════════════════ -->
-    {% if activites %}
-    <div class="section-card">
-        <div class="section-title"><i class="fas fa-calendar-day"></i>Activités journalières</div>
+    <div id="activites" class="section-card">
+        <div class="section-title"><i class="fas fa-calendar-day"></i>Activités et vie scolaire</div>
+        {% if activites %}
         {% for act in activites %}
         <div class="activite-item type-{{ act.type_activite }}">
             <div class="d-flex justify-content-between align-items-start flex-wrap">
@@ -412,18 +485,25 @@
             {% endif %}
         </div>
         {% endfor %}
+        {% else %}
+        <p class="text-muted mb-0"><i class="fas fa-circle-info me-1"></i>Aucune activité ou observation n'a encore été publiée pour cet élève.</p>
+        {% endif %}
     </div>
-    {% endif %}
 
     <!-- ═══════════════════════════════════════════ -->
     <!-- REÇUS DE PAIEMENTS -->
     <!-- ═══════════════════════════════════════════ -->
-    {% if paiements %}
-    <div class="section-card">
-        <div class="section-title" style="color: #198754; border-color: #198754;">
-            <i class="fas fa-receipt"></i>Reçus de paiements
+    <div id="paiements" class="section-card">
+        <div class="section-title d-flex justify-content-between align-items-center flex-wrap gap-2" style="color: #198754; border-color: #198754;">
+            <span><i class="fas fa-receipt"></i>Paiements de l'élève</span>
+            {% if carnet_disponible %}
+            <a href="{% url 'rapport_scolaire_carnet_pdf' %}?token={{ token }}" class="btn btn-sm btn-success no-print" target="_blank" rel="noopener">
+                <i class="fas fa-book-open me-1"></i>Télécharger le carnet de paiement
+            </a>
+            {% endif %}
         </div>
 
+        {% if paiements %}
         {% if echeancier %}
         <div class="row mb-3">
             <div class="col-md-4 text-center">
@@ -491,8 +571,12 @@
                 </tbody>
             </table>
         </div>
+        {% else %}
+        <div class="alert alert-light border mb-0">
+            <i class="fas fa-circle-info me-1"></i>Aucun paiement validé. Le carnet sera disponible après le premier encaissement validé.
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 
     <!-- ═══════════════════════════════════════════ -->
     <!-- BOUTON PDF EN BAS -->

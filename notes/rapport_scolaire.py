@@ -8,26 +8,31 @@ import io
 import os
 import re
 from datetime import datetime
+from urllib.parse import urlencode
+from xml.sax.saxutils import escape
 from decimal import Decimal, ROUND_HALF_UP
 from types import SimpleNamespace
 
 from django.http import HttpResponse, Http404, JsonResponse
 from django.shortcuts import render, redirect
 from django.db.models import Q, Avg
+from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.lib.units import cm
-from reportlab.platypus import Table, TableStyle
+from reportlab.platypus import Paragraph, Table, TableStyle
 from reportlab.lib.utils import ImageReader
 from PIL import Image
 
-from eleves.models import Eleve, Classe, Ecole
+from eleves.models import Eleve, Classe, Ecole, VisiteMedicale
 from notes.models import (
     ClasseNote, MatiereNote, NoteEleve, NoteMensuelle,
-    CompositionNote, AppreciationMaternelle,
+    CompositionNote, AppreciationMaternelle, BulletinMaternelle,
     ActiviteJournaliere, PieceJointeActivite, Classement,
 )
 from paiements.models import Paiement, EcheancierPaiement
@@ -245,6 +250,62 @@ def _collecter_donnees_scolaires(eleve):
         eleve=eleve
     ).select_related('classe').prefetch_related('pieces_jointes').order_by('-date')[:50]
 
+    # Les parents voient les passages à l'infirmerie du seul enfant vérifié.
+    visites_sante = VisiteMedicale.objects.filter(
+        eleve=eleve,
+    ).order_by('-date_visite')[:30]
+
+    # Proposer uniquement les bulletins pour lesquels des données existent.
+    periodes_codes = set()
+    if classe_note:
+        periodes_codes.update(
+            NoteMensuelle.objects.filter(
+                eleve=eleve,
+                matiere__classe=classe_note,
+                annee_scolaire=annee,
+            ).filter(Q(note__isnull=False) | Q(absent=True)).values_list('mois', flat=True)
+        )
+        periodes_codes.update(
+            CompositionNote.objects.filter(
+                eleve=eleve,
+                matiere__classe=classe_note,
+                annee_scolaire=annee,
+            ).filter(Q(note__isnull=False) | Q(absent=True)).values_list('periode', flat=True)
+        )
+        periodes_codes.update(
+            AppreciationMaternelle.objects.filter(
+                eleve=eleve,
+                matiere__classe=classe_note,
+                annee_scolaire=annee,
+            ).values_list('trimestre', flat=True)
+        )
+        periodes_codes.update(
+            BulletinMaternelle.objects.filter(
+                eleve=eleve,
+                classe=classe_note,
+                annee_scolaire=annee,
+            ).values_list('trimestre', flat=True)
+        )
+
+    labels_periodes = dict(
+        list(NoteMensuelle.MOIS_CHOICES)
+        + list(CompositionNote.PERIODE_CHOICES)
+        + list(BulletinMaternelle.TRIMESTRE_CHOICES)
+    )
+    ordre_periodes = {
+        'OCTOBRE': 1, 'NOVEMBRE': 2, 'DECEMBRE': 3,
+        'TRIMESTRE_1': 4, 'SEMESTRE_1': 5,
+        'JANVIER': 6, 'FEVRIER': 7, 'MARS': 8,
+        'TRIMESTRE_2': 9, 'AVRIL': 10, 'MAI': 11, 'JUIN': 12,
+        'TRIMESTRE_3': 13, 'SEMESTRE_2': 14,
+        'PERIODE_1': 21, 'PERIODE_2': 22, 'PERIODE_3': 23,
+        'PERIODE_4': 24, 'PERIODE_5': 25,
+    }
+    bulletins_disponibles = [
+        {'code': code, 'label': labels_periodes.get(code, code.replace('_', ' ').title())}
+        for code in sorted(periodes_codes, key=lambda value: ordre_periodes.get(value, 999))
+    ]
+
     return {
         'eleve': eleve,
         'ecole': ecole,
@@ -259,6 +320,8 @@ def _collecter_donnees_scolaires(eleve):
         'conseils': conseils,
         'moyenne_generale': moyenne_generale,
         'activites': activites,
+        'visites_sante': visites_sante,
+        'bulletins_disponibles': bulletins_disponibles,
     }
 
 
@@ -410,22 +473,39 @@ def rapport_scolaire_detail(request):
     donnees = _collecter_donnees_scolaires(eleve)
     donnees['token'] = token
 
+    # Chaque lien de bulletin est signé pour l'élève, sa classe et sa période.
+    from .bulletin_public import generer_token_bulletin
+    for bulletin in donnees['bulletins_disponibles']:
+        bulletin_token = generer_token_bulletin(
+            eleve.pk,
+            donnees['classe_note'].pk,
+            bulletin['code'],
+        )
+        bulletin['url'] = reverse(
+            'notes:bulletin_public_pdf',
+            args=[eleve.pk, donnees['classe_note'].pk, bulletin['code']],
+        ) + '?' + urlencode({'token': bulletin_token})
+
     # ─── Paiements validés de l'élève ───
     paiements = Paiement.objects.filter(
         eleve=eleve, statut='VALIDE'
     ).select_related('type_paiement', 'mode_paiement').order_by('-date_paiement')
     donnees['paiements'] = paiements
+    donnees['carnet_disponible'] = paiements.exists()
 
     # ─── Situation financière (échéancier) ───
     try:
         ech = eleve.echeancier
+    except EcheancierPaiement.DoesNotExist:
+        ech = None
+    if ech:
         donnees['echeancier'] = {
             'total_du': ech.total_du,
             'total_paye': ech.total_paye,
             'solde_restant': ech.solde_restant,
             'pourcentage_paye': ech.pourcentage_paye,
         }
-    except EcheancierPaiement.DoesNotExist:
+    else:
         donnees['echeancier'] = None
 
     return render(request, 'rapport_scolaire/detail.html', donnees)
@@ -478,6 +558,41 @@ def rapport_scolaire_recu_pdf(request, paiement_id):
         raise Http404
 
     return _generer_recu_paiement_pdf(paiement)
+
+
+def rapport_scolaire_carnet_pdf(request):
+    """Télécharge le carnet du seul élève autorisé par le jeton parent."""
+    token = request.GET.get('token', '')
+    eleve_id = _verify_token(token)
+    if not eleve_id:
+        return render(request, 'rapport_scolaire/recherche.html', {
+            'erreur': "Lien expiré ou invalide. Veuillez relancer la recherche.",
+        })
+
+    eleve = Eleve.objects.select_related('classe', 'classe__ecole').filter(
+        pk=eleve_id,
+        statut='ACTIF',
+    ).first()
+    if not eleve:
+        raise Http404
+
+    paiements = Paiement.objects.filter(
+        eleve=eleve,
+        statut='VALIDE',
+    ).select_related(
+        'eleve', 'eleve__classe', 'eleve__classe__ecole',
+        'ecole_encaissement', 'classe_encaissement',
+    ).order_by('-date_paiement', '-date_creation')
+
+    paiement = paiements.filter(
+        annee_scolaire=eleve.classe.annee_scolaire,
+        ecole_encaissement=eleve.classe.ecole,
+    ).first() or paiements.first()
+    if not paiement:
+        raise Http404("Aucun paiement validé pour cet élève.")
+
+    from paiements.carnet_paiement import _generer_carnet_paiement_pdf
+    return _generer_carnet_paiement_pdf(paiement)
 
 
 def _generer_recu_paiement_pdf(paiement):
@@ -710,6 +825,21 @@ def _generer_rapport_pdf(eleve):
         y = _draw_section_title(c, "CLASSEMENTS", y, margin, col_width, palette)
         y -= 5
         y = _draw_classements(c, classements, y, margin, col_width, new_page, palette)
+
+    # ══════════════════════════════════════════════════════════
+    # SECTION SANTÉ / INFIRMERIE
+    # ══════════════════════════════════════════════════════════
+    visites_sante = VisiteMedicale.objects.filter(
+        eleve=eleve,
+    ).order_by('-date_visite')[:20]
+
+    if visites_sante.exists():
+        y -= 10
+        if y < margin + 60:
+            y = new_page()
+        y = _draw_section_title(c, "SUIVI DE SANTÉ — INFIRMERIE", y, margin, col_width, palette)
+        y -= 5
+        y = _draw_visites_sante(c, visites_sante, y, margin, col_width, new_page, palette)
 
     # ══════════════════════════════════════════════════════════
     # SECTION ACTIVITÉS JOURNALIÈRES
@@ -1011,3 +1141,41 @@ def _draw_activites(c, activites, y, margin, col_width, new_page, palette):
         y = new_page()
     table.drawOn(c, margin, y - th)
     return y - th - 5
+
+
+def _draw_visites_sante(c, visites, y, margin, col_width, new_page, palette):
+    """Dessine l'historique récent de santé dans le rapport PDF parent."""
+    cell_style = ParagraphStyle(
+        'SanteCellule', fontName='Helvetica', fontSize=6.5, leading=8,
+        textColor=colors.black,
+    )
+    data = [['Date / heure', 'Motif', 'Temp.', 'Suite donnée', 'Soins / observation']]
+    for visite in visites:
+        details = visite.soins or visite.observations or visite.symptomes or '—'
+        details = ' '.join(str(details).split())[:180]
+        data.append([
+            timezone.localtime(visite.date_visite).strftime('%d/%m/%Y %H:%M'),
+            Paragraph(escape(visite.motif), cell_style),
+            f"{visite.temperature} °C" if visite.temperature is not None else '—',
+            Paragraph(escape(visite.get_statut_display()), cell_style),
+            Paragraph(escape(details), cell_style),
+        ])
+
+    col_widths = [82, 92, 42, 100, col_width - 316]
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(palette['danger'])),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(palette['light'])]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    _, height = table.wrap(col_width, 0)
+    if y - height < margin:
+        y = new_page()
+    table.drawOn(c, margin, y - height)
+    return y - height - 5
