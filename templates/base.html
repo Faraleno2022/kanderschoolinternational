@@ -70,11 +70,9 @@
         const iPadDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
         const coarsePointer = window.matchMedia
             && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
-        document.documentElement.classList.add(
-            mobilePlatform || iPadDesktopMode || coarsePointer
-                ? 'touch-navigation'
-                : 'desktop-navigation'
-        );
+        if (mobilePlatform || iPadDesktopMode || coarsePointer) {
+            document.documentElement.classList.add('touch-navigation');
+        }
     })();
     </script>
 
@@ -193,51 +191,16 @@
         .navbar-nav .dropdown-menu {
             font-size: 0.9rem;
         }
-        /* Ordinateurs : tous les boutons restent alignés horizontalement. */
-        .desktop-navigation .app-navbar .container-fluid {
-            flex-wrap: nowrap;
+        /* Comportement ordinateur restauré : mise en page Bootstrap d'origine. */
+        @media (max-width: 991.98px) {
+            .navbar-nav .nav-item {
+                display: block;
+            }
+            .navbar-nav .nav-link {
+                font-size: 0.9rem;
+                white-space: normal;
+            }
         }
-        .desktop-navigation .app-navbar .navbar-brand {
-            flex: 0 1 auto;
-            min-width: 0;
-            max-width: min(25vw, 310px);
-        }
-        .desktop-navigation .app-navbar .brand-text,
-        .desktop-navigation .app-navbar .brand-text > span {
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .desktop-navigation .app-navbar .navbar-toggler {
-            display: none !important;
-        }
-        .desktop-navigation .app-navbar .navbar-collapse {
-            display: flex !important;
-            flex: 1 1 auto;
-            flex-basis: auto;
-            align-items: center;
-            min-width: 0;
-            overflow-x: auto;
-            overflow-y: visible;
-            scrollbar-width: thin;
-        }
-        .desktop-navigation .app-navbar .navbar-nav {
-            flex-direction: row;
-            flex-wrap: nowrap;
-            align-items: center;
-        }
-        .desktop-navigation .app-navbar .navbar-nav .nav-item {
-            flex: 0 0 auto;
-        }
-        .desktop-navigation .app-navbar .navbar-nav .nav-link,
-        .desktop-navigation .app-navbar .navbar-nav .btn-link.dropdown-toggle {
-            min-height: 40px;
-            padding: .5rem clamp(.25rem, .45vw, .55rem);
-            font-size: clamp(.68rem, .72vw, .84rem);
-            white-space: nowrap;
-        }
-
         /* iOS, Android, téléphones et tablettes tactiles : menu hamburger. */
         .touch-navigation .app-navbar .container-fluid {
             flex-wrap: wrap;
@@ -390,7 +353,7 @@
 </head>
 <body class="module-{{ request.resolver_match.app_name|default:'general' }}">
     <!-- Navigation -->
-    <nav class="navbar navbar-dark bg-primary fixed-top app-navbar">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top app-navbar">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{% url 'home' %}">
                 {% if user_ecole.logo %}<img src="{{ user_ecole.logo.url }}" alt="Logo {{ user_ecole.nom }}" width="40" height="40" loading="eager">{% else %}<img src="{% static_versioned 'logos/logo.png' %}" alt="Logo Kinder School International" width="40" height="40" loading="eager" decoding="async" fetchpriority="high">{% endif %}
