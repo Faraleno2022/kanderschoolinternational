@@ -344,6 +344,34 @@
         /* Footer */
         .site-footer {
             border-top: 1px solid #e9ecef;
+            max-width: 100%;
+            width: 100%;
+        }
+        .site-footer .container,
+        .site-footer .row,
+        .site-footer [class*="col-"] {
+            min-width: 0;
+        }
+        .site-footer a,
+        .site-footer li,
+        .site-footer p,
+        .site-footer span {
+            overflow-wrap: anywhere;
+        }
+        .site-footer img {
+            flex: 0 0 auto;
+            height: auto;
+            max-width: 100%;
+        }
+        @media (max-width: 767.98px) {
+            .site-footer .container {
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+            .site-footer .row {
+                --bs-gutter-x: 1.25rem;
+                --bs-gutter-y: 1.25rem;
+            }
         }
     </style>
 
