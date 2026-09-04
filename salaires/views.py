@@ -5,7 +5,7 @@ from django.http import JsonResponse, HttpResponse, Http404
 from django.urls import reverse
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q, Sum, Count, Avg
+from django.db.models import Q, Sum, Count, Avg, Prefetch
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from datetime import datetime, timedelta
@@ -403,7 +403,13 @@ def liste_enseignants(request):
     statut = request.GET.get('statut', '')
     
     # Construction de la requête
-    enseignants = Enseignant.objects.select_related('ecole').prefetch_related('affectations__classe')
+    enseignants = Enseignant.objects.select_related('ecole').prefetch_related(
+        Prefetch(
+            'affectations',
+            queryset=AffectationClasse.objects.filter(actif=True).select_related('classe'),
+            to_attr='affectations_actives',
+        )
+    )
     if restreindre:
         enseignants = enseignants.filter(ecole=ecole_user)
     
@@ -754,6 +760,7 @@ def detail_enseignant(request, enseignant_id):
 
 
 @login_required
+@can_add_teachers
 @require_school_object(model=Enseignant, pk_kwarg='enseignant_id', field_path='ecole')
 def ajouter_affectation(request, enseignant_id):
     """Créer une affectation de classe pour un enseignant"""
@@ -762,6 +769,12 @@ def ajouter_affectation(request, enseignant_id):
     if not user_is_admin(request.user) and ecole_user is not None:
         qs = qs.filter(ecole=ecole_user)
     enseignant = get_object_or_404(qs, id=enseignant_id)
+    if not enseignant.est_affectable_classe:
+        messages.error(
+            request,
+            "Les cadres et administrateurs ont une fonction, mais pas d'affectation de classe.",
+        )
+        return redirect('salaires:detail_enseignant', enseignant_id=enseignant.id)
 
     if request.method == 'POST':
         form = AffectationClasseForm(request.POST, enseignant=enseignant)
@@ -2182,9 +2195,11 @@ def ajouter_enseignant(request):
     if request.method == 'POST':
         form = EnseignantForm(request.POST, user=request.user)
         if form.is_valid():
-            enseignant = form.save(commit=False)
-            enseignant.cree_par = request.user
-            enseignant.save()
+            with transaction.atomic():
+                enseignant = form.save(commit=False)
+                enseignant.cree_par = request.user
+                enseignant.save()
+                form.save_affectation(enseignant)
             
             messages.success(
                 request, 
@@ -2206,6 +2221,7 @@ def ajouter_enseignant(request):
 
 
 @login_required
+@can_add_teachers
 def modifier_enseignant(request, enseignant_id):
     """Modifier un enseignant existant"""
     ecole_user = _ecole_utilisateur(request)
@@ -2217,7 +2233,9 @@ def modifier_enseignant(request, enseignant_id):
     if request.method == 'POST':
         form = EnseignantForm(request.POST, instance=enseignant, user=request.user)
         if form.is_valid():
-            form.save()
+            with transaction.atomic():
+                enseignant = form.save()
+                form.save_affectation(enseignant)
             messages.success(
                 request, 
                 f"L'enseignant {enseignant.nom_complet} a été modifié avec succès !"

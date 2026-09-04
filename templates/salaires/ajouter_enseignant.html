@@ -72,6 +72,15 @@
         display: block;
         animation: fadeIn 0.3s ease;
     }
+
+    .conditional-fields {
+        display: none;
+    }
+
+    .conditional-fields.show {
+        display: block;
+        animation: fadeIn 0.3s ease;
+    }
     
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(-10px); }
@@ -353,6 +362,81 @@
                 </div>
             </div>
 
+            <!-- Affectation et fonction -->
+            <div class="form-section" id="affectation-fonction-section">
+                <h6><i class="fas fa-chalkboard-teacher me-2 text-info"></i>Affectation et fonction</h6>
+
+                <div class="conditional-fields" id="classe-affectee-field">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="{{ form.classe_affectee.id_for_label }}" class="form-label">
+                                    {{ form.classe_affectee.label }}
+                                </label>
+                                {{ form.classe_affectee }}
+                                {% if form.classe_affectee.help_text %}
+                                    <div class="help-text">{{ form.classe_affectee.help_text }}</div>
+                                {% endif %}
+                                {% if form.classe_affectee.errors %}
+                                    <ul class="error-list">
+                                        {% for error in form.classe_affectee.errors %}<li>{{ error }}</li>{% endfor %}
+                                    </ul>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 conditional-fields" id="matiere-affectee-field">
+                            <div class="form-group">
+                                <label for="{{ form.matiere_affectee.id_for_label }}" class="form-label">
+                                    {{ form.matiere_affectee.label }}
+                                </label>
+                                {{ form.matiere_affectee }}
+                                {% if form.matiere_affectee.errors %}
+                                    <ul class="error-list">
+                                        {% for error in form.matiere_affectee.errors %}<li>{{ error }}</li>{% endfor %}
+                                    </ul>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 conditional-fields" id="heures-affectation-field">
+                            <div class="form-group">
+                                <label for="{{ form.heures_par_semaine_affectation.id_for_label }}" class="form-label">
+                                    {{ form.heures_par_semaine_affectation.label }}
+                                </label>
+                                {{ form.heures_par_semaine_affectation }}
+                                {% if form.heures_par_semaine_affectation.errors %}
+                                    <ul class="error-list">
+                                        {% for error in form.heures_par_semaine_affectation.errors %}<li>{{ error }}</li>{% endfor %}
+                                    </ul>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="conditional-fields" id="fonction-field">
+                    <div class="form-group mb-0">
+                        <label for="{{ form.fonction.id_for_label }}" class="form-label">
+                            {{ form.fonction.label }}
+                        </label>
+                        {{ form.fonction }}
+                        {% if form.fonction.help_text %}
+                            <div class="help-text">{{ form.fonction.help_text }}</div>
+                        {% endif %}
+                        {% if form.fonction.errors %}
+                            <ul class="error-list">
+                                {% for error in form.fonction.errors %}<li>{{ error }}</li>{% endfor %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="text-muted" id="affectation-help">
+                    Sélectionnez un type de personnel pour afficher son affectation ou sa fonction.
+                </div>
+            </div>
+
             <!-- Rémunération -->
             <div class="form-section">
                 <h6><i class="fas fa-money-bill-wave me-2 text-warning"></i>Rémunération</h6>
@@ -448,11 +532,95 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const typeEnseignantSelect = document.getElementById('{{ form.type_enseignant.id_for_label }}');
+    const ecoleSelect = document.getElementById('{{ form.ecole.id_for_label }}');
+    const classeSelect = document.getElementById('{{ form.classe_affectee.id_for_label }}');
     const salaireFixeField = document.getElementById('salaire-fixe-field');
     const tauxHoraireField = document.getElementById('taux-horaire-field');
     const heuresMensuellesField = document.getElementById('heures-mensuelles-field');
+    const classeField = document.getElementById('classe-affectee-field');
+    const matiereField = document.getElementById('matiere-affectee-field');
+    const heuresAffectationField = document.getElementById('heures-affectation-field');
+    const fonctionField = document.getElementById('fonction-field');
+    const affectationHelp = document.getElementById('affectation-help');
+    const heuresAffectationInput = document.getElementById('{{ form.heures_par_semaine_affectation.id_for_label }}');
+    const initialClasse = '{{ form.classe_affectee.value|default_if_none:""|escapejs }}';
+    const classUrlTemplate = '{% url "eleves:ajax_classes_par_ecole" 0 %}';
+
+    function isTeachingType(type) {
+        return ['GARDERIE', 'MATERNELLE', 'PRIMAIRE', 'SECONDAIRE'].includes(type);
+    }
+
+    function classMatchesType(niveau, type) {
+        if (type === 'GARDERIE') return niveau === 'GARDERIE';
+        if (type === 'MATERNELLE') return niveau === 'MATERNELLE';
+        if (type === 'PRIMAIRE') return niveau.startsWith('PRIMAIRE_');
+        if (type === 'SECONDAIRE') {
+            return niveau.startsWith('COLLEGE_') || niveau.startsWith('LYCEE_') || niveau === 'TERMINALE';
+        }
+        return false;
+    }
+
+    async function loadClasses(preservedValue) {
+        const type = typeEnseignantSelect.value;
+        const ecoleId = ecoleSelect ? ecoleSelect.value : '';
+        classeSelect.innerHTML = '<option value="">Chargement des classes...</option>';
+        classeSelect.disabled = true;
+
+        if (!ecoleId || !isTeachingType(type)) {
+            classeSelect.innerHTML = '<option value="">Aucune classe à sélectionner</option>';
+            return;
+        }
+
+        try {
+            const url = classUrlTemplate.replace('/0/', '/' + encodeURIComponent(ecoleId) + '/');
+            const response = await fetch(url, {
+                credentials: 'same-origin',
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.error || 'Chargement impossible');
+
+            const classes = data.classes.filter(item => classMatchesType(item.niveau || '', type));
+            classeSelect.innerHTML = '<option value="">-- Affecter plus tard --</option>';
+            classes.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = item.nom + (item.annee_scolaire ? ' (' + item.annee_scolaire + ')' : '');
+                if (String(item.id) === String(preservedValue || '')) option.selected = true;
+                classeSelect.appendChild(option);
+            });
+            if (!classes.length) {
+                classeSelect.innerHTML = '<option value="">Aucune classe correspondant à ce cycle</option>';
+            }
+            classeSelect.disabled = false;
+        } catch (error) {
+            classeSelect.innerHTML = '<option value="">Impossible de charger les classes</option>';
+            classeSelect.disabled = false;
+        }
+        updateAssignmentRequirement();
+    }
+
+    function updateAssignmentRequirement() {
+        heuresAffectationInput.required = (
+            typeEnseignantSelect.value === 'SECONDAIRE' && Boolean(classeSelect.value)
+        );
+    }
+
+    function toggleProfessionalFields() {
+        const selectedType = typeEnseignantSelect.value;
+        const teaching = isTeachingType(selectedType);
+        const secondary = selectedType === 'SECONDAIRE';
+        const administrative = ['CADRE', 'ADMINISTRATEUR'].includes(selectedType);
+
+        classeField.classList.toggle('show', teaching);
+        matiereField.classList.toggle('show', secondary);
+        heuresAffectationField.classList.toggle('show', secondary);
+        fonctionField.classList.toggle('show', administrative);
+        affectationHelp.classList.toggle('d-none', teaching || administrative);
+        updateAssignmentRequirement();
+    }
     
-    function toggleSalaryFields() {
+    function toggleSalaryFields(clearOpposite) {
         const selectedType = typeEnseignantSelect.value;
         
         if (selectedType === 'SECONDAIRE') {
@@ -462,8 +630,7 @@ document.addEventListener('DOMContentLoaded', function() {
             tauxHoraireField.classList.add('show');
             heuresMensuellesField.classList.add('show');
             
-            // Vider le champ salaire fixe
-            document.getElementById('{{ form.salaire_fixe.id_for_label }}').value = '';
+            if (clearOpposite) document.getElementById('{{ form.salaire_fixe.id_for_label }}').value = '';
             
         } else if (selectedType) {
             // Autres types : salaire fixe + heures mensuelles optionnelles
@@ -471,8 +638,7 @@ document.addEventListener('DOMContentLoaded', function() {
             salaireFixeField.classList.add('show');
             heuresMensuellesField.classList.add('show');
             
-            // Vider le champ taux horaire
-            document.getElementById('{{ form.taux_horaire.id_for_label }}').value = '';
+            if (clearOpposite) document.getElementById('{{ form.taux_horaire.id_for_label }}').value = '';
             
             // Mettre une valeur par défaut pour les heures mensuelles si vide
             const heuresMensuellesInput = document.getElementById('{{ form.heures_mensuelles.id_for_label }}');
@@ -488,10 +654,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Initialiser l'affichage
-    toggleSalaryFields();
+    toggleSalaryFields(false);
+    toggleProfessionalFields();
+    if (isTeachingType(typeEnseignantSelect.value)) loadClasses(initialClasse);
     
     // Écouter les changements
-    typeEnseignantSelect.addEventListener('change', toggleSalaryFields);
+    typeEnseignantSelect.addEventListener('change', function() {
+        toggleSalaryFields(true);
+        toggleProfessionalFields();
+        loadClasses('');
+    });
+    if (ecoleSelect) ecoleSelect.addEventListener('change', function() { loadClasses(''); });
+    classeSelect.addEventListener('change', updateAssignmentRequirement);
     
     // Animation d'apparition du formulaire
     const formContainer = document.querySelector('.form-container');
