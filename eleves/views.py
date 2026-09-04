@@ -1686,7 +1686,9 @@ def ajax_classes_par_ecole(request, ecole_id):
         qs = Classe.objects.filter(ecole=ecole)
         if annee_active:
             qs = qs.filter(annee_scolaire=annee_active)
-        classes = qs.values('id', 'nom')
+        classes = qs.order_by('niveau', 'nom').values(
+            'id', 'nom', 'niveau', 'annee_scolaire'
+        )
         return JsonResponse({
             'success': True,
             'classes': list(classes)

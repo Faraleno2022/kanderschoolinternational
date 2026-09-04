@@ -209,6 +209,13 @@
                     <span class="info-label">Type :</span>
                     <span class="info-value">{{ enseignant.get_type_enseignant_display }}</span>
                 </div>
+
+                {% if enseignant.fonction %}
+                <div class="info-row">
+                    <span class="info-label">Fonction :</span>
+                    <span class="info-value">{{ enseignant.fonction }}</span>
+                </div>
+                {% endif %}
                 
                 <div class="info-row">
                     <span class="info-label">Statut :</span>
@@ -244,13 +251,13 @@
     </div>
 
     <!-- Affectations de Classes -->
-    {% if affectations %}
+    {% if enseignant.est_affectable_classe %}
     <div class="row">
         <div class="col-12">
             <div class="teacher-info-card">
                 <h5 class="card-title mb-3">
                     <i class="fas fa-chalkboard-teacher me-2 text-warning"></i>
-                    Affectations de Classes ({{ affectations.count }})
+                    Affectations de classes ({{ affectations_actuelles.count }} active{{ affectations_actuelles.count|pluralize }})
                 </h5>
                 <div class="mb-3">
                     <a class="btn btn-primary" href="{% url 'salaires:ajouter_affectation' enseignant.id %}">
@@ -258,15 +265,24 @@
                     </a>
                 </div>
                 
-                {% for affectation in affectations %}
+                {% for affectation in affectations_actuelles %}
                 <div class="assignment-card">
                     <div class="row align-items-center">
                         <div class="col-md-6">
                             <strong>{{ affectation.classe.nom }}</strong>
-                            <small class="text-muted d-block">{{ affectation.classe.niveau }}</small>
+                            <small class="text-muted d-block">
+                                {{ affectation.classe.get_niveau_display }} · {{ affectation.classe.annee_scolaire }}
+                            </small>
+                            {% if affectation.matiere %}
+                            <span class="badge bg-secondary mt-1">{{ affectation.matiere }}</span>
+                            {% endif %}
                         </div>
                         <div class="col-md-3">
+                            {% if affectation.heures_par_semaine %}
                             <span class="badge bg-info">{{ affectation.heures_par_semaine }}h/semaine</span>
+                            {% else %}
+                            <span class="badge bg-success">Classe principale</span>
+                            {% endif %}
                         </div>
                         <div class="col-md-3 text-end">
                             <div class="mb-1">
@@ -296,6 +312,10 @@
                             </div>
                         </div>
                     </div>
+                </div>
+                {% empty %}
+                <div class="alert alert-info mb-0">
+                    Aucune classe active. Utilisez le bouton ci-dessus pour réaliser l'affectation.
                 </div>
                 {% endfor %}
             </div>
@@ -429,9 +449,11 @@
                         <i class="fas fa-edit me-2"></i>Modifier
                     </a>
                     
+                    {% if enseignant.est_affectable_classe %}
                     <a href="{% url 'salaires:ajouter_affectation' enseignant.id %}" class="btn btn-primary btn-action">
                         <i class="fas fa-plus me-2"></i>Affecter une classe
                     </a>
+                    {% endif %}
                     
                     {% if enseignant.statut == 'ACTIF' %}
                     <button class="btn btn-outline-warning btn-action" onclick="changerStatut('CONGE')">

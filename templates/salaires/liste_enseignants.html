@@ -346,23 +346,34 @@
                         <span>{{ enseignant.adresse|truncatechars:40 }}</span>
                     </div>
                     {% endif %}
+                    {% if enseignant.fonction %}
+                    <div class="detail-row">
+                        <span><strong>Fonction :</strong></span>
+                        <span>{{ enseignant.fonction }}</span>
+                    </div>
+                    {% endif %}
                     
                     <!-- Affectations de classes -->
-                    {% if enseignant.affectations.exists %}
+                    {% if enseignant.affectations_actives %}
                     <div class="detail-row">
-                        <span><strong>Classes assignées:</strong></span>
+                        <span><strong>Classe{{ enseignant.affectations_actives|length|pluralize }} affectée{{ enseignant.affectations_actives|length|pluralize }} :</strong></span>
                         <div class="assignments-list">
-                            {% for affectation in enseignant.affectations.all %}
-                            {% if affectation.actif %}
+                            {% for affectation in enseignant.affectations_actives %}
                             <div class="assignment-item">
                                 <span>{{ affectation.classe.nom }}</span>
                                 {% if enseignant.type_enseignant == 'SECONDAIRE' %}
-                                <span class="text-info">{{ affectation.heures_par_semaine }}h/sem</span>
+                                <span class="text-info">
+                                    {% if affectation.matiere %}{{ affectation.matiere }} · {% endif %}{{ affectation.heures_par_semaine }}h/sem
+                                </span>
                                 {% endif %}
                             </div>
-                            {% endif %}
                             {% endfor %}
                         </div>
+                    </div>
+                    {% elif enseignant.est_affectable_classe %}
+                    <div class="detail-row">
+                        <span><strong>Classe :</strong></span>
+                        <span class="text-muted">Non affectée</span>
                     </div>
                     {% endif %}
 
@@ -401,6 +412,13 @@
                        class="btn btn-warning btn-action" title="Modifier l'enseignant">
                         <i class="fas fa-edit"></i> Modifier
                     </a>
+
+                    {% if enseignant.est_affectable_classe %}
+                    <a href="{% url 'salaires:ajouter_affectation' enseignant.id %}"
+                       class="btn btn-outline-primary btn-action" title="Affecter une classe">
+                        <i class="fas fa-chalkboard-teacher"></i> Affecter
+                    </a>
+                    {% endif %}
                     
                     <a href="{% url 'salaires:etats_salaire' %}?enseignant={{ enseignant.id }}" 
                        class="btn btn-info btn-action" title="Voir les salaires">

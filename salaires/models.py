@@ -56,6 +56,12 @@ class Enseignant(SyncTrackedModel):
         default=StatutEnseignant.ACTIF,
         verbose_name="Statut"
     )
+    fonction = models.CharField(
+        max_length=150,
+        blank=True,
+        verbose_name="Fonction / poste administratif",
+        help_text="Ex. Directeur, secrétaire, surveillant général ou comptable",
+    )
     
     # Rémunération
     taux_horaire = models.DecimalField(
@@ -129,6 +135,35 @@ class Enseignant(SyncTrackedModel):
             TypeEnseignant.CADRE,
             TypeEnseignant.ADMINISTRATEUR
         ]
+
+    @property
+    def est_affectable_classe(self):
+        """Indique si cet employé peut être rattaché à une classe."""
+        return self.type_enseignant in [
+            TypeEnseignant.GARDERIE,
+            TypeEnseignant.MATERNELLE,
+            TypeEnseignant.PRIMAIRE,
+            TypeEnseignant.SECONDAIRE,
+        ]
+
+    def accepte_classe(self, classe):
+        """Vérifie que la classe appartient au cycle de l'enseignant."""
+        if not classe or classe.ecole_id != self.ecole_id:
+            return False
+        niveau = classe.niveau or ''
+        if self.type_enseignant == TypeEnseignant.GARDERIE:
+            return niveau == 'GARDERIE'
+        if self.type_enseignant == TypeEnseignant.MATERNELLE:
+            return niveau == 'MATERNELLE'
+        if self.type_enseignant == TypeEnseignant.PRIMAIRE:
+            return niveau.startswith('PRIMAIRE_')
+        if self.type_enseignant == TypeEnseignant.SECONDAIRE:
+            return (
+                niveau.startswith('COLLEGE_')
+                or niveau.startswith('LYCEE_')
+                or niveau == 'TERMINALE'
+            )
+        return False
     
     def clean(self):
         super().clean()
@@ -243,7 +278,15 @@ class AffectationClasse(SyncTrackedModel):
     
     def clean(self):
         super().clean()
-        
+
+        if not self.enseignant.est_affectable_classe:
+            raise ValidationError({
+                'classe': "Ce type de personnel ne peut pas recevoir d'affectation de classe."
+            })
+        if not self.enseignant.accepte_classe(self.classe):
+            raise ValidationError({
+                'classe': "La classe sélectionnée ne correspond pas au cycle de l'enseignant."
+            })
         if self.enseignant.est_taux_horaire and not self.heures_par_semaine:
             raise ValidationError({
                 'heures_par_semaine': 'Le nombre d\'heures par semaine est obligatoire pour les enseignants du secondaire.'

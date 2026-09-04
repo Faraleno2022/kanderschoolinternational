@@ -9,6 +9,47 @@ from .models import (
 from administration.corbeille import CorbeilleAdminMixin
 
 
+class AffectationClasseInline(admin.TabularInline):
+    model = AffectationClasse
+    extra = 1
+    fields = ('classe', 'matiere', 'heures_par_semaine', 'date_debut', 'date_fin', 'actif')
+
+
+@admin.register(Enseignant)
+class EnseignantAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
+    list_display = (
+        'nom', 'prenoms', 'ecole', 'type_enseignant', 'fonction',
+        'statut', 'classes_actives',
+    )
+    list_filter = ('type_enseignant', 'statut', 'ecole')
+    search_fields = ('nom', 'prenoms', 'telephone', 'email', 'fonction')
+    list_select_related = ('ecole',)
+    inlines = (AffectationClasseInline,)
+    fieldsets = (
+        ('Identité', {'fields': ('nom', 'prenoms', 'telephone', 'email', 'adresse')}),
+        ('Poste', {'fields': ('ecole', 'type_enseignant', 'fonction', 'statut', 'date_embauche')}),
+        ('Rémunération', {'fields': ('salaire_fixe', 'taux_horaire', 'heures_mensuelles')}),
+        ('Traçabilité', {'fields': ('cree_par',), 'classes': ('collapse',)}),
+    )
+
+    @admin.display(description='Classes actives')
+    def classes_actives(self, obj):
+        return ', '.join(
+            obj.affectations.filter(actif=True).values_list('classe__nom', flat=True)
+        ) or '—'
+
+
+@admin.register(AffectationClasse)
+class AffectationClasseAdmin(admin.ModelAdmin):
+    list_display = (
+        'enseignant', 'classe', 'matiere', 'heures_par_semaine',
+        'date_debut', 'date_fin', 'actif',
+    )
+    list_filter = ('actif', 'enseignant__type_enseignant', 'enseignant__ecole')
+    search_fields = ('enseignant__nom', 'enseignant__prenoms', 'classe__nom', 'matiere')
+    list_select_related = ('enseignant', 'classe', 'enseignant__ecole')
+
+
 class AvanceSalaireAdminForm(forms.ModelForm):
     class Meta:
         model = AvanceSalaire
