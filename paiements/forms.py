@@ -142,6 +142,9 @@ class ModificationPaiementForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.ancien_type = self.instance.type_paiement if self.instance.pk else None
+        self.ancien_montant = self.instance.montant
+        self.echeancier_corrige = None
         self.fields['type_paiement'].queryset = TypePaiement.objects.filter(
             Q(actif=True) | Q(pk=getattr(self.instance, 'type_paiement_id', None))
         ).distinct()
@@ -154,6 +157,21 @@ class ModificationPaiementForm(forms.ModelForm):
         if montant is None or montant <= 0:
             raise forms.ValidationError("Le montant doit être supérieur à zéro.")
         return montant
+
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.instance.pk and cleaned.get('type_paiement') and 'montant' in cleaned:
+            from copy import copy
+            from .corrections import preparer_correction_admission
+            paiement = copy(self.instance)
+            paiement.type_paiement = cleaned['type_paiement']
+            paiement.montant = cleaned['montant']
+            self.echeancier_corrige = preparer_correction_admission(
+                paiement, self.ancien_type, self.ancien_montant,
+            )
+            cleaned['montant'] = paiement.montant
+        return cleaned
 
 
 class AnnulationPaiementForm(forms.Form):

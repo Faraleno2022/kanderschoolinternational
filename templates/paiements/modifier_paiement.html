@@ -17,6 +17,9 @@
                         {{ paiement.montant|floatformat:0|intcomma }} GNF —
                         statut {{ paiement.get_statut_display }}.
                         Toute correction est enregistrée avec son auteur, son motif et les valeurs avant/après.
+                        Lors d'un changement inscription/réinscription, le tarif est recalculé à l'enregistrement,
+                        en conservant les remises de scolarité. Un reçu au tarif complet est ajusté automatiquement ;
+                        pour un versement partiel, vérifiez le montant réellement encaissé.
                     </div>
                     <form method="post">
                         {% csrf_token %}

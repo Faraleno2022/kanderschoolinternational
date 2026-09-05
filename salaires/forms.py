@@ -86,7 +86,7 @@ class EnseignantForm(forms.ModelForm):
         fields = [
             'nom', 'prenoms', 'telephone', 'email', 'adresse',
             'ecole', 'type_enseignant', 'statut', 'fonction',
-            'taux_horaire', 'salaire_fixe', 'heures_mensuelles', 'date_embauche'
+            'taux_horaire', 'salaire_fixe', 'primes_mensuelles', 'heures_mensuelles', 'date_embauche'
         ]
         widgets = {
             'nom': forms.TextInput(attrs={
@@ -133,6 +133,9 @@ class EnseignantForm(forms.ModelForm):
                 'placeholder': 'Salaire fixe en GNF',
                 'step': '0.01'
             }),
+            'primes_mensuelles': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '0.01',
+            }),
             'heures_mensuelles': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Optionnel, ex. 120 heures',
@@ -151,7 +154,7 @@ class EnseignantForm(forms.ModelForm):
             'email': 'Email',
             'adresse': 'Adresse',
             'ecole': 'École *',
-            'type_enseignant': 'Type d\'enseignant *',
+            'type_enseignant': 'Type d\'enseignant',
             'statut': 'Statut',
             'fonction': 'Fonction / poste administratif',
             'taux_horaire': 'Taux horaire (GNF)',
@@ -162,7 +165,7 @@ class EnseignantForm(forms.ModelForm):
         help_texts = {
             'fonction': 'À renseigner pour les administrateurs et les cadres.',
             'taux_horaire': 'Pour les enseignants du secondaire uniquement',
-            'salaire_fixe': 'Pour garderie, maternelle, primaire, cadres et administrateurs',
+            'salaire_fixe': 'Pour les enseignants hors secondaire et les autres travailleurs',
             'heures_mensuelles': (
                 "Optionnel : valeur proposée pour la saisie globale mensuelle. "
                 "Les pointages arrivée/départ peuvent être utilisés à la place."
@@ -288,10 +291,14 @@ class EnseignantForm(forms.ModelForm):
         if type_enseignant != TypeEnseignant.SECONDAIRE:
             cleaned_data['matiere_affectee'] = ''
             cleaned_data['heures_par_semaine_affectation'] = None
-        if type_enseignant not in [TypeEnseignant.CADRE, TypeEnseignant.ADMINISTRATEUR]:
+        if type_enseignant in [TypeEnseignant.GARDERIE, TypeEnseignant.MATERNELLE,
+                               TypeEnseignant.PRIMAIRE, TypeEnseignant.SECONDAIRE]:
             cleaned_data['fonction'] = ''
 
         return cleaned_data
+
+    def clean_primes_mensuelles(self):
+        return self.cleaned_data.get('primes_mensuelles') or Decimal('0')
 
     @staticmethod
     def _clore_affectations(affectations):

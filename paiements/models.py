@@ -527,7 +527,11 @@ class EcheancierPaiement(SyncTrackedModel):
     @property
     def solde_restant(self):
         """Solde restant à payer, remises validées déduites (ne peut jamais être négatif)"""
-        return max(Decimal('0'), self.total_du - self.total_paye - self.total_remises_valides)
+        from .soldes import couverture_reelle
+        paiements, remises = couverture_reelle(
+            self.eleve_id, self.annee_scolaire, self.ecole_reference_id,
+        )
+        return max(Decimal('0'), self.total_du - paiements - remises)
 
     @property
     def pourcentage_paye(self):

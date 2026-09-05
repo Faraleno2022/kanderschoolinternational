@@ -231,6 +231,8 @@ def calculer_etat_salaire(
             'calcule_par': utilisateur,
             'salaire_base': Decimal('0'),
             'salaire_net': Decimal('0'),
+            'primes': (enseignant.primes_mensuelles or Decimal('0'))
+            if enseignant.date_embauche <= bornes_periode(periode)[1] else Decimal('0'),
             'source_heures': (
                 SourceHeuresSalaire.POINTAGE
                 if enseignant.est_taux_horaire
