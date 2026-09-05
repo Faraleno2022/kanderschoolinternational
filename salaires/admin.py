@@ -28,7 +28,7 @@ class EnseignantAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     fieldsets = (
         ('Identité', {'fields': ('nom', 'prenoms', 'telephone', 'email', 'adresse')}),
         ('Poste', {'fields': ('ecole', 'type_enseignant', 'fonction', 'statut', 'date_embauche')}),
-        ('Rémunération', {'fields': ('salaire_fixe', 'taux_horaire', 'heures_mensuelles')}),
+        ('Rémunération', {'fields': ('salaire_fixe', 'taux_horaire', 'primes_mensuelles', 'heures_mensuelles')}),
         ('Traçabilité', {'fields': ('cree_par',), 'classes': ('collapse',)}),
     )
 

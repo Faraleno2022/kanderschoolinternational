@@ -2097,9 +2097,13 @@ def modifier_paiement(request, paiement_id: int):
                 paiement._audit_user = request.user
                 paiement._audit_reason = form.cleaned_data['motif_modification'].strip()
                 paiement.save()
-                # Recalcul systématique : un paiement redescendu sous son
-                # ancien montant doit aussi libérer la dette qu'il couvrait.
-                _recalculer_soldes_du_paiement(paiement)
+                if form.echeancier_corrige is not None:
+                    form.echeancier_corrige.save(update_fields={
+                        'nature_frais', 'frais_inscription_du', 'date_modification',
+                    })
+                    recalculer_echeancier(form.echeancier_corrige)
+                # Les écritures du paiement et des remises synchronisent aussi
+                # les soldes via les signaux, dans cette même transaction.
             messages.success(
                 request,
                 f"Le paiement {paiement.numero_recu} a été corrigé et mémorisé dans l'historique.",

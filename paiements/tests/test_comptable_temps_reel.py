@@ -116,7 +116,10 @@ class ComptaTempsReelTests(TestCase):
         self.assertIn(self.eleve_impaye.id, impayes_ids)
         self.assertNotIn(self.eleve_solde.id, impayes_ids)
 
-        soldes = self.client.get(reverse('paiements:liste_eleves_soldes'))
+        # Choisir l'année des données du test, même après la rentrée suivante.
+        soldes = self.client.get(
+            reverse('paiements:liste_eleves_soldes'), {'annee': self.classe.annee_scolaire},
+        )
         self.assertEqual(soldes.status_code, 200)
         soldes_ids = [item.eleve_id for item in soldes.context['page_obj'].object_list]
         self.assertIn(self.eleve_solde.id, soldes_ids)

@@ -236,6 +236,10 @@
                 </div>
                 
                 <div class="info-row">
+                    <span class="info-label">Primes mensuelles :</span>
+                    <span class="info-value">{{ enseignant.primes_mensuelles|floatformat:0|intcomma }} GNF</span>
+                </div>
+                <div class="info-row">
                     <span class="info-label">Ancienneté :</span>
                     <span class="info-value">
                         {% now "Y-m-d" as today %}

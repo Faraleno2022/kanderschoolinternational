@@ -263,11 +263,9 @@
                 <label class="form-label">Type</label>
                 <select name="type_enseignant" class="form-select">
                     <option value="">Tous les types</option>
-                    <option value="GARDERIE" {% if request.GET.type_enseignant == "GARDERIE" %}selected{% endif %}>Garderie</option>
-                    <option value="MATERNELLE" {% if request.GET.type_enseignant == "MATERNELLE" %}selected{% endif %}>Maternelle</option>
-                    <option value="PRIMAIRE" {% if request.GET.type_enseignant == "PRIMAIRE" %}selected{% endif %}>Primaire</option>
-                    <option value="SECONDAIRE" {% if request.GET.type_enseignant == "SECONDAIRE" %}selected{% endif %}>Secondaire</option>
-                    <option value="ADMINISTRATEUR" {% if request.GET.type_enseignant == "ADMINISTRATEUR" %}selected{% endif %}>Administrateur</option>
+                    {% for value, label in types_enseignant %}
+                    <option value="{{ value }}" {% if request.GET.type_enseignant == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <div class="col-md-3">

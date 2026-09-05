@@ -114,7 +114,13 @@ def _synchroniser_couverture(
         (_decimal(getattr(echeancier, paid_field, 0)) for _, _, paid_field in ALLOCATION_COMPONENTS),
         ZERO,
     )
-    encaissement = max(total_valide, total_saisi) if conserver_saisie_manuelle else total_valide
+    # Dès que des reçus existent, ils sont la source des encaissements.
+    # Les cumuls de l'échéancier peuvent déjà inclure les remises : les
+    # reprendre comme de l'argent versé compterait ces remises deux fois.
+    encaissement = (
+        total_saisi if conserver_saisie_manuelle and not paiements.exists()
+        else total_valide
+    )
 
     allocation, nouveaux_payes, credit = allocate_amount_sequentially(
         echeancier,

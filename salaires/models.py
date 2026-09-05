@@ -16,6 +16,11 @@ class TypeEnseignant(models.TextChoices):
     SECONDAIRE = 'SECONDAIRE', 'Secondaire (taux horaire)'
     CADRE = 'CADRE', 'Cadre / personnel administratif'
     ADMINISTRATEUR = 'ADMINISTRATEUR', 'Administrateur'
+    CHAUFFEUR = 'CHAUFFEUR', 'Chauffeur'
+    VIGILE = 'VIGILE', 'Vigiles'
+    ENTRETIEN = 'ENTRETIEN', 'Service entretien'
+    NOUNOU = 'NOUNOU', 'Nounou'
+    RESTAURATION = 'RESTAURATION', 'Restauration'
 
 
 class StatutEnseignant(models.TextChoices):
@@ -82,6 +87,12 @@ class Enseignant(SyncTrackedModel):
         help_text="Pour garderie, maternelle, primaire et administrateurs",
         validators=[MinValueValidator(Decimal('0'))],
     )
+    primes_mensuelles = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal('0'), blank=True,
+        validators=[MinValueValidator(Decimal('0'))],
+        verbose_name="Primes mensuelles (GNF)",
+        help_text="Montant proposé sur chaque nouvel état de salaire, ajustable pour le mois concerné.",
+    )
     heures_mensuelles = models.DecimalField(
         max_digits=6, 
         decimal_places=2, 
@@ -133,7 +144,12 @@ class Enseignant(SyncTrackedModel):
             TypeEnseignant.MATERNELLE,
             TypeEnseignant.PRIMAIRE,
             TypeEnseignant.CADRE,
-            TypeEnseignant.ADMINISTRATEUR
+            TypeEnseignant.ADMINISTRATEUR,
+            TypeEnseignant.CHAUFFEUR,
+            TypeEnseignant.VIGILE,
+            TypeEnseignant.ENTRETIEN,
+            TypeEnseignant.NOUNOU,
+            TypeEnseignant.RESTAURATION,
         ]
 
     @property
