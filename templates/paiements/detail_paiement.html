@@ -16,6 +16,9 @@
 
 {% block page_actions %}
     <div>
+        <a href="{% url 'eleves:repartir_eleves' %}{% if request.session.derniers_eleves_importes %}?lot=dernier{% endif %}" class="btn btn-outline-primary">
+            <i class="fas fa-exchange-alt me-1"></i>Répartir les élèves
+        </a>
         <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-1"></i>Retour à la liste
         </a>

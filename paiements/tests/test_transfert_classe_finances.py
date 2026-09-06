@@ -176,7 +176,10 @@ class TransfertClasseFinancesTests(TestCase):
         self.eleve.save()
         self.echeancier.refresh_from_db()
 
-        self.assertEqual(self.echeancier.total_paye, Decimal('600000'))
+        # Le cumul de couverture comprend le versement et la remise ;
+        # l'encaissement conservé reste uniquement l'argent reçu.
+        self.assertEqual(self.echeancier.total_paye, Decimal('700000'))
+        self.assertEqual(self.eleve._financial_transfer_info['encaissements_conserves'], 600000)
         self.assertEqual(self.echeancier.total_remises_valides, Decimal('100000'))
         self.assertEqual(self.echeancier.solde_restant, Decimal('1100000'))
         self.assertEqual(
@@ -198,3 +201,119 @@ class TransfertClasseFinancesTests(TestCase):
         self.assertEqual(self.echeancier.total_du, Decimal('1500000'))
         self.assertEqual(self.echeancier.total_paye, Decimal('600000'))
         self.assertEqual(self.echeancier.classe_reference, self.ancienne_classe)
+
+    def _classe_b(self):
+        return self._classe(self.ecole, '7e B', 'COLLEGE_7', '2025-2026')
+
+    def _remise(self, paiement, montant=100000, portee='1', deduite=False):
+        remise = RemiseReduction.objects.create(
+            nom='Remise sections A/B', type_remise='MONTANT_FIXE',
+            valeur=montant, motif='AUTRE',
+            date_debut=date(2025, 9, 1), date_fin=date(2026, 7, 31),
+        )
+        return PaiementRemise.objects.create(
+            paiement=paiement, remise=remise, montant_remise=montant,
+            portee_tranches=portee, deduite_du_paiement=deduite,
+        )
+
+    def test_sections_a_b_a_conservent_cumuls_remise_et_recu(self):
+        from paiements.soldes import recalculer_echeancier
+        paiement = self._paiement()
+        remise = self._remise(paiement)
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.total_paye, 700000)
+        numero_recu = paiement.numero_recu
+        for cible in (self._classe_b(), self.ancienne_classe):
+            with self.subTest(classe=cible.nom):
+                self.eleve.classe = cible
+                self.eleve.save()
+                self.echeancier.refresh_from_db()
+                paiement.refresh_from_db()
+                remise.refresh_from_db()
+                self.assertEqual(self.echeancier.total_du, 1500000)
+                self.assertEqual(self.echeancier.total_paye, 700000)
+                self.assertEqual(self.echeancier.solde_restant, 800000)
+                self.assertEqual(self.eleve._financial_transfer_info['solde_restant'], 800000)
+                self.assertEqual(self.echeancier.classe_reference, cible)
+                self.assertEqual(paiement.montant, 600000)
+                self.assertEqual(paiement.numero_recu, numero_recu)
+                self.assertEqual(paiement.classe_encaissement, self.ancienne_classe)
+                self.assertEqual(remise.montant_remise, 100000)
+                self.assertEqual(recalculer_echeancier(self.echeancier, enregistrer=False), {})
+        self.assertEqual(self.eleve.echeanciers.count(), 1)
+
+    def test_section_b_dossier_solde_avec_remise_reste_solde(self):
+        paiement = self._paiement('1400000')
+        self._remise(paiement, deduite=True)
+        self.eleve.classe = self._classe_b()
+        self.eleve.save()
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.solde_restant, 0)
+        self.assertEqual(self.echeancier.statut, 'PAYE_COMPLET')
+        self.assertEqual(self.echeancier.total_paye, 1500000)
+        self.assertEqual(self.eleve._financial_transfer_info['solde_restant'], 0)
+
+    def test_modification_suppression_apres_transfert_section_b(self):
+        paiement = self._paiement()
+        self._remise(paiement)
+        self.eleve.classe = self._classe_b()
+        self.eleve.save()
+        paiement.montant = 400000
+        paiement.save()
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.total_paye, 500000)
+        self.assertEqual(self.echeancier.solde_restant, 1000000)
+        paiement.delete()
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.total_paye, 0)
+        self.assertEqual(self.echeancier.solde_restant, 1500000)
+        self.eleve.classe = self.ancienne_classe
+        self.eleve.save()
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.total_paye, 0)
+
+    def test_section_b_conserve_tarif_reinscription(self):
+        self.echeancier.nature_frais = 'REINSCRIPTION'
+        self.echeancier.frais_inscription_du = 75000
+        self.echeancier.save()
+        self.type_paiement = TypePaiement.objects.create(nom='Réinscription + Annuel')
+        self._paiement()
+        self.eleve.classe = self._classe_b()
+        self.eleve.save()
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.nature_frais, 'REINSCRIPTION')
+        self.assertEqual(self.echeancier.frais_inscription_du, 75000)
+        self.assertEqual(self.echeancier.total_du, 1475000)
+        self.assertEqual(self.echeancier.solde_restant, 875000)
+
+    def test_tarif_inferieur_credit_tient_compte_remise_sans_changer_recu(self):
+        GrilleTarifaire.objects.filter(
+            ecole=self.ecole, niveau='COLLEGE_8', annee_scolaire='2025-2026',
+        ).update(frais_inscription=100000, tranche_1=200000, tranche_2=200000, tranche_3=150000)
+        paiement = self._paiement()
+        self._remise(paiement)
+        self.eleve.classe = self.nouvelle_classe
+        self.eleve.save()
+        self.echeancier.refresh_from_db()
+        paiement.refresh_from_db()
+        self.assertEqual(self.echeancier.total_du, 650000)
+        self.assertEqual(self.echeancier.total_paye, 650000)
+        self.assertEqual(self.echeancier.statut, 'PAYE_COMPLET')
+        self.assertEqual(self.echeancier.solde_restant, 0)
+        self.assertEqual(self.eleve._financial_transfer_info['credit_non_affecte'], 50000)
+        self.assertEqual(paiement.montant, 600000)
+
+    def test_section_b_ne_reprend_pas_cumul_perime_paiement_annule(self):
+        paiement = self._paiement()
+        paiement.statut = 'ANNULE'
+        paiement.save()
+        # Simuler un cumul hérité erroné : le reçu annulé fait foi.
+        EcheancierPaiement.objects.filter(pk=self.echeancier.pk).update(
+            frais_inscription_paye=100000, tranche_1_payee=500000,
+        )
+        self.eleve.classe = self._classe_b()
+        self.eleve.save()
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.total_paye, 0)
+        self.assertEqual(self.echeancier.solde_restant, 1500000)
+        self.assertEqual(self.eleve._financial_transfer_info['encaissements_conserves'], 0)

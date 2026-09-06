@@ -86,8 +86,18 @@ def recalculer_echeancier(echeancier, *, enregistrer=True):
         echeancier.eleve_id, echeancier.annee_scolaire,
         echeancier.ecole_reference_id,
     )
-    couverture = max(0, sum_paiements + sum_remises)
+    return appliquer_couverture_echeancier(
+        echeancier, sum_paiements + sum_remises, enregistrer=enregistrer,
+    )
 
+
+def appliquer_couverture_echeancier(echeancier, couverture, *, enregistrer=True):
+    """Répartit la couverture et fixe le statut, y compris lors d'un transfert.
+
+    Les cumuls comprennent les remises, comme après une modification de
+    paiement. Le transfert peut aussi conserver une saisie historique sans reçu.
+    """
+    couverture = max(0, int(couverture))
     total_du = sum(
         int(getattr(echeancier, champ_du, 0) or 0)
         for _champ_paye, champ_du in CHAMPS_ALLOCATION

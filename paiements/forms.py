@@ -72,7 +72,7 @@ class PaiementForm(forms.ModelForm):
         # Ordonner les élèves par nom
         self.fields['eleve'].queryset = Eleve.objects.select_related(
             'classe', 'classe__ecole'
-        ).filter(statut='ACTIF').order_by('nom', 'prenom')
+        ).filter(statut__in=['ACTIF', 'ATTENTE_PAIEMENT'], est_dans_corbeille=False).order_by('nom', 'prenom')
         
         # Filtrer les types et modes actifs
         self.fields['type_paiement'].queryset = TypePaiement.objects.filter(actif=True)
@@ -165,6 +165,10 @@ class ModificationPaiementForm(forms.ModelForm):
             from copy import copy
             from .corrections import preparer_correction_admission
             paiement = copy(self.instance)
+            # L'administration peut aussi corriger le rattachement du reçu.
+            for champ in ('eleve', 'ecole_encaissement', 'classe_encaissement', 'annee_scolaire'):
+                if champ in cleaned:
+                    setattr(paiement, champ, cleaned[champ])
             paiement.type_paiement = cleaned['type_paiement']
             paiement.montant = cleaned['montant']
             self.echeancier_corrige = preparer_correction_admission(

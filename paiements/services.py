@@ -4,18 +4,16 @@ from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Sum
 from django.utils import timezone
 
 from eleves.models import GrilleTarifaire
 
 from .allocation import (
     ALLOCATION_COMPONENTS,
-    allocate_amount_sequentially,
-    allocate_discounts,
     registration_kind_for_type,
 )
-from .models import EcheancierPaiement, Paiement, PaiementRemise
+from .models import EcheancierPaiement, Paiement
+from .soldes import appliquer_couverture_echeancier, couverture_reelle
 
 
 ZERO = Decimal('0')
@@ -107,78 +105,30 @@ def _synchroniser_couverture(
         eleve_id=echeancier.eleve_id,
         annee_scolaire=echeancier.annee_scolaire,
         ecole_encaissement_id=ecole_id,
-        statut='VALIDE',
     )
-    total_valide = _decimal(paiements.aggregate(total=Sum('montant'))['total'])
-    total_saisi = sum(
-        (_decimal(getattr(echeancier, paid_field, 0)) for _, _, paid_field in ALLOCATION_COMPONENTS),
-        ZERO,
+    total_valide, total_remises = couverture_reelle(
+        echeancier.eleve_id, echeancier.annee_scolaire, ecole_id,
     )
-    # Dès que des reçus existent, ils sont la source des encaissements.
-    # Les cumuls de l'échéancier peuvent déjà inclure les remises : les
-    # reprendre comme de l'argent versé compterait ces remises deux fois.
-    encaissement = (
-        total_saisi if conserver_saisie_manuelle and not paiements.exists()
-        else total_valide
-    )
-
-    allocation, nouveaux_payes, credit = allocate_amount_sequentially(
-        echeancier,
-        encaissement,
-        initial_paid={key: ZERO for key, _, _ in ALLOCATION_COMPONENTS},
-    )
-    for key, _due_field, paid_field in ALLOCATION_COMPONENTS:
-        setattr(echeancier, paid_field, nouveaux_payes[key])
-
-    remises = list(
-        PaiementRemise.objects.filter(
-            paiement__eleve_id=echeancier.eleve_id,
-            paiement__annee_scolaire=echeancier.annee_scolaire,
-            paiement__ecole_encaissement_id=ecole_id,
-            paiement__statut='VALIDE',
+    total_valide, total_remises = _decimal(total_valide), _decimal(total_remises)
+    # Seuls les anciens dossiers sans aucun reçu gardent leur saisie manuelle.
+    # Un reçu annulé ou en attente ne doit pas rétablir un ancien cumul.
+    encaissement = total_valide
+    if conserver_saisie_manuelle and not paiements.exists():
+        encaissement = sum(
+            (_decimal(getattr(echeancier, paid_field, 0)) for _, _, paid_field in ALLOCATION_COMPONENTS),
+            ZERO,
         )
-        .select_related('paiement')
-        .order_by('paiement__date_paiement', 'paiement_id', 'pk')
-    )
-    soldes_apres_encaissement = {
-        key: max(ZERO, _decimal(getattr(echeancier, due_field, 0)) - nouveaux_payes[key])
-        for key, due_field, _paid_field in ALLOCATION_COMPONENTS
-    }
-    allocation_remises, _ = allocate_discounts(
-        echeancier, remises, balances=soldes_apres_encaissement,
-    )
-    couverture = sum(allocation.values(), ZERO) + sum(allocation_remises.values(), ZERO)
+
+    couverture = encaissement + total_remises
+    appliquer_couverture_echeancier(echeancier, couverture, enregistrer=False)
     total_du = _total_du(echeancier)
-
-    aujourd_hui = timezone.localdate()
-    dates = {
-        'inscription': echeancier.date_echeance_inscription,
-        'tranche_1': echeancier.date_echeance_tranche_1,
-        'tranche_2': echeancier.date_echeance_tranche_2,
-        'tranche_3': echeancier.date_echeance_tranche_3,
-    }
-    exigible = ZERO
-    exigible_couvert = ZERO
-    for key, due_field, _paid_field in ALLOCATION_COMPONENTS:
-        if dates[key] and dates[key] < aujourd_hui:
-            exigible += _decimal(getattr(echeancier, due_field, 0))
-            exigible_couvert += allocation[key] + allocation_remises[key]
-
-    if total_du <= 0 or couverture >= total_du:
-        echeancier.statut = 'PAYE_COMPLET'
-    elif exigible > 0 and exigible_couvert < exigible:
-        echeancier.statut = 'EN_RETARD'
-    elif couverture <= 0:
-        echeancier.statut = 'A_PAYER'
-    else:
-        echeancier.statut = 'PAYE_PARTIEL'
-
+    # Le crédit signale l'argent encaissé au-delà du tarif net ; une remise
+    # seule ne devient pas un montant à rembourser.
+    credit = max(ZERO, encaissement - max(ZERO, total_du - total_remises))
     return {
         'encaissements_valides': total_valide,
         'encaissements_conserves': encaissement,
-        'remises_conservees': sum(
-            (_decimal(item.montant_remise) for item in remises), ZERO,
-        ),
+        'remises_conservees': total_remises,
         'credit_non_affecte': credit,
         'solde_restant': max(ZERO, total_du - couverture),
     }
