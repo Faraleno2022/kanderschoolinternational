@@ -447,6 +447,7 @@ class Eleve(SyncTrackedModel):
     
     STATUT_CHOICES = [
         ('ACTIF', 'Actif'),
+        ('ATTENTE_PAIEMENT', 'En attente du premier paiement'),
         ('SUSPENDU', 'Suspendu'),
         ('EXCLU', 'Exclu'),
         ('TRANSFERE', 'Transféré'),
@@ -640,10 +641,10 @@ class Eleve(SyncTrackedModel):
                 old_instance = Eleve.objects.get(pk=self.pk)
                 if old_instance.classe_id != self.classe_id:
                     # Changement de classe détecté
-                    regenerer_matricule = True
+                    regenerer_matricule = not getattr(self, '_conserver_matricule', False)
                     ancienne_classe = old_instance.classe
                     ancien_matricule = self.matricule
-                    reaffecter_ancienne_classe = True
+                    reaffecter_ancienne_classe = regenerer_matricule
                     # Stocker les infos pour créer l'historique après la sauvegarde
                     changement_classe_info = {
                         'ancienne_classe': old_instance.classe.nom,

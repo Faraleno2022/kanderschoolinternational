@@ -180,6 +180,11 @@
         <p class="mb-0">Importez rapidement une liste d'élèves depuis un fichier Excel</p>
     </div>
 
+    <div class="alert alert-info">
+        Après l'import, choisissez individuellement la section de chaque élève (A, B, C…).
+        Les nouveaux dossiers seront activés après validation du premier paiement.
+        <a href="{% url 'eleves:repartir_eleves' %}?statut=tous" class="btn btn-outline-primary mt-2">Répartir les élèves déjà importés</a>
+    </div>
     <!-- Indicateur d'étapes -->
     <div class="import-card">
         <div class="step-indicator">

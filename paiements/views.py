@@ -1624,13 +1624,30 @@ def liste_paiements(request):
             output_field=DecimalField(max_digits=12, decimal_places=0),
         )
     )
+    # Une jointure vers les versements/remises répéterait chaque échéancier
+    # et multiplierait ses frais dans les sommes globales et par classe.
+    # Agréger d'abord les remises dans leur contexte, sans ajouter de ligne
+    # à la requête des dus (deux élèves au même tarif restent deux élèves).
+    remises_par_echeancier = (
+        PaiementRemise.objects.filter(
+            paiement__eleve_id=OuterRef('eleve_id'),
+            paiement__annee_scolaire=OuterRef('annee_scolaire'),
+            paiement__ecole_encaissement_id=OuterRef('ecole_reference_id'),
+            paiement__statut='VALIDE',
+        )
+        .order_by()
+        .values('paiement__eleve_id')
+        .annotate(total=Sum('montant_remise'))
+        .values('total')[:1]
+    )
+    eche_qs = eche_qs.annotate(
+        remises_echeancier=Coalesce(
+            Subquery(remises_par_echeancier), Value(0),
+            output_field=DecimalField(max_digits=12, decimal_places=0),
+        ),
+    )
     remises_expr = Coalesce(
-        Sum('eleve__paiements__remises__montant_remise', filter=Q(
-            eleve__paiements__statut='VALIDE',
-            eleve__paiements__annee_scolaire=F('annee_scolaire'),
-            eleve__paiements__ecole_encaissement_id=F('ecole_reference_id'),
-        )),
-        Value(0),
+        Sum('remises_echeancier'), Value(0),
         output_field=DecimalField(max_digits=12, decimal_places=0),
     )
     # Le poste admission est commun. La nature explicite est prioritaire;

@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.db import transaction
+from .forms import ModificationPaiementForm
 
 from administration.corbeille import CorbeilleAdminMixin, archiver_avant_suppression
 
@@ -24,8 +25,17 @@ class ModePaiementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
     list_filter = ("actif",)
 
 
+class PaiementAdminForm(ModificationPaiementForm):
+    """Même correction de tarif que le formulaire de paiement habituel."""
+    motif_modification = None
+
+    class Meta(ModificationPaiementForm.Meta):
+        fields = '__all__'
+
+
 @admin.register(Paiement)
 class PaiementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
+    form = PaiementAdminForm
     list_display = ("numero_recu", "eleve", "type_paiement", "mode_paiement", "montant", "date_paiement", "statut")
     search_fields = ("numero_recu", "eleve__nom", "eleve__prenom", "eleve__matricule")
     list_filter = ("statut", "type_paiement", "mode_paiement")
@@ -36,6 +46,11 @@ class PaiementAdmin(CorbeilleAdminMixin, admin.ModelAdmin):
             obj._audit_user = request.user
             obj._audit_reason = "Modification depuis l'administration Django"
         super().save_model(request, obj, form, change)
+        echeancier_corrige = getattr(form, 'echeancier_corrige', None)
+        if echeancier_corrige is not None:
+            echeancier_corrige.save(update_fields={
+                'nature_frais', 'frais_inscription_du', 'date_modification',
+            })
         if change:
             from .soldes import recalculer_echeancier
             echeancier = EcheancierPaiement.objects.filter(

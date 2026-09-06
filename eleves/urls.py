@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .views_repartition import repartir_eleves
 from . import views_sante
 from . import views_evaluation
 from . import views_charte
@@ -92,6 +93,7 @@ urlpatterns = [
     path('infirmerie/visite/<int:visite_id>/supprimer/', views_sante.supprimer_visite, name='supprimer_visite'),
 
     # Import/Export d'élèves
+    path('repartir/', repartir_eleves, name='repartir_eleves'),
     path('importer/', importer_eleves, name='importer_eleves'),
     path('template-eleves/', telecharger_template_eleves, name='telecharger_template_eleves'),
     path('exporter/classe/<int:classe_id>/', exporter_eleves_classe, name='exporter_eleves_classe'),

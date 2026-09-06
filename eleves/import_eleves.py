@@ -346,6 +346,9 @@ class ImportElevesProcessor:
                 )
                 self.stats['modifies'] += len(eleves_a_modifier)
         
+        self.eleves_importes = list(Eleve.objects.filter(
+            classe=classe, matricule__in=[e.matricule for e in eleves_a_creer + eleves_a_modifier],
+        ).values_list('pk', flat=True))
         return self.stats
     
     def _preparer_eleve(self, row, classe, numero_ordre, matricules_existants, responsables_dict, eleves_existants):
@@ -413,7 +416,7 @@ class ImportElevesProcessor:
             eleve_existant.responsable_secondaire = None
             eleve_existant._responsable_tel = tel_principal
             eleve_existant._responsable2_tel = tel_secondaire
-            eleve_existant.statut = 'ACTIF'
+            # Une réimportation conserve le statut et ne débloque pas le dossier.
 
             return {
                 'type': 'modifier',
@@ -431,7 +434,7 @@ class ImportElevesProcessor:
                 lieu_naissance=lieu_naissance,
                 classe=classe,
                 date_inscription=datetime.now().date(),
-                statut='ACTIF'
+                statut='ATTENTE_PAIEMENT'
             )
             eleve._responsable_tel = tel_principal
             eleve._responsable2_tel = tel_secondaire

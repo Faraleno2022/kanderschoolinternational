@@ -154,16 +154,19 @@ def _traiter_import_eleves(request):
                         messages.error(request, f"{classe.nom} : ... et {len(validator.erreurs) - 5} autres erreurs")
                     return redirect('eleves:importer_eleves')
 
+            import_ids = []
             stats = {'total': 0, 'crees': 0, 'modifies': 0, 'erreurs': 0, 'matricules_generes': 0}
             for classe, groupe_df, validator in validations:
                 for avertissement in validator.avertissements[:3]:
                     messages.warning(request, f"{classe.nom} : {avertissement}")
-                resultat = ImportElevesProcessor(
+                processor = ImportElevesProcessor(
                     df=groupe_df,
                     classe_id=classe.id,
                     user=request.user,
                     generer_matricules=generer_matricules,
-                ).importer()
+                )
+                resultat = processor.importer()
+                import_ids.extend(processor.eleves_importes)
                 for key in stats:
                     stats[key] += resultat[key]
 
@@ -198,8 +201,9 @@ def _traiter_import_eleves(request):
                 f"📊 Total traité: {stats['total']} élève(s)"
             )
             
-            # Rediriger vers la liste des élèves de la classe
-            return redirect('eleves:gestion_classes')
+            request.session['derniers_eleves_importes'] = list(dict.fromkeys(import_ids))
+            from django.urls import reverse
+            return redirect(reverse('eleves:repartir_eleves') + '?lot=dernier')
             
         finally:
             # Nettoyer le fichier temporaire

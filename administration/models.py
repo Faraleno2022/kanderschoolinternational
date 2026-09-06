@@ -80,19 +80,24 @@ class ObjetSupprime(models.Model):
             obj.save()
             restored_objects.append(obj.object)
 
-        # Une restauration de paiement doit remettre l'échéancier et les
-        # cartes dans le même état que l'encaissement restauré.
+        # La désérialisation utilise raw=True : recalculer après restauration
+        # de toutes les dépendances, y compris une remise restaurée seule.
+        from paiements.models import EcheancierPaiement, Paiement
+        from paiements.soldes import recalculer_echeancier
+        paiement_ids = set()
         for restored in restored_objects:
             if restored._meta.label_lower == 'paiements.paiement':
-                from paiements.models import EcheancierPaiement
-                from paiements.soldes import recalculer_echeancier
-                echeancier = EcheancierPaiement.objects.filter(
-                    eleve_id=restored.eleve_id,
-                    annee_scolaire=restored.annee_scolaire,
-                    ecole_reference_id=restored.ecole_encaissement_id,
-                ).first()
-                if echeancier:
-                    recalculer_echeancier(echeancier)
+                paiement_ids.add(restored.pk)
+            elif restored._meta.label_lower == 'paiements.paiementremise':
+                paiement_ids.add(restored.paiement_id)
+        contextes = Paiement.objects.filter(pk__in=paiement_ids).order_by().values_list(
+            'eleve_id', 'annee_scolaire', 'ecole_encaissement_id',
+        ).distinct()
+        for eleve_id, annee, ecole_id in contextes:
+            for echeancier in EcheancierPaiement.objects.filter(
+                eleve_id=eleve_id, annee_scolaire=annee, ecole_reference_id=ecole_id,
+            ):
+                recalculer_echeancier(echeancier)
         self.restaure = True
         self.restaure_le = timezone.now()
         self.save(update_fields=['restaure', 'restaure_le'])

@@ -105,7 +105,7 @@ class CartesHuitParPageTests(TestCase):
         import_response = self.client.post(reverse('eleves:importer_eleves'), {
             'classe_id': '', 'generer_matricules': 'on', 'fichier': upload,
         })
-        self.assertRedirects(import_response, reverse('eleves:gestion_classes'))
+        self.assertRedirects(import_response, reverse('eleves:repartir_eleves') + '?lot=dernier')
         self.assertEqual(Eleve.objects.filter(matricule='T8-001').count(), 1)
         self.assertEqual(Eleve.objects.count(), 9)
 
