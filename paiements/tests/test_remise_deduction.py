@@ -105,11 +105,34 @@ class RemiseDeductionTest(TestCase):
         data.update(extra)
         return self.client.post(self.url, data)
 
+    def _etat_financier(self):
+        """Capture les valeurs persistées pour détecter toute écriture après un refus."""
+        return {
+            'paiements': list(Paiement.objects.filter(eleve=self.eleve).order_by('pk').values()),
+            'remises': list(PaiementRemise.objects.filter(
+                paiement__eleve=self.eleve,
+            ).order_by('pk').values()),
+            'echeanciers': list(EcheancierPaiement.objects.filter(
+                eleve=self.eleve,
+            ).order_by('pk').values()),
+            'catalogue': list(RemiseReduction.objects.order_by('pk').values()),
+            'historique': list(self.paiement.historique_modifications.order_by('pk').values()),
+        }
+
+    def _verifier_refus_sans_modification(self, etat_avant, message, **donnees):
+        response = self._post(**donnees)
+        self.assertContains(response, message, status_code=200)
+        self.assertTemplateUsed(response, 'paiements/appliquer_remise.html')
+        self.assertTrue(response.context['form'].is_bound)
+        self.assertEqual(self._etat_financier(), etat_avant)
+        return response
+
     def test_sans_deduction_la_remise_qui_creerait_un_trop_percu_est_refusee(self):
         """Le reçu solde déjà l'année : ajouter 120 000 de couverture est refusé."""
-        response = self._post()
+        self._verifier_refus_sans_modification(
+            self._etat_financier(), "dépasse ce qui reste dû",
+        )
 
-        self.assertEqual(response.status_code, 200)
         self.assertFalse(PaiementRemise.objects.filter(paiement=self.paiement).exists())
         self.paiement.refresh_from_db()
         self.assertEqual(self.paiement.montant, Decimal("1250000"))
@@ -156,8 +179,9 @@ class RemiseDeductionTest(TestCase):
 
         # Sans déduction, la remise dépasserait le reste dû : elle est refusée
         # et le reçu doit être laissé tel quel, pas à moitié restauré.
-        response = self._post()
-        self.assertEqual(response.status_code, 200)
+        self._verifier_refus_sans_modification(
+            self._etat_financier(), "dépasse ce qui reste dû",
+        )
         self.paiement.refresh_from_db()
         self.assertEqual(self.paiement.montant, Decimal("1130000"))
 
@@ -197,9 +221,11 @@ class RemiseDeductionTest(TestCase):
         self.paiement.montant = Decimal("100000")
         self.paiement.save()
 
-        response = self._post(deduire_du_paiement='1')
+        self._verifier_refus_sans_modification(
+            self._etat_financier(), "dépasse le montant du reçu",
+            deduire_du_paiement='1',
+        )
 
-        self.assertEqual(response.status_code, 200)
         self.assertFalse(PaiementRemise.objects.filter(paiement=self.paiement).exists())
         self.paiement.refresh_from_db()
         self.assertEqual(self.paiement.montant, Decimal("100000"))
@@ -213,3 +239,22 @@ class RemiseDeductionTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['deduire_choisi'])
         self.assertEqual(response.context['montant_brut'], 1250000)
+
+    def test_remises_cumulees_refusees_sans_effacer_la_remise_existante(self):
+        self.paiement.montant = Decimal("900000")
+        self.paiement.save()
+        self.assertEqual(self._post().status_code, 302)
+
+        # 120 000 de catalogue + 250 000 de pourcentage dépassent les 350 000 dus.
+        self._verifier_refus_sans_modification(
+            self._etat_financier(), "dépasse ce qui reste dû",
+            pourcentage_scolarite='50',
+        )
+
+    def test_annee_deja_surcouverte_refusee_sans_modifier_les_montants(self):
+        self.paiement.montant = Decimal("1300000")
+        self.paiement.save()
+        self._verifier_refus_sans_modification(
+            self._etat_financier(), "déjà couvert au-delà du total dû",
+            deduire_du_paiement='1',
+        )
