@@ -207,7 +207,11 @@
                             {% empty %}
                             <tr>
                                 <td colspan="10" class="text-center text-muted">
+                                    {% if ecole_manquante %}
+                                    Aucune école n’est associée à votre compte. Contactez votre administrateur pour l’associer à une école.
+                                    {% else %}
                                     Aucun enseignant actif trouvé.
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}

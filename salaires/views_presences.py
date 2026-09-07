@@ -16,13 +16,25 @@ from .services import (
     STATUTS_HEURES_PAYEES,
     recalculer_etat_salaire_pour_date,
 )
-from utilisateurs.utils import filter_by_user_school, user_school, user_is_admin
+from utilisateurs.utils import filter_by_user_school, user_school
+
+
+def _enseignants_autorises(user):
+    """Garde l'école du compte, ou l'accès global du superadministrateur."""
+    enseignants = filter_by_user_school(Enseignant.objects.all(), user)
+    ecole = user_school(user)
+    if ecole is not None:
+        enseignants = enseignants.filter(ecole=ecole)
+    return enseignants
+
+
+def _presences_autorisees(user):
+    return PresenceEnseignant.objects.filter(enseignant__in=_enseignants_autorises(user))
 
 
 @login_required
 def liste_presences(request):
     """Liste des présences avec filtres"""
-    user_school_obj = user_school(request.user)
     
     # Filtres
     date_debut = request.GET.get('date_debut')
@@ -37,9 +49,7 @@ def liste_presences(request):
         date_fin = date.today().strftime('%Y-%m-%d')
     
     # Requête de base
-    presences = PresenceEnseignant.objects.filter(
-        enseignant__ecole=user_school_obj
-    ).select_related('enseignant', 'pointe_par')
+    presences = _presences_autorisees(request.user).select_related('enseignant', 'pointe_par')
     
     # Appliquer les filtres
     if date_debut:
@@ -64,8 +74,7 @@ def liste_presences(request):
     )
     
     # Liste des enseignants pour le filtre
-    enseignants = Enseignant.objects.filter(
-        ecole=user_school_obj,
+    enseignants = _enseignants_autorises(request.user).filter(
         statut='ACTIF'
     ).order_by('nom', 'prenoms')
     
@@ -111,8 +120,8 @@ def pointer_presence(request):
 
         enseignants_valides = {
             enseignant.id: enseignant
-            for enseignant in Enseignant.objects.filter(
-                id__in=ids, ecole=user_school_obj, statut='ACTIF'
+            for enseignant in _enseignants_autorises(request.user).filter(
+                id__in=ids, statut='ACTIF'
             )
         }
         if set(ids) != set(enseignants_valides):
@@ -193,15 +202,14 @@ def pointer_presence(request):
         date_pointage_str = date_pointage_obj.strftime('%Y-%m-%d')
     
     # Récupérer les enseignants actifs
-    enseignants = Enseignant.objects.filter(
-        ecole=user_school_obj,
+    enseignants = _enseignants_autorises(request.user).filter(
         statut='ACTIF'
     ).order_by('nom', 'prenoms')
     
     # Récupérer les présences existantes pour cette date
     presences_existantes = {}
     total_heures_jour = Decimal('0')
-    for presence in PresenceEnseignant.objects.filter(date=date_pointage_obj, enseignant__ecole=user_school_obj):
+    for presence in _presences_autorisees(request.user).filter(date=date_pointage_obj):
         presences_existantes[presence.enseignant_id] = presence
         if (
             presence.statut in STATUTS_HEURES_PAYEES
@@ -214,8 +222,7 @@ def pointer_presence(request):
     fin_mois = date_pointage_obj
     
     heures_mois_par_enseignant = {}
-    presences_mois = PresenceEnseignant.objects.filter(
-        enseignant__ecole=user_school_obj,
+    presences_mois = _presences_autorisees(request.user).filter(
         date__gte=debut_mois,
         date__lte=fin_mois
     ).values('enseignant_id').annotate(
@@ -253,6 +260,7 @@ def pointer_presence(request):
         'enseignants': enseignants,
         'date_pointage': date_pointage_str,
         'date_pointage_obj': date_pointage_obj,
+        'ecole_manquante': user_school_obj is None and not request.user.is_superuser,
         'presences_existantes': presences_existantes,
         'heures_mois_par_enseignant': heures_mois_par_enseignant,
         'statuts': PresenceEnseignant.STATUT_CHOICES,
@@ -268,11 +276,7 @@ def pointer_presence(request):
 def modifier_presence(request, presence_id):
     """Modifier une présence existante"""
     user_school_obj = user_school(request.user)
-    presence = get_object_or_404(
-        PresenceEnseignant,
-        id=presence_id,
-        enseignant__ecole=user_school_obj
-    )
+    presence = get_object_or_404(_presences_autorisees(request.user), id=presence_id)
     
     if request.method == 'POST':
         form = PresenceForm(request.POST, instance=presence, ecole=user_school_obj)
@@ -304,12 +308,7 @@ def modifier_presence(request, presence_id):
 @login_required
 def supprimer_presence(request, presence_id):
     """Supprimer une présence"""
-    user_school_obj = user_school(request.user)
-    presence = get_object_or_404(
-        PresenceEnseignant,
-        id=presence_id,
-        enseignant__ecole=user_school_obj
-    )
+    presence = get_object_or_404(_presences_autorisees(request.user), id=presence_id)
     
     if request.method == 'POST':
         enseignant_nom = presence.enseignant.nom_complet
@@ -341,7 +340,6 @@ def supprimer_presence(request, presence_id):
 @login_required
 def rapport_presences(request):
     """Rapport de présences par enseignant et période"""
-    user_school_obj = user_school(request.user)
     
     # Filtres
     date_debut = request.GET.get('date_debut')
@@ -355,8 +353,7 @@ def rapport_presences(request):
         date_fin = date.today().strftime('%Y-%m-%d')
     
     # Requête de base
-    presences = PresenceEnseignant.objects.filter(
-        enseignant__ecole=user_school_obj,
+    presences = _presences_autorisees(request.user).filter(
         date__gte=date_debut,
         date__lte=date_fin
     ).select_related('enseignant')
@@ -406,9 +403,7 @@ def rapport_presences(request):
     rapport = list(rapport_par_enseignant.values())
     
     # Liste des enseignants pour le filtre
-    enseignants = Enseignant.objects.filter(
-        ecole=user_school_obj
-    ).order_by('nom', 'prenoms')
+    enseignants = _enseignants_autorises(request.user).order_by('nom', 'prenoms')
     
     context = {
         'rapport': rapport,
@@ -424,7 +419,6 @@ def rapport_presences(request):
 @login_required
 def export_presences_csv(request):
     """Exporter les présences en CSV"""
-    user_school_obj = user_school(request.user)
     
     # Filtres
     date_debut = request.GET.get('date_debut', date.today().strftime('%Y-%m-%d'))
@@ -432,8 +426,7 @@ def export_presences_csv(request):
     enseignant_id = request.GET.get('enseignant')
     
     # Requête
-    presences = PresenceEnseignant.objects.filter(
-        enseignant__ecole=user_school_obj,
+    presences = _presences_autorisees(request.user).filter(
         date__gte=date_debut,
         date__lte=date_fin
     ).select_related('enseignant')
@@ -493,13 +486,10 @@ def export_presences_excel(request):
         date_fin = date.today()
     
     # Requête
-    presences = filter_by_user_school(
-        PresenceEnseignant.objects.filter(date__gte=date_debut, date__lte=date_fin),
-        request.user,
-        'enseignant__ecole',
+    presences = _presences_autorisees(request.user).filter(
+        date__gte=date_debut, date__lte=date_fin,
     ).select_related('enseignant').order_by('enseignant__nom', 'date')
     if user_school_obj is not None:
-        presences = presences.filter(enseignant__ecole=user_school_obj)
         nom_ecole = user_school_obj.nom
     else:
         nom_ecole = "Toutes les écoles" if request.user.is_superuser else "Aucune école attribuée"
