@@ -16,7 +16,7 @@ from .services import (
     STATUTS_HEURES_PAYEES,
     recalculer_etat_salaire_pour_date,
 )
-from utilisateurs.utils import user_school, user_is_admin
+from utilisateurs.utils import filter_by_user_school, user_school, user_is_admin
 
 
 @login_required
@@ -493,11 +493,16 @@ def export_presences_excel(request):
         date_fin = date.today()
     
     # Requête
-    presences = PresenceEnseignant.objects.filter(
-        enseignant__ecole=user_school_obj,
-        date__gte=date_debut,
-        date__lte=date_fin
+    presences = filter_by_user_school(
+        PresenceEnseignant.objects.filter(date__gte=date_debut, date__lte=date_fin),
+        request.user,
+        'enseignant__ecole',
     ).select_related('enseignant').order_by('enseignant__nom', 'date')
+    if user_school_obj is not None:
+        presences = presences.filter(enseignant__ecole=user_school_obj)
+        nom_ecole = user_school_obj.nom
+    else:
+        nom_ecole = "Toutes les écoles" if request.user.is_superuser else "Aucune école attribuée"
     
     if enseignant_id:
         presences = presences.filter(enseignant_id=enseignant_id)
@@ -522,7 +527,7 @@ def export_presences_excel(request):
     
     # Titre
     ws1.merge_cells('A1:H1')
-    ws1['A1'] = f"Pointage des Présences - {user_school_obj.nom}"
+    ws1['A1'] = f"Pointage des Présences - {nom_ecole}"
     ws1['A1'].font = Font(bold=True, size=14)
     ws1['A1'].alignment = Alignment(horizontal="center")
     
