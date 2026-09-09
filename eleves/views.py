@@ -60,20 +60,21 @@ def liste_eleves(request):
     # Cache de l'école utilisateur
     user_school_cache_key = f'user_school_{request.user.id}'
     user_school_obj = cache.get(user_school_cache_key)
-    if user_school_obj is None and not user_is_admin(request.user):
+    if user_school_obj is None and not user_is_superadmin(request.user):
         user_school_obj = user_school(request.user)
         if user_school_obj:
             cache.set(user_school_cache_key, user_school_obj, 300)
     
     # Queryset optimisé avec relations pré-chargées
     eleves = QueryOptimizer.get_optimized_eleves(
-        school=user_school_obj if not user_is_admin(request.user) else None,
+        school=user_school_obj if not user_is_superadmin(request.user) else None,
         with_payments=True,
         with_classes=True
     ).filter(est_dans_corbeille=False)
+    eleves = filter_by_user_school(eleves, request.user, 'classe__ecole')
 
     # Filtrer par année scolaire active
-    if not user_is_admin(request.user) and user_school_obj:
+    if not user_is_superadmin(request.user) and user_school_obj:
         annee_active = get_annee_active(request, user_school_obj)
         if annee_active:
             eleves = eleves.filter(classe__annee_scolaire=annee_active)
@@ -109,19 +110,14 @@ def liste_eleves(request):
     else:
         evaluation = ''
     
-    # Statistiques optimisées avec cache
-    stats_cache_key = f'eleves_stats_{request.user.id}_{hash(str(eleves.query))}'
-    stats = cache.get(stats_cache_key)
-    
-    if stats is None:
-        stats = eleves.aggregate(
-            total_eleves=Count('id'),
-            eleves_actifs=Count(Case(When(statut='ACTIF', then=1), output_field=IntegerField())),
-            eleves_suspendus=Count(Case(When(statut='SUSPENDU', then=1), output_field=IntegerField())),
-            eleves_exclus=Count(Case(When(statut='EXCLU', then=1), output_field=IntegerField()))
-        )
-        cache.set(stats_cache_key, stats, 120)  # Cache 2 minutes
-    
+    # Agrégation fraîche : le contenu change sans que la requête SQL change.
+    stats = eleves.aggregate(
+        total_eleves=Count('id'),
+        eleves_actifs=Count(Case(When(statut='ACTIF', then=1), output_field=IntegerField())),
+        eleves_suspendus=Count(Case(When(statut='SUSPENDU', then=1), output_field=IntegerField())),
+        eleves_exclus=Count(Case(When(statut='EXCLU', then=1), output_field=IntegerField())),
+    )
+
     # Pagination optimisée
     page_number = request.GET.get('page', 1)
     page_obj, paginator = PaginationOptimizer.optimize_pagination(
@@ -409,7 +405,9 @@ def creer_ecole_confirmation(request):
 
 def _user_can_edit_school(request, ecole: Ecole) -> bool:
     """Autoriser édition si admin ou créateur, ou si école en BROUILLON/EN_ATTENTE."""
-    if user_is_admin(request.user):
+    if user_is_superadmin(request.user) or (
+        user_is_admin(request.user) and user_school(request.user) == ecole
+    ):
         return True
     try:
         if ecole.created_by_id and request.user.is_authenticated and ecole.created_by_id == request.user.id:
@@ -546,7 +544,7 @@ def detail_eleve(request, eleve_id):
     qs = Eleve.objects.filter(est_dans_corbeille=False).select_related(
         'classe', 'classe__ecole', 'responsable_principal', 'responsable_secondaire'
     ).prefetch_related('paiements', 'historique')
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         qs = filter_by_user_school(qs, request.user, 'classe__ecole')
     eleve = get_object_or_404(qs, id=eleve_id)
     
@@ -612,13 +610,13 @@ def ajouter_eleve(request):
     user_school_cache_key = f'user_school_{request.user.id}'
     user_school_obj = cache.get(user_school_cache_key)
     
-    if user_school_obj is None and not user_is_admin(request.user):
+    if user_school_obj is None and not user_is_superadmin(request.user):
         user_school_obj = user_school(request.user)
         if user_school_obj:
             cache.set(user_school_cache_key, user_school_obj, 300)  # Cache 5 minutes
     
     # Vérification d'accès rapide
-    if not user_is_admin(request.user) and user_school_obj is None:
+    if not user_is_superadmin(request.user) and user_school_obj is None:
         return render(request, 'utilisateurs/acces_refuse_ecole.html', status=403)
     
     if request.method == 'POST':
@@ -626,7 +624,7 @@ def ajouter_eleve(request):
         form = EleveForm(request.POST, request.FILES, user=request.user)
         
         # Cache des classes pour éviter les requêtes répétées (filtrées par année active)
-        if not user_is_admin(request.user):
+        if not user_is_superadmin(request.user):
             annee_active = get_annee_active(request, user_school_obj)
             classes_cache_key = f'classes_ecole_{user_school_obj.id}_{annee_active}'
             classes_qs = cache.get(classes_cache_key)
@@ -739,7 +737,7 @@ def ajouter_eleve(request):
         form = EleveForm(user=request.user)
 
         # Cache des classes pour le formulaire GET (filtrées par année active)
-        if not user_is_admin(request.user) and user_school_obj:
+        if not user_is_superadmin(request.user) and user_school_obj:
             annee_active = get_annee_active(request, user_school_obj)
             classes_cache_key = f'classes_ecole_{user_school_obj.id}_{annee_active}'
             classes_qs = cache.get(classes_cache_key)
@@ -771,7 +769,7 @@ def ajouter_eleve(request):
         from django.db.models import Count, Case, When, IntegerField
         
         eleves_qs = Eleve.objects.all()
-        if not user_is_admin(request.user) and user_school_obj:
+        if not user_is_superadmin(request.user) and user_school_obj:
             eleves_qs = eleves_qs.filter(classe__ecole=user_school_obj)
         
         # Agrégation en une seule requête
@@ -805,7 +803,7 @@ def ajouter_eleve(request):
 def modifier_eleve(request, eleve_id):
     """Vue pour modifier un élève existant"""
     qs = Eleve.objects.filter(est_dans_corbeille=False)
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         qs = filter_by_user_school(qs, request.user, 'classe__ecole')
     
     try:
@@ -815,8 +813,8 @@ def modifier_eleve(request, eleve_id):
         return redirect('eleves:liste_eleves')
     
     if request.method == 'POST':
-        form = EleveForm(request.POST, request.FILES, instance=eleve)
-        if not user_is_admin(request.user):
+        form = EleveForm(request.POST, request.FILES, instance=eleve, user=request.user)
+        if not user_is_superadmin(request.user):
             try:
                 ecole_u = user_school(request.user)
                 qs = Classe.objects.filter(ecole=ecole_u)
@@ -999,8 +997,8 @@ def modifier_eleve(request, eleve_id):
             else:
                 messages.error(request, "Le formulaire est invalide. Veuillez corriger les erreurs et reessayer.")
     else:
-        form = EleveForm(instance=eleve)
-        if not user_is_admin(request.user):
+        form = EleveForm(instance=eleve, user=request.user)
+        if not user_is_superadmin(request.user):
             try:
                 ecole_u = user_school(request.user)
                 qs = Classe.objects.filter(ecole=ecole_u)
@@ -1039,7 +1037,7 @@ def modifier_eleve(request, eleve_id):
 @login_required
 def _get_classe_or_403(request, classe_id):
     qs = Classe.objects.select_related('ecole')
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         qs = qs.filter(ecole=user_school(request.user))
     return get_object_or_404(qs, id=classe_id)
 
@@ -1483,7 +1481,7 @@ def export_tous_eleves_excel(request):
 def supprimer_eleve(request, eleve_id):
     """Place un élève dans la corbeille après confirmation."""
     qs = Eleve.objects.filter(est_dans_corbeille=False)
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         qs = filter_by_user_school(qs, request.user, 'classe__ecole')
 
     eleve = get_object_or_404(qs, id=eleve_id)
@@ -1543,7 +1541,7 @@ def corbeille_eleves(request):
     eleves = Eleve.objects.filter(est_dans_corbeille=True).select_related(
         'classe', 'classe__ecole', 'supprime_par',
     )
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         eleves = filter_by_user_school(eleves, request.user, 'classe__ecole')
     eleves = eleves.order_by('-supprime_le', 'nom', 'prenom')
     page_obj = Paginator(eleves, 25).get_page(request.GET.get('page'))
@@ -1558,7 +1556,7 @@ def corbeille_eleves(request):
 def restaurer_eleve(request, eleve_id):
     """Restaure un élève archivé, avec contrôle de l'école."""
     qs = Eleve.objects.filter(est_dans_corbeille=True)
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         qs = filter_by_user_school(qs, request.user, 'classe__ecole')
     eleve = get_object_or_404(qs, pk=eleve_id)
     nom_complet = eleve.nom_complet
@@ -1595,7 +1593,7 @@ def supprimer_eleves_masse(request):
         return redirect('eleves:liste_eleves')
     
     qs = Eleve.objects.filter(id__in=eleve_ids, est_dans_corbeille=False)
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         qs = filter_by_user_school(qs, request.user, 'classe__ecole')
 
     eleves = list(qs)
@@ -1640,7 +1638,7 @@ def gestion_classes(request):
         eleves_count=Count('eleves', filter=Q(eleves__statut='ACTIF'))
     ).order_by('ecole__nom', 'niveau', 'nom')
 
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         classes = classes.filter(ecole=ecole_user)
 
     # Filtrer par année active
@@ -1655,8 +1653,8 @@ def gestion_classes(request):
     }
 
     ecoles_iter = Ecole.objects.all()
-    if not user_is_admin(request.user) and ecole_user:
-        ecoles_iter = ecoles_iter.filter(id=ecole_user.id)
+    if not user_is_superadmin(request.user):
+        ecoles_iter = ecoles_iter.filter(id=ecole_user.id) if ecole_user else ecoles_iter.none()
     for ecole in ecoles_iter:
         classes_ecole = classes.filter(ecole=ecole)
         stats['classes_par_ecole'][ecole.nom] = {
@@ -1678,7 +1676,7 @@ def ajax_classes_par_ecole(request, ecole_id):
     """Vue AJAX pour récupérer les classes d'une école"""
     try:
         # Non-admin: ne peut demander que sa propre école
-        if not user_is_admin(request.user):
+        if not user_is_superadmin(request.user):
             if str(user_school(request.user).id) != str(ecole_id):
                 return JsonResponse({'success': False, 'error': "Accès non autorisé à cette école."}, status=403)
         ecole = get_object_or_404(Ecole, id=ecole_id)
@@ -1933,7 +1931,7 @@ def statistiques_eleves(request):
     from paiements.models import Paiement
     
     paiements_qs = Paiement.objects.all()
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         paiements_qs = paiements_qs.filter(eleve__classe__ecole=user_school(request.user))
     stats_financieres = {
         'eleves_avec_paiements': eleves_base.filter(paiements__isnull=False).distinct().count(),
@@ -1982,7 +1980,7 @@ def fiche_inscription_pdf(request, eleve_id):
     qs = Eleve.objects.select_related(
         'classe', 'classe__ecole', 'responsable_principal', 'responsable_secondaire'
     )
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         qs = filter_by_user_school(qs, request.user, 'classe__ecole')
     eleve = get_object_or_404(qs, id=eleve_id)
     
@@ -2389,7 +2387,7 @@ def ajax_rechercher_responsable_telephone(request):
         user_school_cache_key = f'user_school_{request.user.id}'
         user_school_obj = cache.get(user_school_cache_key)
         
-        if user_school_obj is None and not user_is_admin(request.user):
+        if user_school_obj is None and not user_is_superadmin(request.user):
             user_school_obj = user_school(request.user)
             if user_school_obj:
                 cache.set(user_school_cache_key, user_school_obj, 300)
@@ -2403,12 +2401,12 @@ def ajax_rechercher_responsable_telephone(request):
             base_qs = Responsable.objects.select_related()
             
             # Filtrer par école pour les non-admins
-            if not user_is_admin(request.user) and user_school_obj:
+            if not user_is_superadmin(request.user) and user_school_obj:
                 base_qs = base_qs.filter(
                     Q(eleves_principal__classe__ecole=user_school_obj) | 
                     Q(eleves_secondaire__classe__ecole=user_school_obj)
                 )
-            elif not user_is_admin(request.user):
+            elif not user_is_superadmin(request.user):
                 base_qs = base_qs.none()
             
             # Recherche optimisée par téléphone
@@ -2461,7 +2459,7 @@ def generer_ticket_retrait_pdf(request, eleve_id):
     )
     
     # Vérifier les permissions
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         user_school_obj = user_school(request.user)
         if not user_school_obj or eleve.classe.ecole != user_school_obj:
             messages.error(request, "Vous n'avez pas accès à cet élève.")
@@ -2828,7 +2826,7 @@ def generer_ticket_bus_pdf(request, eleve_id):
     )
     
     # Vérifier les permissions
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         user_school_obj = user_school(request.user)
         if not user_school_obj or eleve.classe.ecole != user_school_obj:
             messages.error(request, "Vous n'avez pas accès à cet élève.")
@@ -3218,7 +3216,7 @@ def generer_ticket_cantine_pdf(request, eleve_id):
     eleve_qs = Eleve.objects.filter(est_dans_corbeille=False).select_related(
         'classe', 'classe__ecole', 'responsable_principal',
     )
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         eleve_qs = filter_by_user_school(eleve_qs, request.user, 'classe__ecole')
     eleve = get_object_or_404(eleve_qs, pk=eleve_id)
     abonnement = AbonnementCantine.objects.filter(
@@ -3254,7 +3252,7 @@ def generer_tickets_cantine_classe_pdf(request, classe_id):
     from reportlab.lib.pagesizes import A4
 
     classe = get_object_or_404(Classe, id=classe_id)
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         ecole = user_school(request.user)
         if not ecole or classe.ecole_id != ecole.id:
             messages.error(request, "Vous n'avez pas accès à cette classe.")
@@ -3314,7 +3312,7 @@ def generer_tickets_retrait_classe_pdf(request, classe_id):
     classe = get_object_or_404(Classe, id=classe_id)
     
     # Vérifier les permissions
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         user_school_obj = user_school(request.user)
         if not user_school_obj or classe.ecole != user_school_obj:
             messages.error(request, "Vous n'avez pas accès à cette classe.")
@@ -3393,7 +3391,7 @@ def generer_tickets_bus_classe_pdf(request, classe_id):
     classe = get_object_or_404(Classe, id=classe_id)
     
     # Vérifier les permissions
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         user_school_obj = user_school(request.user)
         if not user_school_obj or classe.ecole != user_school_obj:
             messages.error(request, "Vous n'avez pas accès à cette classe.")
@@ -4138,16 +4136,12 @@ def _dessiner_ticket_bus(c, eleve, abonnement, x, y, width, height, main_font, m
 def carte_scolaire_preview(request, eleve_id):
     """Affiche un aperçu HTML de la carte scolaire"""
     eleve = get_object_or_404(
-        Eleve.objects.select_related('classe', 'classe__ecole', 'responsable_principal'),
+        filter_by_user_school(
+            Eleve.objects.select_related('classe', 'classe__ecole', 'responsable_principal'),
+            request.user, 'classe__ecole',
+        ),
         id=eleve_id
     )
-    
-    # Vérifier permissions
-    if not user_is_admin(request.user):
-        user_school_obj = user_school(request.user)
-        if not user_school_obj or eleve.classe.ecole != user_school_obj:
-            messages.error(request, "Vous n'avez pas accès à cet élève.")
-            return redirect('eleves:liste_eleves')
     
     context = {
         'eleve': eleve,
@@ -4159,19 +4153,15 @@ def carte_scolaire_preview(request, eleve_id):
 @login_required
 def generer_carte_scolaire_pdf(request, eleve_id):
     """Génère une carte scolaire moderne pour un élève"""
-    from .carte_scolaire_generator import generer_carte_scolaire_moderne, generer_carte_pvc_haute_qualite
+    from .carte_scolaire_generator import generer_carte_scolaire_moderne
     
     eleve = get_object_or_404(
-        Eleve.objects.select_related('classe', 'classe__ecole', 'responsable_principal'),
+        filter_by_user_school(
+            Eleve.objects.select_related('classe', 'classe__ecole', 'responsable_principal'),
+            request.user, 'classe__ecole',
+        ),
         id=eleve_id
     )
-    
-    # Vérifier permissions
-    if not user_is_admin(request.user):
-        user_school_obj = user_school(request.user)
-        if not user_school_obj or eleve.classe.ecole != user_school_obj:
-            messages.error(request, "Vous n'avez pas accès à cet élève.")
-            return redirect('eleves:liste_eleves')
     
     # Par défaut, utiliser le format PVC pour les cartes individuelles
     # Le format standard n'est utilisé que si explicitement demandé
@@ -4189,164 +4179,6 @@ def generer_carte_scolaire_pdf(request, eleve_id):
         response['Content-Disposition'] = f'attachment; filename="carte_pvc_{eleve.matricule}.pdf"'
         # Utiliser le générateur moderne qui est déjà au format carte bancaire (86mm x 54mm)
         return generer_carte_scolaire_moderne(eleve, response)
-    
-    # Polices
-    try:
-        pdfmetrics.registerFont(TTFont('Arial', 'C:/Windows/Fonts/arial.ttf'))
-        pdfmetrics.registerFont(TTFont('Arial-Bold', 'C:/Windows/Fonts/arialbd.ttf'))
-        main_font = 'Arial'
-        main_font_bold = 'Arial-Bold'
-    except:
-        main_font = 'Helvetica'
-        main_font_bold = 'Helvetica-Bold'
-    
-    primary_color = '#2563eb'
-    light_color = '#dbeafe'
-    
-    # Fond et bordure
-    c.setFillColor(colors.white)
-    c.rect(0, 0, width, height, stroke=0, fill=1)
-    c.setStrokeColor(colors.HexColor(primary_color))
-    c.setLineWidth(2.5)
-    c.roundRect(2, 2, width-4, height-4, 10, stroke=1, fill=0)
-    
-    # Bande supérieure (plus grande)
-    c.setFillColor(colors.HexColor(primary_color))
-    c.roundRect(5, height-42, width-10, 37, 8, stroke=0, fill=1)
-    
-    # Logo école (plus grand)
-    try:
-        if eleve.classe.ecole.logo and hasattr(eleve.classe.ecole.logo, 'path'):
-            if os.path.exists(eleve.classe.ecole.logo.path):
-                logo_size = 30
-                c.setFillColor(colors.white)
-                c.circle(10 + logo_size/2, height - 35 + logo_size/2, logo_size/2 + 1, stroke=0, fill=1)
-                c.drawImage(eleve.classe.ecole.logo.path, 10, height - 35, 
-                          width=logo_size, height=logo_size, preserveAspectRatio=True, mask='auto')
-    except:
-        pass
-    
-    # Nom école (texte plus grand)
-    c.setFillColor(colors.white)
-    c.setFont(main_font_bold, 11)
-    c.drawString(45, height-15, eleve.classe.ecole.nom[:40])
-    c.setFont(main_font, 9)
-    c.drawString(45, height-30, f"Année Scolaire: {eleve.classe.annee_scolaire}")
-    
-    # Photo élève (plus grande)
-    photo_x = width - 48
-    photo_y = height/2 + 3
-    photo_size = 42
-    
-    c.setFillColor(colors.white)
-    c.roundRect(photo_x, photo_y, photo_size, photo_size, 6, stroke=0, fill=1)
-    c.setStrokeColor(colors.HexColor(primary_color))
-    c.setLineWidth(2.5)
-    c.roundRect(photo_x, photo_y, photo_size, photo_size, 6, stroke=1, fill=0)
-    
-    if eleve.photo:
-        try:
-            from PIL import Image
-            if hasattr(eleve.photo, 'path') and os.path.exists(eleve.photo.path):
-                img = Image.open(eleve.photo.path)
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                img.thumbnail((photo_size - 5, photo_size - 5), Image.Resampling.LANCZOS)
-                temp_buffer = io.BytesIO()
-                img.save(temp_buffer, format='JPEG')
-                temp_buffer.seek(0)
-                c.drawImage(temp_buffer, photo_x + 2.5, photo_y + 2.5, 
-                          width=photo_size - 5, height=photo_size - 5, preserveAspectRatio=True)
-        except:
-            c.setFillColor(colors.HexColor(primary_color))
-            c.setFont(main_font_bold, 18)
-            c.drawCentredString(photo_x + photo_size/2, photo_y + photo_size/2 - 5, 
-                              f"{eleve.prenom[0]}{eleve.nom[0]}")
-    else:
-        c.setFillColor(colors.HexColor(primary_color))
-        c.setFont(main_font_bold, 18)
-        c.drawCentredString(photo_x + photo_size/2, photo_y + photo_size/2 - 5, 
-                          f"{eleve.prenom[0]}{eleve.nom[0]}")
-    
-    # Section informations élève (plus d'espace, plus d'infos)
-    y_pos = height - 58
-    x_margin = 10
-    
-    # Nom et prénom (plus grand)
-    c.setFillColor(colors.HexColor('#1f2937'))
-    c.setFont(main_font_bold, 13)
-    nom_complet = f"{eleve.prenom} {eleve.nom}".upper()
-    if len(nom_complet) > 25:
-        nom_complet = nom_complet[:25] + "."
-    c.drawString(x_margin, y_pos, nom_complet)
-    
-    # Ligne de séparation
-    y_pos -= 8
-    c.setStrokeColor(colors.HexColor(light_color))
-    c.setLineWidth(1)
-    c.line(x_margin, y_pos, width - photo_size - 15, y_pos)
-    
-    # Informations principales (2 colonnes)
-    y_pos -= 10
-    c.setFont(main_font_bold, 9)
-    c.setFillColor(colors.HexColor('#374151'))
-    
-    # Colonne 1
-    c.drawString(x_margin, y_pos, "Matricule:")
-    c.setFont(main_font, 9)
-    c.setFillColor(colors.HexColor('#6b7280'))
-    c.drawString(x_margin + 32, y_pos, eleve.matricule)
-    
-    # Colonne 2
-    c.setFont(main_font_bold, 9)
-    c.setFillColor(colors.HexColor('#374151'))
-    sexe_display = "Masculin" if eleve.sexe == 'M' else "Féminin"
-    c.drawString(x_margin, y_pos - 9, "Sexe:")
-    c.setFont(main_font, 9)
-    c.setFillColor(colors.HexColor('#6b7280'))
-    c.drawString(x_margin + 32, y_pos - 9, sexe_display)
-    
-    # Ligne 2
-    c.setFont(main_font_bold, 9)
-    c.setFillColor(colors.HexColor('#374151'))
-    c.drawString(x_margin, y_pos - 18, "Classe:")
-    c.setFont(main_font, 9)
-    c.setFillColor(colors.HexColor('#6b7280'))
-    c.drawString(x_margin + 32, y_pos - 18, eleve.classe.nom)
-    
-    c.setFont(main_font_bold, 9)
-    c.setFillColor(colors.HexColor('#374151'))
-    c.drawString(x_margin, y_pos - 27, "Né(e) le:")
-    c.setFont(main_font, 9)
-    c.setFillColor(colors.HexColor('#6b7280'))
-    c.drawString(x_margin + 32, y_pos - 27, eleve.date_naissance.strftime('%d/%m/%Y'))
-    
-    # Contact d'urgence
-    if eleve.responsable_principal:
-        c.setFont(main_font_bold, 8)
-        c.setFillColor(colors.HexColor('#374151'))
-        c.drawString(x_margin, y_pos - 37, "Contact urgence:")
-        c.setFont(main_font, 8)
-        c.setFillColor(colors.HexColor('#6b7280'))
-        tel = eleve.responsable_principal.telephone or "Non renseigné"
-        c.drawString(x_margin + 50, y_pos - 37, tel[:20])
-    
-    # Pied de page avec adresse école
-    c.setFont(main_font, 7)
-    c.setFillColor(colors.HexColor('#9ca3af'))
-    if eleve.classe.ecole.adresse:
-        adresse_courte = eleve.classe.ecole.adresse[:45]
-        c.drawString(x_margin, 10, adresse_courte)
-    
-    if eleve.classe.ecole.telephone:
-        c.drawString(x_margin, 4, f"Tél: {eleve.classe.ecole.tous_telephones}")
-    
-    c.setFont(main_font, 6)
-    c.drawRightString(width - 5, 6, f"Généré le {timezone.now().strftime('%d/%m/%Y')}")
-    
-    c.showPage()
-    c.save()
-    return response
 
 
 @login_required
@@ -4356,7 +4188,7 @@ def generer_cartes_classe_pdf(request, classe_id):
     
     classe = get_object_or_404(Classe, id=classe_id)
     
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         user_school_obj = user_school(request.user)
         if not user_school_obj or classe.ecole != user_school_obj:
             messages.error(request, "Vous n'avez pas accès à cette classe.")
@@ -4508,7 +4340,7 @@ def ajax_modifier_telephone_responsable(request):
         return JsonResponse({'success': False, 'error': 'Élève introuvable'}, status=404)
 
     # Vérifier que l'utilisateur a accès à cet élève
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         user_school_obj = user_school(request.user)
         if not user_school_obj or eleve.classe.ecole != user_school_obj:
             return JsonResponse({'success': False, 'error': 'Accès non autorisé'}, status=403)

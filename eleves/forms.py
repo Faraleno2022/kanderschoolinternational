@@ -1,7 +1,7 @@
 from django import forms
 from django.core.validators import RegexValidator
 from .models import Eleve, Responsable, Classe, Ecole, VisiteMedicale
-from utilisateurs.utils import user_is_admin, user_school
+from utilisateurs.utils import user_is_superadmin, user_school, filter_by_user_school
 from datetime import date
 
 class ResponsableForm(forms.ModelForm):
@@ -273,9 +273,14 @@ class EleveForm(forms.ModelForm):
         self.fields['responsable_principal'].required = False
         self.fields['responsable_secondaire'].required = False
         
+        if self._current_user:
+            self.fields['classe'].queryset = filter_by_user_school(
+                self.fields['classe'].queryset, self._current_user
+            )
+
         # Ordonner et filtrer les responsables par école pour les non-admins
         try:
-            if self._current_user and not user_is_admin(self._current_user):
+            if self._current_user and not user_is_superadmin(self._current_user):
                 ecole = user_school(self._current_user)
                 if ecole:
                     from django.db.models import Q
@@ -296,8 +301,8 @@ class EleveForm(forms.ModelForm):
                 self.fields['responsable_secondaire'].queryset = Responsable.objects.all().order_by('nom', 'prenom')
         except Exception:
             # Fallback de sécurité
-            self.fields['responsable_principal'].queryset = Responsable.objects.all().order_by('nom', 'prenom')
-            self.fields['responsable_secondaire'].queryset = Responsable.objects.all().order_by('nom', 'prenom')
+            self.fields['responsable_principal'].queryset = Responsable.objects.none()
+            self.fields['responsable_secondaire'].queryset = Responsable.objects.none()
         self.fields['responsable_secondaire'].required = False
     
     def clean_nom(self):

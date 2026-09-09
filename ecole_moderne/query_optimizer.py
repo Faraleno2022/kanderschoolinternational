@@ -236,26 +236,14 @@ class PaginationOptimizer:
     
     @staticmethod
     def optimize_pagination(queryset, page, per_page=20):
-        """
-        Pagination optimisée avec count() en cache
-        """
-        from django.core.paginator import Paginator
-        
-        # Cache du count total
-        cache_key = f'pagination_count_{hash(str(queryset.query))}'
-        total_count = cache.get(cache_key)
-        
-        if total_count is None:
-            total_count = queryset.count()
-            cache.set(cache_key, total_count, 300)  # 5 minutes
-        
-        # Pagination avec count en cache
+        """Pagine une requête, y compris vide, avec un décompte à jour."""
+        from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+
+        # Paginator mémorise déjà count pour cette requête. Un cache partagé
+        # peut périmer après écriture et str(queryset.none().query) lève une erreur.
         paginator = Paginator(queryset, per_page)
-        paginator._count = total_count  # Override du count
-        
         try:
             page_obj = paginator.page(page)
-        except:
+        except (EmptyPage, PageNotAnInteger):
             page_obj = paginator.page(1)
-        
         return page_obj, paginator
