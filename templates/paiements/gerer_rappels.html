@@ -252,7 +252,7 @@
                                 {% endif %}
                                 
                                 <span class="badge bg-info">
-                                    <i class="fas fa-{{ rappel.canal|lower == 'sms' and 'sms' or rappel.canal|lower == 'whatsapp' and 'whatsapp' or rappel.canal|lower == 'email' and 'envelope' or 'phone' }} me-1"></i>
+                                    <i class="fas fa-{% if rappel.canal|lower == 'sms' %}sms{% elif rappel.canal|lower == 'whatsapp' %}whatsapp{% elif rappel.canal|lower == 'email' %}envelope{% else %}phone{% endif %} me-1"></i>
                                     {{ rappel.get_canal_display }}
                                 </span>
                             </div>

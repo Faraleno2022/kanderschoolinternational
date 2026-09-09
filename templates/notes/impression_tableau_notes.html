@@ -313,7 +313,7 @@
                                 {% if mat_id == matiere.id %}
                                     {% if mat_note.note_display %}
                                         <span class="note">{{ mat_note.note_display }}</span>
-                                    {% elif mat_note.note %}
+                                    {% elif mat_note.note != None %}
                                         <span class="note">{{ mat_note.note|floatformat:1 }}</span>
                                     {% elif mat_note.absent %}
                                         <span class="absent">ABS</span>

@@ -264,14 +264,11 @@
                   <td>{{ g.tranche_3|floatformat:0 }}</td>
                   <td>
                     {% if g.date_echeance_inscription_defaut or g.date_echeance_tranche_1_defaut or g.date_echeance_tranche_2_defaut or g.date_echeance_tranche_3_defaut %}
-                      {% with c=0 %}{% endwith %}
-                      {% with has_all=g.date_echeance_inscription_defaut and g.date_echeance_tranche_1_defaut and g.date_echeance_tranche_2_defaut and g.date_echeance_tranche_3_defaut %}
-                        {% if has_all %}
+                      {% if g.date_echeance_inscription_defaut and g.date_echeance_tranche_1_defaut and g.date_echeance_tranche_2_defaut and g.date_echeance_tranche_3_defaut %}
                           <span class="badge bg-success" title="Toutes les dates par défaut sont définies">Défini</span>
                         {% else %}
                           <span class="badge bg-warning text-dark" title="Certaines dates par défaut sont définies">Partiel</span>
                         {% endif %}
-                      {% endwith %}
                     {% else %}
                       <span class="badge bg-secondary" title="Aucune date par défaut: fallback 15/01, 15/03, 15/05">Fallback</span>
                     {% endif %}

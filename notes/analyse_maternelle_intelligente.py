@@ -7,6 +7,7 @@ les cases à cocher d'analyse et les recommandations
 import re
 from typing import Dict, List, Tuple, Optional
 from django.db import transaction
+from django.http import JsonResponse
 from .models import EvaluationMaternelle, AnalyseTravailMaternelle, RecommandationMaternelle
 
 

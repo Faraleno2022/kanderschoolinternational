@@ -7876,104 +7876,93 @@ def saisie_notes_simple(request):
     """Saisie notes simple"""
     return render(request, 'notes/saisie_notes_simple.html', {'titre_page': 'Saisie Notes Simple'})
 
-@login_required
-def imprimer_tableau_notes_html(request):
-    """Imprimer le tableau des notes avec ajustement des colonnes sur A4 landscape (version navigateur)"""
-    from django.template.loader import render_to_string
-    from django.http import HttpResponse
-    import logging
-    
-    logger = logging.getLogger(__name__)
-    
-    # Récupérer les paramètres
+def _contexte_impression_notes(request):
+    """Données communes aux impressions HTML et PDF, limitées à la classe choisie."""
+    from .models import AppreciationMaternelle
+    from .calculs_moyennes import (
+        detecter_niveau_scolaire, calculer_moyenne_matiere,
+        calculer_moyenne_annuelle_matiere,
+    )
+    from .utils_rangs import calculer_rangs_classe_periode
+
     classe_id = request.GET.get('classe_id')
     periode = request.GET.get('periode')
-    
     if not classe_id or not periode:
-        return HttpResponse("Paramètres manquants", status=400)
-    
-    try:
-        # Récupérer la classe et les données
-        classe_note = get_object_or_404(ClasseNote, pk=classe_id)
-        # Vérifier si ClasseNote a un attribut classe ou classe_eleve
-        if hasattr(classe_note, 'classe'):
-            classe = classe_note.classe
-        elif hasattr(classe_note, 'classe_eleve'):
-            classe = classe_note.classe_eleve
-        else:
-            # Si aucun attribut, utiliser directement l'objet
-            classe = classe_note
-        
-        # Récupérer les matières
-        matieres = MatiereNote.objects.filter(classe=classe_note).order_by('nom')
-        
-        # Calculer le classement
-        from .calculs_moyennes import calculer_classement_classe
-        from .calculs_intelligent import calculer_rang_intelligent
-        
-        # Récupérer les élèves
-        from eleves.models import Eleve
-        # Si classe_note est une ClasseNote, utiliser classe_note.classe
-        if hasattr(classe_note, 'classe') and classe_note.classe:
-            eleves = Eleve.objects.filter(classe=classe_note.classe, statut='actif').order_by('matricule')
-        else:
-            # Sinon, essayer de récupérer les élèves directement
-            eleves = Eleve.objects.filter(statut='actif').order_by('matricule')
-        
-        # Calculer les moyennes et rangs
-        classement_resultat = calculer_classement_classe(eleves, matieres, periode, 'mensuel')
-        
-        # Préparer les données pour le template
-        classement_data = []
-        for eleve in eleves:
-            # Récupérer les détails des notes par matière
-            details_matieres = {}
-            for matiere in matieres:
-                from .calculs_moyennes import calculer_moyenne_matiere
-                result = calculer_moyenne_matiere(eleve, matiere, periode, 'mensuel')
-                details_matieres[matiere.id] = result
-            
-            # Récupérer le rang et la moyenne
-            rang_num = classement_resultat['rang_map'].get(eleve.id)
-            rang_str = str(rang_num) if rang_num else "-"
-            moyenne = classement_resultat['moyennes_par_eleve'].get(eleve.id)
-            
-            # Formatter le rang avec ex-æquo si nécessaire
-            if rang_num:
-                from .calculs_intelligent import formater_rang_intelligent
-                sexe = getattr(eleve, 'sexe', 'M') or 'M'
-                rang_str = formater_rang_intelligent(rang_num, sexe)
-            
-            classement_data.append({
-                'matricule': eleve.matricule,
-                'nom_complet': eleve.nom_complet,
-                'rang': rang_str,
-                'moyenne': moyenne,
-                'details_matieres': details_matieres,
-                'sexe': getattr(eleve, 'sexe', 'M') or 'M'
-            })
-        
-        # Trier par rang
-        classement_data.sort(key=lambda x: x['rang'] if x['rang'] != '-' else '999')
-        
-        # Contexte pour le template
-        context = {
-            'classe_selectionnee': classe,
-            'periode_selectionnee': periode,
-            'matieres': matieres,
-            'classement_data': classement_data,
+        raise ValueError('Paramètres manquants')
+    if not classe_id.isdecimal():
+        raise ValueError('Classe invalide')
+    classe_note = get_object_or_404(
+        filter_by_user_school(ClasseNote.objects.all(), request.user), pk=classe_id
+    )
+    matieres = MatiereNote.objects.filter(classe=classe_note, actif=True).order_by('nom')
+    classe_eleve = trouver_classe_eleve(classe_note)
+    eleves = Eleve.objects.filter(classe=classe_eleve, statut='ACTIF').order_by('prenom', 'nom') if classe_eleve else Eleve.objects.none()
+    est_maternelle = detecter_niveau_scolaire(classe_note.nom) == 'MATERNELLE'
+    if periode == 'ANNUEL_TRIM':
+        system_type = 'annuel_trimestriel'
+    elif periode == 'ANNUEL_SEM':
+        system_type = 'annuel_semestriel'
+    elif 'TRIMESTRE' in periode or 'Trimestre' in periode:
+        system_type = 'trimestre'
+    elif 'SEMESTRE' in periode or 'Semestre' in periode:
+        system_type = 'semestre'
+    else:
+        system_type = 'mensuel'
+    rangs = calculer_rangs_classe_periode(classe_note, periode, use_cache=False)
+    appreciations = {}
+    absences = set()
+    if est_maternelle:
+        appreciations = {
+            (a.eleve_id, a.matiere_id): a
+            for a in AppreciationMaternelle.objects.filter(
+                eleve__in=eleves, matiere__in=matieres, trimestre=periode,
+                annee_scolaire=classe_note.annee_scolaire,
+            )
         }
-        
-        # Générer le HTML
-        html_content = render_to_string('notes/impression_tableau_notes.html', context, request=request)
-        
-        # Retourner le HTML (le navigateur gérera l'impression)
-        response = HttpResponse(html_content, content_type='text/html')
-        return response
-        
-    except Exception as e:
-        logger.error(f"Erreur lors de l'impression du tableau: {str(e)}")
-        return HttpResponse(f"Erreur: {str(e)}", status=500)
+    elif system_type == 'mensuel':
+        absences = set(NoteMensuelle.objects.filter(
+            eleve__in=eleves, matiere__in=matieres, mois=periode,
+            annee_scolaire=classe_note.annee_scolaire, absent=True,
+        ).values_list('eleve_id', 'matiere_id'))
+    classement = []
+    for eleve in eleves:
+        details = {}
+        for matiere in matieres:
+            if est_maternelle:
+                appreciation = appreciations.get((eleve.pk, matiere.pk))
+                details[matiere.pk] = {
+                    'note_display': appreciation.appreciation if appreciation and not appreciation.absent else '',
+                    'absent': bool(appreciation and appreciation.absent),
+                }
+            else:
+                if system_type.startswith('annuel'):
+                    note = calculer_moyenne_annuelle_matiere(eleve, matiere, system_type)['moyenne_annuelle']
+                else:
+                    note = calculer_moyenne_matiere(eleve, matiere, periode, system_type)['moyenne_matiere']
+                details[matiere.pk] = {'note': note, 'absent': (eleve.pk, matiere.pk) in absences}
+        rang = rangs.get(eleve.pk, {})
+        classement.append({
+            'matricule': eleve.matricule, 'prenom': eleve.prenom, 'nom': eleve.nom,
+            'rang': rang.get('rang', '-'), 'rang_num': rang.get('rang_num', float('inf')),
+            'moyenne': rang.get('moyenne'), 'details_matieres': details,
+        })
+    classement.sort(key=lambda ligne: ligne['rang_num'])
+    return {
+        'classe_note': classe_note, 'classe_selectionnee': classe_note,
+        'periode_selectionnee': periode, 'matieres': matieres,
+        'classement_data': classement, 'est_maternelle': est_maternelle,
+        'annee_scolaire': classe_note.annee_scolaire,
+    }
+
+
+@login_required
+def imprimer_tableau_notes_html(request):
+    try:
+        context = _contexte_impression_notes(request)
+    except ValueError as exc:
+        return HttpResponse(str(exc), status=400)
+    return render(request, 'notes/impression_tableau_notes.html', context)
+
 
 @login_required
 def saisie_notes_simple(request):
@@ -7982,10 +7971,10 @@ def saisie_notes_simple(request):
     from .models import ClasseNote, MatiereNote, NoteMensuelle, CompositionNote, AppreciationMaternelle
     from .calculs_moyennes import detecter_niveau_scolaire
     
-    ecole = _get_ecole(request)
+    ecole = user_school(request.user)
     
     # Récupérer les classes disponibles
-    classes = ClasseNote.objects.filter(ecole=ecole, actif=True).order_by('nom') if ecole else ClasseNote.objects.none()
+    classes = filter_by_user_school(ClasseNote.objects.filter(actif=True), request.user).order_by('nom')
     
     # Paramètres de recherche
     classe_id = request.GET.get('classe_id')
@@ -7995,7 +7984,7 @@ def saisie_notes_simple(request):
     classe_selectionnee = None
     eleve_selectionne = None
     matiere_selectionnee = None
-    eleves = []
+    eleves = Eleve.objects.none()
     matieres = []
     notes_mensuelles = {}
     compositions = {}
@@ -8017,19 +8006,15 @@ def saisie_notes_simple(request):
     ]
     
     if classe_id:
-        classe_selectionnee = ClasseNote.objects.filter(id=classe_id, ecole=ecole).first()
+        classe_selectionnee = get_object_or_404(classes, id=classe_id)
         
         if classe_selectionnee:
             # Détecter le niveau d'enseignement
             niveau_enseignement = detecter_niveau_scolaire(classe_selectionnee.nom)
             
             # Récupérer les élèves de la classe
-            classe_eleve = ClasseEleve.objects.filter(
-                nom=classe_selectionnee.nom,
-                annee_scolaire=classe_selectionnee.annee_scolaire,
-                ecole=ecole
-            ).first()
-            
+            classe_eleve = trouver_classe_eleve(classe_selectionnee)
+
             if classe_eleve:
                 eleves = Eleve.objects.filter(classe=classe_eleve, statut='ACTIF').order_by('prenom', 'nom')
             
@@ -8037,7 +8022,7 @@ def saisie_notes_simple(request):
             matieres = MatiereNote.objects.filter(classe=classe_selectionnee, actif=True).order_by('nom')
     
     if eleve_id and classe_selectionnee:
-        eleve_selectionne = Eleve.objects.filter(id=eleve_id).first()
+        eleve_selectionne = eleves.filter(id=eleve_id).first()
     
     if matiere_id and classe_selectionnee:
         matiere_selectionnee = MatiereNote.objects.filter(id=matiere_id, classe=classe_selectionnee).first()
@@ -8052,10 +8037,10 @@ def saisie_notes_simple(request):
         )
         
         for nm in notes_mensuelles_qs:
-            if nm.note is not None:
-                notes_mensuelles[nm.mois] = float(nm.note)
-            elif nm.absent:
+            if nm.absent:
                 notes_mensuelles[nm.mois] = 'ABS'
+            elif nm.note is not None:
+                notes_mensuelles[nm.mois] = float(nm.note)
         
         # Charger les compositions
         compositions_qs = CompositionNote.objects.filter(
@@ -8126,261 +8111,102 @@ def saisie_notes_simple(request):
 
 @login_required
 def sauvegarder_notes_guineen(request):
-    """Sauvegarder notes guinéen - Notes mensuelles et compositions"""
-    from django.http import JsonResponse
-    from .models import ClasseNote, MatiereNote, NoteMensuelle, CompositionNote
-    from eleves.models import Eleve
-    import json
-    
+    """Valide tout le formulaire avant d'enregistrer les notes dans une transaction."""
+    from django.db import transaction
+    from .calculs_moyennes import detecter_niveau_scolaire
+    from .utils_rangs import invalider_cache_rangs
+
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Méthode non autorisée'}, status=405)
-    
     try:
         data = json.loads(request.body)
-        eleve_id = data.get('eleve_id')
-        matiere_id = data.get('matiere_id')
-        annee_scolaire = data.get('annee_scolaire')
-        notes_mois = data.get('notes_mois', {})  # Format: {mois: {note: X, absent: bool}}
-        compositions = data.get('compositions', {})  # Format: {compositionX: {note: X, absent: bool}}
-        
-        eleve = Eleve.objects.get(id=eleve_id)
-        matiere = MatiereNote.objects.get(id=matiere_id)
-
-        # ── Sécurité: vérifier que l'élève et la matière appartiennent à l'école ──
-        user_profil = getattr(request.user, 'profil', None)
-        ecole_user = user_profil.ecole if user_profil else None
-        if ecole_user and matiere.classe.ecole != ecole_user:
-            return JsonResponse({'success': False, 'error': 'Accès non autorisé à cette matière'}, status=403)
-        if ecole_user and eleve.classe and eleve.classe.ecole != ecole_user:
-            return JsonResponse({'success': False, 'error': 'Accès non autorisé à cet élève'}, status=403)
-
-        # Utiliser l'année scolaire de la matière si non fournie
-        if not annee_scolaire:
-            annee_scolaire = matiere.classe.annee_scolaire
-
-        from .calculs_moyennes import detecter_niveau_scolaire
-        niveau_note = detecter_niveau_scolaire(matiere.classe.nom)
-        note_max = Decimal('10') if niveau_note == 'PRIMAIRE' else Decimal('20')
-
-        saved_count = 0
-        updated_count = 0
-
-        # Sauvegarder les notes mensuelles
-        for mois, note_data in notes_mois.items():
-            if note_data is not None:
-                try:
-                    note_value = note_data.get('note') if isinstance(note_data, dict) else note_data
-                    absent = note_data.get('absent', False) if isinstance(note_data, dict) else False
-                    
-                    if absent or (note_value is not None and note_value != ''):
-                        note_decimal = Decimal('0') if absent else Decimal(str(note_value).replace(',', '.'))
-                        if note_decimal < 0 or note_decimal > note_max:
-                            return JsonResponse({
-                                'success': False,
-                                'error': f'Note invalide: elle doit être entre 0 et {note_max}'
-                            }, status=400)
-                        obj, created = NoteMensuelle.objects.update_or_create(
-                            eleve=eleve,
-                            matiere=matiere,
-                            mois=mois.upper(),
-                            annee_scolaire=annee_scolaire,
-                            defaults={
-                                'note': note_decimal,
-                                'absent': absent
-                            }
-                        )
-                        if created:
-                            saved_count += 1
-                        else:
-                            updated_count += 1
-                except (ValueError, InvalidOperation):
-                    continue
-        
-        # Sauvegarder les compositions
+        if not isinstance(data, dict):
+            raise ValueError('Le formulaire doit contenir un objet JSON.')
+        eleve = get_object_or_404(
+            filter_by_user_school(Eleve.objects.all(), request.user, 'classe__ecole'),
+            pk=data.get('eleve_id'),
+        )
+        matiere = get_object_or_404(
+            filter_by_user_school(MatiereNote.objects.select_related('classe'), request.user, 'classe__ecole'),
+            pk=data.get('matiere_id'),
+        )
+        classe_eleve = trouver_classe_eleve(matiere.classe)
+        if classe_eleve is None or eleve.classe_id != classe_eleve.pk:
+            raise ValueError("L'élève n'appartient pas à la classe de cette matière.")
+        annee_scolaire = data.get('annee_scolaire') or matiere.classe.annee_scolaire
+        if annee_scolaire != matiere.classe.annee_scolaire:
+            raise ValueError("L'année scolaire ne correspond pas à la classe.")
+        note_max = Decimal('10') if detecter_niveau_scolaire(matiere.classe.nom) == 'PRIMAIRE' else Decimal('20')
+        mois_valides = dict(NoteMensuelle.MOIS_CHOICES)
         periode_mapping = {
-            'composition1': 'TRIMESTRE_1',
-            'composition2': 'TRIMESTRE_2',
+            'composition1': 'TRIMESTRE_1', 'composition2': 'TRIMESTRE_2',
             'composition3': 'TRIMESTRE_3',
         }
-        
-        for key, comp_data in compositions.items():
-            if comp_data is not None and key in periode_mapping:
-                try:
-                    note_value = comp_data.get('note') if isinstance(comp_data, dict) else comp_data
-                    absent = comp_data.get('absent', False) if isinstance(comp_data, dict) else False
-                    
-                    if absent or (note_value is not None and note_value != ''):
-                        note_decimal = Decimal('0') if absent else Decimal(str(note_value).replace(',', '.'))
-                        if note_decimal < 0 or note_decimal > note_max:
-                            return JsonResponse({
-                                'success': False,
-                                'error': f'Note invalide: elle doit être entre 0 et {note_max}'
-                            }, status=400)
-                        obj, created = CompositionNote.objects.update_or_create(
-                            eleve=eleve,
-                            matiere=matiere,
-                            periode=periode_mapping[key],
-                            annee_scolaire=annee_scolaire,
-                            defaults={
-                                'note': note_decimal,
-                                'absent': absent
-                            }
-                        )
-                        if created:
-                            saved_count += 1
-                        else:
-                            updated_count += 1
-                except (ValueError, InvalidOperation):
+        if data.get('system_type') in ('semestre', 'semestriel'):
+            periode_mapping = {'composition1': 'SEMESTRE_1', 'composition2': 'SEMESTRE_2'}
+        periode_mapping.update({code: code for code, _ in CompositionNote.PERIODE_CHOICES})
+        changements = []
+        for nom_champ, modele, champ_periode, mapping in (
+            ('notes_mois', NoteMensuelle, 'mois', mois_valides),
+            ('compositions', CompositionNote, 'periode', periode_mapping),
+        ):
+            valeurs = data.get(nom_champ, {})
+            if not isinstance(valeurs, dict):
+                raise ValueError('Format de notes invalide.')
+            for cle, valeur in valeurs.items():
+                periode = cle.upper() if champ_periode == 'mois' else mapping.get(cle)
+                if (champ_periode == 'mois' and periode not in mois_valides) or not periode:
+                    raise ValueError('Période de note invalide.')
+                if valeur is None:
                     continue
-        
-        # Invalider le cache des rangs
-        try:
-            # Essayer d'invalider le cache avec pattern
-            cache_key = f"rangs_classe_{matiere.classe.id}_*"
-            if hasattr(cache, 'delete_pattern'):
-                cache.delete_pattern(cache_key)
-            else:
-                # Sinon, invalider les clés connues
-                for periode in ['OCTOBRE', 'NOVEMBRE', 'DECEMBRE', 'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN']:
-                    cache.delete(f"rangs_classe_{matiere.classe.id}_periode_{periode}")
-        except Exception:
-            pass
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'{saved_count} note(s) créée(s), {updated_count} mise(s) à jour',
-            'saved': saved_count,
-            'updated': updated_count
-        })
-        
-    except Eleve.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Élève non trouvé'}, status=404)
-    except MatiereNote.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Matière non trouvée'}, status=404)
-    except json.JSONDecodeError:
-        return JsonResponse({'success': False, 'error': 'Données JSON invalides'}, status=400)
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+                brut = valeur.get('note') if isinstance(valeur, dict) else valeur
+                absent = valeur.get('absent', False) if isinstance(valeur, dict) else False
+                if not isinstance(absent, bool):
+                    raise ValueError("L'absence doit être indiquée par vrai ou faux.")
+                if not absent and brut in (None, ''):
+                    continue
+                note = Decimal('0') if absent else Decimal(str(brut).replace(',', '.'))
+                if not note.is_finite() or note < 0 or note > note_max:
+                    raise ValueError(f'Note invalide : elle doit être entre 0 et {note_max}.')
+                changements.append((modele, champ_periode, periode, note, absent))
+    except (ValueError, TypeError, InvalidOperation) as exc:
+        return JsonResponse({'success': False, 'error': str(exc) or 'Note invalide.'}, status=400)
+
+    saved_count = updated_count = 0
+    with transaction.atomic():
+        for modele, champ_periode, periode, note, absent in changements:
+            _, created = modele.objects.update_or_create(
+                eleve=eleve, matiere=matiere, annee_scolaire=annee_scolaire,
+                **{champ_periode: periode},
+                defaults={'note': note, 'absent': absent},
+            )
+            saved_count += int(created)
+            updated_count += int(not created)
+        transaction.on_commit(lambda: invalider_cache_rangs(matiere.classe))
+    return JsonResponse({
+        'success': True,
+        'message': f'{saved_count} note(s) créée(s), {updated_count} mise(s) à jour',
+        'saved': saved_count, 'updated': updated_count,
+    })
+
 
 @login_required
 def imprimer_tableau_notes_pdf(request):
-    """Imprimer le tableau des notes avec ajustement des colonnes sur A4 landscape - Supporte maternelle"""
-    from django.template.loader import render_to_string
-    from weasyprint import HTML, CSS
-    from django.http import HttpResponse
-    from .models import AppreciationMaternelle
-    from .calculs_moyennes import detecter_niveau_scolaire
-    from .utils_rangs import calculer_rangs_classe_periode
-    
-    classe_id = request.GET.get('classe_id')
-    periode = request.GET.get('periode')
-    
-    if not classe_id or not periode:
-        return HttpResponse("Paramètres manquants", status=400)
-    
     try:
-        classe_note = get_object_or_404(ClasseNote, pk=classe_id)
-        matieres = MatiereNote.objects.filter(classe=classe_note, actif=True).order_by('nom')
-        
-        # Détecter si maternelle
-        niveau_detecte = detecter_niveau_scolaire(classe_note.nom)
-        est_maternelle = (niveau_detecte == 'MATERNELLE')
-        
-        # Récupérer les élèves
-        from eleves.models import Eleve, Classe as ClasseEleve
-        classe_eleve = ClasseEleve.objects.filter(
-            nom=classe_note.nom,
-            annee_scolaire=classe_note.annee_scolaire,
-            ecole=classe_note.ecole
-        ).first()
-        
-        eleves = Eleve.objects.filter(classe=classe_eleve, statut='ACTIF').order_by('prenom', 'nom') if classe_eleve else []
-        rangs_dict = calculer_rangs_classe_periode(classe_note, periode, use_cache=True)
-        
-        classement_data = []
-        
-        if est_maternelle:
-            # Récupérer appréciations maternelle (même logique que consulter_notes)
-            appreciations_qs = AppreciationMaternelle.objects.filter(
-                matiere__in=matieres,
-                trimestre=periode,
-                annee_scolaire=classe_note.annee_scolaire
-            ).values('eleve_id', 'matiere_id', 'appreciation')
-            
-            if not appreciations_qs.exists():
-                appreciations_qs = AppreciationMaternelle.objects.filter(
-                    matiere__in=matieres,
-                    trimestre=periode
-                ).values('eleve_id', 'matiere_id', 'appreciation')
-            
-            appreciations_dict = {(a['eleve_id'], a['matiere_id']): a for a in appreciations_qs}
-            
-            for eleve in eleves:
-                details_matieres = {}
-                for matiere in matieres:
-                    app_data = appreciations_dict.get((eleve.id, matiere.id))
-                    details_matieres[matiere.id] = {
-                        'note_display': app_data['appreciation'] if app_data and app_data['appreciation'] else '-'
-                    }
-                
-                rang_info = rangs_dict.get(eleve.id)
-                classement_data.append({
-                    'matricule': eleve.matricule,
-                    'prenom': eleve.prenom,
-                    'nom': eleve.nom,
-                    'rang': rang_info['rang'] if rang_info else '-',
-                    'moyenne': float(rang_info['moyenne']) if rang_info else None,
-                    'details_matieres': details_matieres,
-                })
-        else:
-            from .calculs_moyennes import calculer_classement_classe, calculer_moyenne_matiere
-            classement_resultat = calculer_classement_classe(eleves, matieres, periode, 'mensuel')
-            
-            for eleve in eleves:
-                details_matieres = {}
-                for matiere in matieres:
-                    result = calculer_moyenne_matiere(eleve, matiere, periode, 'mensuel')
-                    details_matieres[matiere.id] = result
-                
-                rang_info = rangs_dict.get(eleve.id)
-                classement_data.append({
-                    'matricule': eleve.matricule,
-                    'prenom': eleve.prenom,
-                    'nom': eleve.nom,
-                    'rang': rang_info['rang'] if rang_info else '-',
-                    'moyenne': float(rang_info['moyenne']) if rang_info else None,
-                    'details_matieres': details_matieres,
-                })
-        
-        # Trier par rang numérique
-        def sort_rang(x):
-            r = x['rang']
-            if r == '-': return 999
-            return int(r.replace('er', '').replace('ère', '').replace('ème', ''))
-        classement_data.sort(key=sort_rang)
-        
-        context = {
-            'classe_note': classe_note,
-            'classe_selectionnee': classe_note,
-            'periode_selectionnee': periode,
-            'matieres': matieres,
-            'classement_data': classement_data,
-            'est_maternelle': est_maternelle,
-            'annee_scolaire': classe_note.annee_scolaire,
-        }
-        
-        html_content = render_to_string('notes/impression_tableau_notes.html', context, request=request)
-        html = HTML(string=html_content)
-        css = CSS(string='@page { size: A4 landscape; margin: 10mm; }')
-        pdf = html.write_pdf(stylesheets=[css])
-        
-        response = HttpResponse(pdf, content_type='application/pdf')
-        response['Content-Disposition'] = f'inline; filename="tableau_notes_{classe_note.nom}_{periode}.pdf"'
-        return response
-        
-    except Exception as e:
-        logger.error(f"Erreur lors de l'impression du tableau: {str(e)}")
-        return HttpResponse(f"Erreur: {str(e)}", status=500)
+        context = _contexte_impression_notes(request)
+    except ValueError as exc:
+        return HttpResponse(str(exc), status=400)
+    from weasyprint import HTML, CSS
+    html_content = render_to_string('notes/impression_tableau_notes.html', context, request=request)
+    pdf = HTML(string=html_content).write_pdf(
+        stylesheets=[CSS(string='@page { size: A4 landscape; margin: 10mm; }')]
+    )
+    response = HttpResponse(pdf, content_type='application/pdf')
+    classe = context['classe_note']
+    periode = context['periode_selectionnee']
+    response['Content-Disposition'] = f'inline; filename="tableau_notes_{classe.nom}_{periode}.pdf"'
+    return response
+
 
 
 # ============================================================================
