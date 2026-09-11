@@ -12,27 +12,22 @@ from .models import (
     AbonnementBus, AbonnementCantine, PresenceCantine
 )
 from eleves.models import Eleve
-from utilisateurs.utils import user_is_admin, user_school, filter_by_user_school
+from utilisateurs.utils import user_is_superadmin, user_school, filter_by_user_school
 
 logger = logging.getLogger(__name__)
 
 
 def _get_user_school_or_403(request):
-    """Retourne l'école de l'utilisateur ou None si admin (accès global)."""
-    if user_is_admin(request.user):
-        return None  # Admin voit tout
+    """Retourne l'école de l'utilisateur ou None si superadministrateur (accès global)."""
+    if user_is_superadmin(request.user):
+        return None  # Seul le superadministrateur voit tout
     ecole = user_school(request.user)
     return ecole
 
 
 def _filter_qs_by_school(qs, request, field_path='eleve__classe__ecole'):
     """Filtre un queryset par l'école de l'utilisateur connecté."""
-    if user_is_admin(request.user):
-        return qs
-    ecole = user_school(request.user)
-    if ecole:
-        return qs.filter(**{field_path: ecole})
-    return qs.none()  # Pas d'école assignée → aucun résultat
+    return filter_by_user_school(qs, request.user, field_path)
 
 
 @login_required
@@ -132,10 +127,10 @@ def creer_abonnement_bus(request):
         observations = request.POST.get('observations', '')
         
         try:
-            eleve = Eleve.objects.get(id=eleve_id)
+            eleve = filter_by_user_school(Eleve.objects.all(), request.user, 'classe__ecole').get(id=eleve_id)
             # ── Sécurité: vérifier que l'élève appartient à l'école de l'utilisateur ──
             ecole_user = user_school(request.user)
-            if not user_is_admin(request.user) and ecole_user and eleve.classe and eleve.classe.ecole != ecole_user:
+            if not user_is_superadmin(request.user) and ecole_user and eleve.classe and eleve.classe.ecole != ecole_user:
                 messages.error(request, "Vous ne pouvez pas créer un abonnement pour un élève d'une autre école.")
                 return redirect('abonnements:liste_bus')
 
@@ -178,7 +173,7 @@ def creer_abonnement_bus(request):
 
     # GET — filtrer les élèves par école
     eleves_qs = Eleve.objects.filter(statut='ACTIF')
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         ecole_user = user_school(request.user)
         if ecole_user:
             eleves_qs = eleves_qs.filter(classe__ecole=ecole_user)
@@ -248,10 +243,10 @@ def creer_abonnement_cantine(request):
         observations = request.POST.get('observations', '')
         
         try:
-            eleve = Eleve.objects.get(id=eleve_id)
+            eleve = filter_by_user_school(Eleve.objects.all(), request.user, 'classe__ecole').get(id=eleve_id)
             # ── Sécurité: vérifier que l'élève appartient à l'école de l'utilisateur ──
             ecole_user = user_school(request.user)
-            if not user_is_admin(request.user) and ecole_user and eleve.classe and eleve.classe.ecole != ecole_user:
+            if not user_is_superadmin(request.user) and ecole_user and eleve.classe and eleve.classe.ecole != ecole_user:
                 messages.error(request, "Vous ne pouvez pas créer un abonnement pour un élève d'une autre école.")
                 return redirect('abonnements:liste_cantine')
 
@@ -291,7 +286,7 @@ def creer_abonnement_cantine(request):
 
     # GET — filtrer les élèves par école
     eleves_qs = Eleve.objects.filter(statut='ACTIF')
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         ecole_user = user_school(request.user)
         if ecole_user:
             eleves_qs = eleves_qs.filter(classe__ecole=ecole_user)
@@ -359,12 +354,9 @@ def enregistrer_presence_cantine(request):
         present = request.POST.get('present') == 'true'
         
         try:
-            abonnement = AbonnementCantine.objects.get(id=abonnement_id)
-            # ── Sécurité: vérifier que l'abonnement appartient à l'école de l'utilisateur ──
-            if not user_is_admin(request.user):
-                ecole_user = user_school(request.user)
-                if ecole_user and abonnement.eleve.classe and abonnement.eleve.classe.ecole != ecole_user:
-                    return JsonResponse({'success': False, 'error': 'Accès non autorisé'}, status=403)
+            abonnement = _filter_qs_by_school(AbonnementCantine.objects.all(), request).filter(id=abonnement_id).first()
+            if abonnement is None:
+                return JsonResponse({'success': False, 'error': 'Accès non autorisé'}, status=403)
 
             date_obj = date.fromisoformat(date_str)
 

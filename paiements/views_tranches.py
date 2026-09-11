@@ -380,7 +380,7 @@ def export_tranches_par_classe_pdf(request):
     classes = Classe.objects.select_related('ecole').all()
     ecole_user = user_school(request.user)
     annee_active = get_annee_active(request, ecole_user) if ecole_user else None
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not request.user.is_superuser
     if restreindre:
         classes = classes.filter(ecole=ecole_user)
     elif ecole_id:
@@ -609,7 +609,7 @@ def export_tranches_par_classe_excel(request):
     classes = Classe.objects.select_related('ecole').all()
     ecole_user = user_school(request.user)
     annee_active_xl = get_annee_active(request, ecole_user) if ecole_user else None
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not request.user.is_superuser
     if restreindre:
         classes = classes.filter(ecole=ecole_user)
     elif ecole_id:

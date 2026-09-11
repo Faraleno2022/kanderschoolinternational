@@ -313,6 +313,7 @@ def valider_depense(request, depense_id):
     return redirect('depenses:detail_depense', depense_id=depense_id)
 
 @login_required
+@can_validate_expenses
 @require_school_object(model=Depense, pk_kwarg='depense_id', field_path='cree_par__profil__ecole')
 def marquer_payee(request, depense_id):
     """Marquer une dépense comme payée"""

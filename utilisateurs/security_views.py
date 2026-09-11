@@ -19,6 +19,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,16 @@ BLOCK_DURATION_SECONDS = 1800
 LOCKOUT_MESSAGE = (
     "Trop de tentatives de connexion. Contactez l'administrateur FARA LENO AU +224622613559."
 )
+
+def _safe_next_url(request, value):
+    """Accept only local paths that browsers cannot interpret as another host."""
+    return bool(
+        value and value.startswith('/')
+        and url_has_allowed_host_and_scheme(
+            value, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+        )
+    )
+
 
 def get_client_ip(request):
     """Obtient l'adresse IP réelle du client"""
@@ -188,7 +199,7 @@ def secure_login(request):
                 # Redirection sécurisée
                 next_url = request.GET.get('next')
                 # Ignorer toute redirection vers /admin/*
-                if next_url and next_url.startswith('/') and not next_url.startswith('/admin/'):
+                if _safe_next_url(request, next_url) and not next_url.startswith('/admin/'):
                     return redirect(next_url)
                 return redirect('eleves:liste_eleves')
             else:
@@ -535,7 +546,7 @@ def verify_phone(request):
     # Si déjà vérifié pour la session courante, on passe
     if request.session.get('phone_verified'):
         next_url = request.GET.get('next')
-        if next_url and next_url.startswith('/'):
+        if _safe_next_url(request, next_url):
             return redirect(next_url)
         return redirect('eleves:liste_eleves')
 
@@ -547,7 +558,7 @@ def verify_phone(request):
             request.session['phone_verified_at'] = time.time()
             messages.success(request, _('Vérification du téléphone réussie.'))
             next_url = request.GET.get('next') or request.POST.get('next')
-            if next_url and next_url.startswith('/'):
+            if _safe_next_url(request, next_url):
                 return redirect(next_url)
             return redirect('eleves:liste_eleves')
         else:

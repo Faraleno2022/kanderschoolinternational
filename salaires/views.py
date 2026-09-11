@@ -46,7 +46,7 @@ from .services import (
     total_avances_a_deduire,
 )
 from eleves.models import Ecole, Classe
-from utilisateurs.utils import filter_by_user_school, user_is_admin, user_school
+from utilisateurs.utils import filter_by_user_school, user_is_admin, user_is_superadmin, user_school
 from utilisateurs.permissions import can_add_teachers
 from ecole_moderne.security_decorators import delete_permission_required, require_school_object
 
@@ -58,14 +58,19 @@ from .views_presences import (
 )
 
 def _ecole_utilisateur(request):
-    """Compat: utiliser l'utilitaire centralisé"""
-    return user_school(request.user)
+    """Refuser un compte sans école avant de construire les requêtes de paie."""
+    from django.core.exceptions import PermissionDenied
+
+    ecole = user_school(request.user)
+    if ecole is None and not user_is_superadmin(request.user):
+        raise PermissionDenied("Aucune école associée à ce compte.")
+    return ecole
 
 @login_required
 def tableau_bord(request):
     """Tableau de bord du module Salaires"""
     ecole_user = _ecole_utilisateur(request)
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not user_is_superadmin(request.user) and ecole_user is not None
 
     # Statistiques générales
     base_qs = Enseignant.objects.all()
@@ -394,7 +399,7 @@ def annuler_avance_salaire(request, avance_id):
 def liste_enseignants(request):
     """Liste des enseignants avec filtres"""
     ecole_user = _ecole_utilisateur(request)
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not user_is_superadmin(request.user) and ecole_user is not None
 
     # Récupération des paramètres de filtrage
     search = request.GET.get('search', '')
@@ -474,7 +479,7 @@ def export_enseignants_csv(request):
     statut = request.GET.get('statut', '')
 
     ecole_user = _ecole_utilisateur(request)
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not user_is_superadmin(request.user) and ecole_user is not None
     enseignants = Enseignant.objects.select_related('ecole')
     if restreindre:
         enseignants = enseignants.filter(ecole=ecole_user)
@@ -526,7 +531,7 @@ def export_enseignants_pdf(request):
     statut = request.GET.get('statut', '')
 
     ecole_user = _ecole_utilisateur(request)
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not user_is_superadmin(request.user) and ecole_user is not None
     enseignants = Enseignant.objects.select_related('ecole')
     if restreindre:
         enseignants = enseignants.filter(ecole=ecole_user)
@@ -691,7 +696,7 @@ def detail_enseignant(request, enseignant_id):
     """Détail d'un enseignant"""
     ecole_user = _ecole_utilisateur(request)
     qs = Enseignant.objects.all()
-    if not user_is_admin(request.user) and ecole_user is not None:
+    if not user_is_superadmin(request.user) and ecole_user is not None:
         qs = qs.filter(ecole=ecole_user)
     
     try:
@@ -766,7 +771,7 @@ def ajouter_affectation(request, enseignant_id):
     """Créer une affectation de classe pour un enseignant"""
     ecole_user = _ecole_utilisateur(request)
     qs = Enseignant.objects.all()
-    if not user_is_admin(request.user) and ecole_user is not None:
+    if not user_is_superadmin(request.user) and ecole_user is not None:
         qs = qs.filter(ecole=ecole_user)
     enseignant = get_object_or_404(qs, id=enseignant_id)
     if not enseignant.est_affectable_classe:
@@ -803,7 +808,7 @@ def clore_affectation(request, affectation_id):
         id=affectation_id
     )
     ecole_user = _ecole_utilisateur(request)
-    if not user_is_admin(request.user) and ecole_user is not None and affectation.enseignant.ecole_id != ecole_user.id:
+    if not user_is_superadmin(request.user) and ecole_user is not None and affectation.enseignant.ecole_id != ecole_user.id:
         messages.error(request, "Accès refusé.")
         return redirect('salaires:detail_enseignant', enseignant_id=affectation.enseignant_id)
 
@@ -827,7 +832,7 @@ def supprimer_affectation(request, affectation_id):
         id=affectation_id
     )
     ecole_user = _ecole_utilisateur(request)
-    if not user_is_admin(request.user) and ecole_user is not None and affectation.enseignant.ecole_id != ecole_user.id:
+    if not user_is_superadmin(request.user) and ecole_user is not None and affectation.enseignant.ecole_id != ecole_user.id:
         messages.error(request, "Accès refusé.")
         return redirect('salaires:detail_enseignant', enseignant_id=affectation.enseignant_id)
 
@@ -845,7 +850,7 @@ def supprimer_affectation(request, affectation_id):
 def etats_salaire(request):
     """Liste des états de salaire avec filtres"""
     ecole_user = _ecole_utilisateur(request)
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not user_is_superadmin(request.user) and ecole_user is not None
 
     # Récupération des paramètres de filtrage
     periode_id = request.GET.get('periode', '')
@@ -966,7 +971,7 @@ def export_etats_salaire_csv(request):
     search = request.GET.get('search', '')
 
     ecole_user = _ecole_utilisateur(request)
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not user_is_superadmin(request.user) and ecole_user is not None
     etats = EtatSalaire.objects.select_related('enseignant', 'periode', 'periode__ecole')
     if restreindre:
         etats = etats.filter(periode__ecole=ecole_user)
@@ -1030,7 +1035,7 @@ def export_etats_salaire_pdf(request):
     search = request.GET.get('search', '')
 
     ecole_user = _ecole_utilisateur(request)
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not user_is_superadmin(request.user) and ecole_user is not None
     etats = EtatSalaire.objects.select_related('enseignant', 'periode', 'periode__ecole')
     if restreindre:
         etats = etats.filter(periode__ecole=ecole_user)
@@ -1493,7 +1498,7 @@ def fiche_paie_pdf(request, etat_id):
     
     # Vérifier les permissions (double vérification en plus du décorateur)
     ecole_user = _ecole_utilisateur(request)
-    if not user_is_admin(request.user) and ecole_user and etat.periode.ecole != ecole_user:
+    if not user_is_superadmin(request.user) and ecole_user and etat.periode.ecole != ecole_user:
         raise Http404("État de salaire non trouvé")
     
     # Créer la réponse HTTP
@@ -1720,7 +1725,7 @@ def gestion_periodes(request):
 
     # Restriction par école pour les non-admins
     ecole_user = _ecole_utilisateur(request)
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not user_is_superadmin(request.user) and ecole_user is not None
     if restreindre:
         periodes = periodes.filter(ecole=ecole_user)
     
@@ -1823,7 +1828,7 @@ def gestion_periodes(request):
 def rapport_paiements(request):
     """Rapport des salaires payés: totaux par mois et par année, avec filtres."""
     ecole_user = _ecole_utilisateur(request)
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not user_is_superadmin(request.user) and ecole_user is not None
 
     annee = request.GET.get('annee', '')
     ecole_id = request.GET.get('ecole', '')
@@ -1873,7 +1878,7 @@ def rapport_paiements(request):
 def export_rapport_paiements_pdf(request):
     """Export PDF du rapport des salaires payés (paysage)."""
     ecole_user = _ecole_utilisateur(request)
-    restreindre = not user_is_admin(request.user) and ecole_user is not None
+    restreindre = not user_is_superadmin(request.user) and ecole_user is not None
 
     annee = request.GET.get('annee', '')
     ecole_id = request.GET.get('ecole', '')
@@ -2035,7 +2040,7 @@ def creer_periode(request):
             
             # Vérifier que l'utilisateur a le droit de créer une période pour cette école
             ecole_user = _ecole_utilisateur(request)
-            if not user_is_admin(request.user) and ecole_user is not None and ecole.id != ecole_user.id:
+            if not user_is_superadmin(request.user) and ecole_user is not None and ecole.id != ecole_user.id:
                 messages.error(request, "Vous n'avez pas le droit de créer une période pour cette école.")
                 return redirect('salaires:gestion_periodes')
             
@@ -2094,7 +2099,7 @@ def cloturer_periode(request, periode_id):
 
             ecole_user = _ecole_utilisateur(request)
             if (
-                not user_is_admin(request.user)
+                not user_is_superadmin(request.user)
                 and ecole_user is not None
                 and periode.ecole_id != ecole_user.id
             ):
@@ -2159,11 +2164,12 @@ def cloturer_periode(request, periode_id):
     return redirect('salaires:gestion_periodes')
 
 @login_required
+@can_add_teachers
 def changer_statut_enseignant(request, enseignant_id):
     """Changement de statut d'un enseignant"""
     ecole_user = _ecole_utilisateur(request)
     qs = Enseignant.objects.all()
-    if not user_is_admin(request.user) and ecole_user is not None:
+    if not user_is_superadmin(request.user) and ecole_user is not None:
         qs = qs.filter(ecole=ecole_user)
     enseignant = get_object_or_404(qs, id=enseignant_id)
     
@@ -2226,7 +2232,7 @@ def modifier_enseignant(request, enseignant_id):
     """Modifier un enseignant existant"""
     ecole_user = _ecole_utilisateur(request)
     qs = Enseignant.objects.all()
-    if not user_is_admin(request.user) and ecole_user is not None:
+    if not user_is_superadmin(request.user) and ecole_user is not None:
         qs = qs.filter(ecole=ecole_user)
     enseignant = get_object_or_404(qs, id=enseignant_id)
     
@@ -2261,7 +2267,7 @@ def supprimer_enseignant(request, enseignant_id):
     """Vue pour supprimer un enseignant avec ses états de salaire (avec code de vérification)"""
     # Filtrer selon les permissions
     qs = Enseignant.objects.all()
-    if not user_is_admin(request.user):
+    if not user_is_superadmin(request.user):
         qs = qs.filter(ecole=user_school(request.user))
     
     try:

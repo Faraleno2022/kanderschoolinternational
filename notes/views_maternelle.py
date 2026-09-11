@@ -5,7 +5,7 @@ Vues pour l'évaluation et les bulletins de la maternelle
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, Http404
 from django.db import transaction
 from django.utils import timezone
 from datetime import datetime
@@ -18,6 +18,9 @@ from .models import (
 from eleves.models import Eleve, Classe
 from eleves.utils_annee import get_annee_active
 from .analyse_maternelle_intelligente import AnalyseMaternelleIntelligente
+from .classes_utils import trouver_classe_eleve
+from utilisateurs.utils import filter_by_user_school
+from utilisateurs.permissions import can_manage_notes
 
 
 def get_annee_scolaire_courante():
@@ -70,17 +73,14 @@ def saisie_evaluation_maternelle(request):
     evaluations_existantes = {}
     
     if classe_id:
-        classe_selectionnee = get_object_or_404(ClasseNote, id=classe_id)
+        classe_selectionnee = get_object_or_404(filter_by_user_school(ClasseNote.objects.all(), request.user), id=classe_id)
         annee_scolaire = classe_selectionnee.annee_scolaire or annee_scolaire
         trimestre, choix_periodes = obtenir_periode_maternelle(request, annee_scolaire)
         
         # Récupérer les élèves de cette classe depuis le module eleves
         # Utiliser l'année scolaire de la ClasseNote
         try:
-            classe_eleves = Classe.objects.filter(
-                nom=classe_selectionnee.nom,
-                annee_scolaire=classe_selectionnee.annee_scolaire
-            ).first()
+            classe_eleves = trouver_classe_eleve(classe_selectionnee)
             if classe_eleves:
                 eleves = Eleve.objects.filter(
                     classe=classe_eleves,
@@ -124,35 +124,41 @@ def saisie_evaluation_maternelle(request):
 
 
 @login_required
+@can_manage_notes
 def saisie_eleve_maternelle(request, eleve_id):
     """Vue de saisie détaillée pour un élève"""
-    eleve = get_object_or_404(Eleve, id=eleve_id)
+    eleve = get_object_or_404(filter_by_user_school(Eleve.objects.all(), request.user, 'classe__ecole'), id=eleve_id)
     
     classe_id = request.GET.get('classe')
-    classe_note = get_object_or_404(ClasseNote, id=classe_id)
+    classe_note = get_object_or_404(filter_by_user_school(ClasseNote.objects.all(), request.user), id=classe_id)
     annee_scolaire = classe_note.annee_scolaire or get_annee_scolaire_courante()
     trimestre, _ = obtenir_periode_maternelle(request, annee_scolaire)
     matieres = MatiereNote.objects.filter(classe=classe_note, actif=True).order_by('nom')
     
-    # Récupérer ou créer l'évaluation
-    evaluation, created = EvaluationMaternelle.objects.get_or_create(
-        eleve=eleve,
-        classe=classe_note,
-        trimestre=trimestre,
+    evaluation_fields = dict(
+        eleve=eleve, classe=classe_note, trimestre=trimestre,
         annee_scolaire=annee_scolaire,
-        defaults={'cree_par': request.user}
     )
-    
-    # Récupérer ou créer l'analyse et les recommandations
-    analyse, _ = AnalyseTravailMaternelle.objects.get_or_create(evaluation=evaluation)
-    recommandations, _ = RecommandationMaternelle.objects.get_or_create(evaluation=evaluation)
-    
-    # Récupérer les notes existantes
-    notes_existantes = {n.matiere_id: n for n in evaluation.notes_matieres.all()}
-    
+    evaluation = EvaluationMaternelle.objects.filter(**evaluation_fields).first()
     if request.method == 'POST':
-        return sauvegarder_evaluation_maternelle(request, evaluation, matieres, analyse, recommandations)
-    
+        with transaction.atomic():
+            evaluation, _ = EvaluationMaternelle.objects.get_or_create(
+                **evaluation_fields, defaults={'cree_par': request.user}
+            )
+            analyse, _ = AnalyseTravailMaternelle.objects.get_or_create(evaluation=evaluation)
+            recommandations, _ = RecommandationMaternelle.objects.get_or_create(evaluation=evaluation)
+            return sauvegarder_evaluation_maternelle(request, evaluation, matieres, analyse, recommandations)
+
+    if evaluation is None:
+        evaluation = EvaluationMaternelle(**evaluation_fields, cree_par=request.user)
+        analyse = AnalyseTravailMaternelle(evaluation=evaluation)
+        recommandations = RecommandationMaternelle(evaluation=evaluation)
+        notes_existantes = {}
+    else:
+        analyse = AnalyseTravailMaternelle.objects.filter(evaluation=evaluation).first() or AnalyseTravailMaternelle(evaluation=evaluation)
+        recommandations = RecommandationMaternelle.objects.filter(evaluation=evaluation).first() or RecommandationMaternelle(evaluation=evaluation)
+        notes_existantes = {n.matiere_id: n for n in evaluation.notes_matieres.all()}
+
     context = {
         'eleve': eleve,
         'classe_note': classe_note,
@@ -279,7 +285,7 @@ def sauvegarder_evaluation_maternelle(request, evaluation, matieres, analyse, re
 @login_required
 def bulletin_maternelle(request, evaluation_id):
     """Affiche le bulletin maternelle en HTML"""
-    evaluation = get_object_or_404(EvaluationMaternelle, id=evaluation_id)
+    evaluation = get_object_or_404(filter_by_user_school(EvaluationMaternelle.objects.all(), request.user, 'classe__ecole'), id=evaluation_id)
     
     # Récupérer les données associées
     notes = evaluation.notes_matieres.select_related('matiere').order_by('matiere__nom')
@@ -332,7 +338,7 @@ def bulletin_maternelle_pdf(request, evaluation_id):
     import base64
     import os
     
-    evaluation = get_object_or_404(EvaluationMaternelle, id=evaluation_id)
+    evaluation = get_object_or_404(filter_by_user_school(EvaluationMaternelle.objects.all(), request.user, 'classe__ecole'), id=evaluation_id)
     
     # Récupérer les données
     notes = evaluation.notes_matieres.select_related('matiere').order_by('matiere__nom')
@@ -426,7 +432,7 @@ def bulletins_classe_maternelle_pdf(request):
         messages.error(request, "Veuillez sélectionner une classe")
         return redirect('notes:saisie_evaluation_maternelle')
     
-    classe_note = get_object_or_404(ClasseNote, id=classe_id)
+    classe_note = get_object_or_404(filter_by_user_school(ClasseNote.objects.all(), request.user), id=classe_id)
     annee_scolaire = classe_note.annee_scolaire or get_annee_scolaire_courante()
     trimestre, _ = obtenir_periode_maternelle(request, annee_scolaire)
     
@@ -531,6 +537,7 @@ def bulletins_classe_maternelle_pdf(request):
 
 
 @login_required
+@can_manage_notes
 def analyse_appreciations_auto(request):
     """Vue pour l'analyse automatique des appréciations"""
     if request.method == 'POST':
@@ -542,7 +549,7 @@ def analyse_appreciations_auto(request):
         
         if evaluation_id:
             try:
-                evaluation = EvaluationMaternelle.objects.get(id=evaluation_id)
+                evaluation = filter_by_user_school(EvaluationMaternelle.objects.all(), request.user, 'classe__ecole').get(id=evaluation_id)
                 analyse, recommandations = AnalyseMaternelleIntelligente.appliquer_analyse_automatique(
                     evaluation, appreciation_text
                 )
@@ -603,11 +610,8 @@ def api_get_eleves_classe(request):
         return JsonResponse({'error': 'Classe non spécifiée'}, status=400)
     
     try:
-        classe_note = ClasseNote.objects.get(id=classe_id)
-        classe_eleves = Classe.objects.filter(
-            nom=classe_note.nom,
-            annee_scolaire=classe_note.annee_scolaire
-        ).first()
+        classe_note = get_object_or_404(filter_by_user_school(ClasseNote.objects.all(), request.user), id=classe_id)
+        classe_eleves = trouver_classe_eleve(classe_note)
         if classe_eleves:
             eleves = Eleve.objects.filter(
                 classe=classe_eleves,
@@ -617,5 +621,7 @@ def api_get_eleves_classe(request):
             eleves = []
         
         return JsonResponse({'eleves': list(eleves)})
+    except Http404:
+        raise
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)

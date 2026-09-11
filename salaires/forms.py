@@ -186,12 +186,14 @@ class EnseignantForm(forms.ModelForm):
         
         # Restreindre les écoles visibles selon l'utilisateur
         if self.user:
-            from utilisateurs.utils import user_is_admin, user_school
-            if not user_is_admin(self.user):
+            from utilisateurs.utils import user_is_superadmin, user_school
+            if not user_is_superadmin(self.user):
                 ecole_user = user_school(self.user)
                 if ecole_user:
                     self.fields['ecole'].queryset = Ecole.objects.filter(id=ecole_user.id)
                     self.fields['ecole'].initial = ecole_user
+                else:
+                    self.fields['ecole'].queryset = Ecole.objects.none()
         
         # Définir le statut par défaut
         if not self.instance.pk:
@@ -211,6 +213,9 @@ class EnseignantForm(forms.ModelForm):
             ecole = user_school(self.user)
             ecole_id = getattr(ecole, 'id', None)
 
+        if self.user and not user_is_superadmin(self.user):
+            # Never expose classes from a forged school field, even on an invalid form.
+            ecole_id = getattr(user_school(self.user), 'pk', None)
         classes = _classes_recentes_ecole(ecole_id)
         if type_enseignant:
             classes = _classes_cycle(classes, type_enseignant)
