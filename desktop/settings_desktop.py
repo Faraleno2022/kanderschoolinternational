@@ -67,7 +67,9 @@ HF_TOKEN = ''
 AUTH_PASSWORD_VALIDATORS = []
 
 # ── Clé secrète locale ──
-SECRET_KEY = 'myschool-desktop-offline-key-do-not-use-in-production'
+from ecole_moderne.runtime_secret import load_or_create_secret
+
+SECRET_KEY = load_or_create_secret(DATA_DIR / ".secret_key")
 
 # ── Marquer le mode offline pour les templates ──
 # Ajouter un context processor pour injecter is_offline=True

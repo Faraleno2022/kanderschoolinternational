@@ -10,7 +10,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from eleves.models import Ecole
@@ -24,7 +24,8 @@ def _json_body(request):
     if not request.body:
         return {}
     try:
-        return json.loads(request.body.decode('utf-8'))
+        data = json.loads(request.body.decode('utf-8'))
+        return data if isinstance(data, dict) else None
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
 
@@ -39,10 +40,14 @@ def _current_school(user, data=None):
     return None
 
 
-def _has_sync_admin_access(request):
+def _has_sync_admin_token(request):
     token = request.headers.get('X-Sync-Admin-Token', '')
     expected = getattr(settings, 'MYSCHOOL_SYNC_ADMIN_TOKEN', '')
-    if expected and token and secrets.compare_digest(token, expected):
+    return bool(expected and token and secrets.compare_digest(token, expected))
+
+
+def _has_sync_admin_access(request):
+    if _has_sync_admin_token(request):
         return True
     user = getattr(request, 'user', None)
     return bool(user and user.is_authenticated and user_is_admin(user))
@@ -129,6 +134,13 @@ def device_setup(request):
 @csrf_exempt
 @require_POST
 def register_device(request):
+    # Machine clients authenticate explicitly; cookie sessions still require CSRF.
+    if _has_sync_admin_token(request):
+        return _register_device(request)
+    return csrf_protect(_register_device)(request)
+
+
+def _register_device(request):
     if not _has_sync_admin_access(request):
         return JsonResponse({'ok': False, 'error': 'Permission refusee.'}, status=403)
 

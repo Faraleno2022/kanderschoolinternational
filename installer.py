@@ -90,8 +90,10 @@ def create_shortcut(target: str, shortcut_path: str, icon: str = None,
             f'{icon_line2}'
             'oSC.Save()\n'
         )
-        vbs_path = tempfile.mktemp(suffix='.vbs')
-        with open(vbs_path, 'w', encoding='ascii', errors='ignore') as f:
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.vbs', encoding='ascii', errors='ignore', delete=False
+        ) as f:
+            vbs_path = f.name
             f.write(vbs)
         subprocess.run(['cscript', '//NoLogo', vbs_path],
                        capture_output=True, timeout=15)

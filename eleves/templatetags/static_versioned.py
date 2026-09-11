@@ -3,7 +3,7 @@ import time
 from django import template
 from django.templatetags.static import static
 from django.conf import settings
-from django.utils.safestring import mark_safe
+from django.utils.html import format_html, format_html_join
 
 register = template.Library()
 
@@ -54,23 +54,25 @@ def image_with_reload(path, alt_text="", css_class="", **kwargs):
         # Construire les attributs HTML
         attributes = []
         if alt_text:
-            attributes.append(f'alt="{alt_text}"')
+            attributes.append(format_html('alt="{}"', alt_text))
         if css_class:
-            attributes.append(f'class="{css_class}"')
+            attributes.append(format_html('class="{}"', css_class))
         
         # Gestion du lazy loading
         loading_type = kwargs.pop('loading', 'lazy')
         if loading_type in ['lazy', 'eager']:
-            attributes.append(f'loading="{loading_type}"')
+            attributes.append(format_html('loading="{}"', loading_type))
         
         # Optimisations de performance
-        attributes.append('decoding="async"')
+        attributes.append(format_html('decoding="{}"', 'async'))
         
         # Ajouter les attributs supplémentaires
         for key, value in kwargs.items():
             # Convertir les underscores en tirets pour les attributs HTML
             key = key.replace('_', '-')
-            attributes.append(f'{key}="{value}"')
+            if not key.replace('-', '').isalnum() or key.lower().startswith('on'):
+                continue
+            attributes.append(format_html('{}="{}"', key, value))
         
         # Ajouter l'attribut onerror pour les images de fallback
         fallback_urls = {
@@ -94,17 +96,15 @@ def image_with_reload(path, alt_text="", css_class="", **kwargs):
                     }}
                 }};
             """.replace('\n', '').replace('  ', '')
-            attributes.append(f'onerror="{error_handler}"')
+            attributes.append(format_html('onerror="{}"', error_handler))
         
         # Construire la balise img complète
-        attrs_str = ' '.join(attributes)
-        img_tag = f'<img src="{versioned_url}" {attrs_str}>'
-        
-        return mark_safe(img_tag)
+        attrs_str = format_html_join(' ', '{}', ((attr,) for attr in attributes))
+        return format_html('<img src="{}" {}>', versioned_url, attrs_str)
         
     except Exception:
         # En cas d'erreur, retourner une balise img basique
-        return mark_safe(f'<img src="{static(path)}" alt="{alt_text}" class="{css_class}" loading="lazy">')
+        return format_html('<img src="{}" alt="{}" class="{}" loading="lazy">', static(path), alt_text, css_class)
 
 @register.simple_tag
 def cache_bust():

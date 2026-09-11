@@ -113,19 +113,10 @@ if os.name == 'nt':
             os.environ['GDK_PIXBUF_MODULEDIR'] = _loaders_dir
 
 # ─── Générer une SECRET_KEY stable par installation ───────────────────────────
+from ecole_moderne.runtime_secret import load_or_create_secret
+
 _secret_file = os.path.join(BASE_DIR, '.secret_key')
-if os.path.exists(_secret_file):
-    with open(_secret_file, 'r') as _f:
-        _secret_key = _f.read().strip()
-else:
-    _secret_key = 'sk-' + secrets.token_hex(32)
-    try:
-        with open(_secret_file, 'w') as _f:
-            _f.write(_secret_key)
-    except Exception:
-        _secret_key = 'offline-fallback-key-myschool-gn-v1-' + hashlib.md5(
-            BASE_DIR.encode()
-        ).hexdigest()
+_secret_key = load_or_create_secret(_secret_file)
 
 # ─── Variables d'environnement Django ─────────────────────────────────────────
 os.environ['DJANGO_SETTINGS_MODULE'] = 'ecole_moderne.settings'
