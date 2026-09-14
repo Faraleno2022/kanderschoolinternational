@@ -13,9 +13,12 @@ from django.utils.deprecation import MiddlewareMixin
 from django.contrib import messages
 from django.contrib.auth import logout
 from django.shortcuts import redirect
+from django.urls import reverse
 from django.core.exceptions import TooManyFieldsSent
 from django.core.mail import mail_admins
 import re
+
+from .client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +29,7 @@ class SecurityMiddleware(MiddlewareMixin):
     
     # Patterns d'attaques SQL Injection (plus stricts pour éviter les faux positifs)
     SQL_INJECTION_PATTERNS = [
-        # Commentaires/terminaisons SQL dangereuses
-        r"(--|;|/\*|\*/|%2D%2D|%3B)",
+        # La ponctuation seule (;, --, apostrophes) est du texte légitime.
         # UNION SELECT (avec mots-clés)
         r"\bunion\b\s+\bselect\b",
         # EXEC sp (procédures stockées)
@@ -44,7 +46,7 @@ class SecurityMiddleware(MiddlewareMixin):
     XSS_PATTERNS = [
         r"<script[^>]*>.*?</script>",
         r"javascript:",
-        r"on\w+\s*=",
+        r"<[^>]*\bon[a-z]+\s*=",
         r"<iframe[^>]*>.*?</iframe>",
         r"<object[^>]*>.*?</object>",
         r"<embed[^>]*>.*?</embed>",
@@ -100,14 +102,36 @@ class SecurityMiddleware(MiddlewareMixin):
             return JsonResponse({'success': False, 'error': message}, status=403)
         return HttpResponseForbidden(message)
 
-    def _valeurs_post_analysables(self, request):
-        """Retourne les valeurs POST à analyser, hors champs sensibles."""
-        for key, value in request.POST.items():
-            if key.lower() in self.SENSITIVE_FIELDS:
-                continue
-            if isinstance(value, str):
-                yield value
+    def _valeurs_analysables(self, request):
+        """Analyse les valeurs décodées, y compris les champs répétés.
 
+        Les noms comme « observations= » ne sont pas des attributs JavaScript.
+        Les mots de passe et jetons restent exclus de cette heuristique.
+        """
+        sources = [request.GET]
+        if request.method == 'POST':
+            sources.append(request.POST)
+        for source in sources:
+            for key, values in source.lists():
+                if key.lower() not in self.SENSITIVE_FIELDS:
+                    yield from values
+
+    def _matches_payload(self, request, patterns, include_path=False):
+        try:
+            values = self._valeurs_analysables(request)
+            if include_path and any(
+                re.search(pattern, unquote(request.path), re.IGNORECASE)
+                for pattern in patterns
+            ):
+                return True
+            return any(
+                re.search(pattern, value, re.IGNORECASE)
+                for value in values for pattern in patterns
+            )
+        except TooManyFieldsSent:
+            # Django conserve le rejet du formulaire trop volumineux.
+            logger.warning("[SECURITY] Trop de champs pour l'analyse des valeurs")
+            return False
 
     def process_request(self, request):
         """
@@ -195,8 +219,11 @@ class SecurityMiddleware(MiddlewareMixin):
             self.block_ip(client_ip, "Path Traversal")
             return self._forbidden(request, "Tentative d'attaque détectée.")
 
-        # 6. Vérifier si l'IP est bloquée
-        if self.is_ip_blocked(client_ip):
+        # 6. L'administrateur déjà connecté doit pouvoir retirer un faux positif.
+        # Seul ce formulaire reste accessible ; sa vue impose staff, CSRF et
+        # code de vérification. Ni GET ni une requête anonyme ne débloquent l'IP.
+        if (self.is_ip_blocked(client_ip)
+                and request.path != reverse('utilisateurs:admin_unlock')):
             logger.info(f"Accès refusé pour IP bloquée: {client_ip}")
             return self._forbidden(request, "Votre adresse IP a été bloquée.")
         
@@ -206,74 +233,37 @@ class SecurityMiddleware(MiddlewareMixin):
         return None
     
     def get_client_ip(self, request):
-        """Obtient l'adresse IP réelle du client"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
+        return get_client_ip(request)
     
     def is_rate_limited(self, ip):
         """Vérifie si l'IP dépasse la limite de requêtes"""
         cache_key = f"rate_limit_{ip}"
         requests = cache.get(cache_key, 0)
-        return requests > 100  # Max 100 requêtes par minute
+        return requests >= 100  # Max 100 requêtes par minute
     
     def increment_request_count(self, ip):
         """Incrémente le compteur de requêtes pour une IP"""
         cache_key = f"rate_limit_{ip}"
-        requests = cache.get(cache_key, 0)
-        cache.set(cache_key, requests + 1, 60)  # Expire après 1 minute
+        # Une fenêtre fixe : incrémenter ne repousse pas l'expiration.
+        if not cache.add(cache_key, 1, 60):
+            try:
+                cache.incr(cache_key)
+            except ValueError:
+                # La clé peut expirer entre add() et incr().
+                cache.add(cache_key, 1, 60)
     
     def is_suspicious_user_agent(self, user_agent):
         """Vérifie si le User Agent est suspect"""
         return any(suspicious in user_agent for suspicious in self.SUSPICIOUS_USER_AGENTS)
     
     def detect_sql_injection(self, request):
-        """Détecte les tentatives d'injection SQL (requêtes et POST), sans pénaliser les apostrophes normales)"""
-        # Vérifier dans la query string uniquement (pas tout le chemin)
-        query = (request.META.get('QUERY_STRING') or '').lower()
-        for pattern in self.SQL_INJECTION_PATTERNS:
-            if re.search(pattern, query, re.IGNORECASE):
-                return True
-        
-        # Vérifier dans les paramètres POST (hors champs sensibles)
-        if request.method == 'POST':
-            try:
-                for value in self._valeurs_post_analysables(request):
-                    val = value.lower()
-                    for pattern in self.SQL_INJECTION_PATTERNS:
-                        if re.search(pattern, val, re.IGNORECASE):
-                            return True
-            except TooManyFieldsSent:
-                logger.warning("[SECURITY] POST ignoré pour scan SQLi: trop de champs (TooManyFieldsSent)")
-                return False
+        """Détecte les constructions SQL, sans bloquer la ponctuation normale."""
+        return self._matches_payload(request, self.SQL_INJECTION_PATTERNS)
 
-        return False
-    
     def detect_xss(self, request):
-        """Détecte les tentatives XSS"""
-        # Vérifier dans l'URL
-        full_path = request.get_full_path().lower()
-        for pattern in self.XSS_PATTERNS:
-            if re.search(pattern, full_path, re.IGNORECASE):
-                return True
-        
-        # Vérifier dans les paramètres POST (hors champs sensibles)
-        if request.method == 'POST':
-            try:
-                for value in self._valeurs_post_analysables(request):
-                    for pattern in self.XSS_PATTERNS:
-                        if re.search(pattern, value.lower(), re.IGNORECASE):
-                            return True
-            except TooManyFieldsSent:
-                # Si le formulaire contient trop de champs, ignorer l'analyse POST
-                logger.warning("[SECURITY] POST ignoré pour scan XSS: trop de champs (TooManyFieldsSent)")
-                return False
+        """Détecte le code HTML/JavaScript dans les valeurs et le chemin."""
+        return self._matches_payload(request, self.XSS_PATTERNS, include_path=True)
 
-        return False
-    
     @staticmethod
     def _decode_repeatedly(value, max_rounds=3):
         """Décode les séquences URL, y compris les encodages imbriqués."""
@@ -439,13 +429,7 @@ class SessionSecurityMiddleware(MiddlewareMixin):
         return None
     
     def get_client_ip(self, request):
-        """Obtient l'adresse IP réelle du client"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
+        return get_client_ip(request)
     
     @staticmethod
     def inactivity_timeout():
@@ -496,13 +480,7 @@ class CSRFSecurityMiddleware(MiddlewareMixin):
         return None
     
     def get_client_ip(self, request):
-        """Obtient l'adresse IP réelle du client"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
+        return get_client_ip(request)
     
     def is_same_origin(self, request, referer):
         """Vérifie si le referer provient du même domaine"""
