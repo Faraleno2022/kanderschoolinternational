@@ -228,9 +228,17 @@ AUTHENTICATION_BACKENDS = [
 
 # =================== Django-Axes (anti brute-force) ===================
 from datetime import timedelta as _td_axes
+# Proxy observé sur l'hébergement PythonAnywhere. Cette liste est remplaçable
+# par TRUSTED_PROXY_NETWORKS (IP/CIDR séparés par des virgules) ; une valeur
+# explicitement vide désactive la confiance dans les en-têtes de proxy.
+TRUSTED_PROXY_NETWORKS = (
+    _env_list('TRUSTED_PROXY_NETWORKS')
+    if 'TRUSTED_PROXY_NETWORKS' in os.environ else ['10.0.4.129/32']
+)
+AXES_CLIENT_IP_CALLABLE = 'ecole_moderne.client_ip.get_client_ip'
 AXES_FAILURE_LIMIT = 10             # Bloquer après 10 tentatives échouées
 AXES_COOLOFF_TIME = _td_axes(minutes=30)  # Débloquer après 30 minutes (anti-verrouillage permanent)
-AXES_LOCKOUT_PARAMETERS = ['username', 'ip_address']  # Bloquer par utilisateur + IP
+AXES_LOCKOUT_PARAMETERS = [['username', 'ip_address']]  # Bloquer uniquement ce couple
 AXES_RESET_ON_SUCCESS = True        # Réinitialiser le compteur après un login réussi
 AXES_ENABLE_ADMIN = True            # Voir les tentatives dans l'admin Django
 AXES_LOCKOUT_URL = '/utilisateurs/login/'  # Rediriger vers le login après blocage

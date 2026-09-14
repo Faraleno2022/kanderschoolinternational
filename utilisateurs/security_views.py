@@ -21,6 +21,9 @@ from datetime import datetime, timedelta
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from ecole_moderne.client_ip import get_client_ip
+from .security_locks import clear_login_locks
+
 logger = logging.getLogger(__name__)
 
 # ====== Paramètres de sécurité login ======
@@ -42,15 +45,6 @@ def _safe_next_url(request, value):
         )
     )
 
-
-def get_client_ip(request):
-    """Obtient l'adresse IP réelle du client"""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0]
-    else:
-        ip = request.META.get('REMOTE_ADDR')
-    return ip
 
 def is_ip_blocked(ip, username=None):
     """Vérifie si une IP ou un couple IP+username est bloqué."""
@@ -270,38 +264,15 @@ def admin_verify(request):
         from django.conf import settings as django_settings
         expected_code = django_settings.SECURITY_VERIFICATION_CODE
         if expected_code and code == expected_code:
-            # Nettoyer les verrous pour ip/username si disponibles
-            cleared = 0
-            try:
-                keys = []
-                if ip_val and username_val:
-                    keys = [
-                        f'failed_login_{ip_val}',
-                        f'failed_login_{ip_val}_{username_val}',
-                        f'blocked_login_{ip_val}',
-                        f'blocked_login_{ip_val}_{username_val}',
-                    ]
-                elif ip_val:
-                    keys = [
-                        f'failed_login_{ip_val}',
-                        f'blocked_login_{ip_val}',
-                    ]
-                elif username_val:
-                    try:
-                        for k in list(getattr(cache, '_cache', {}).keys()):
-                            if isinstance(k, str) and (k.endswith(f'_{username_val}') or k.startswith('failed_login_') or k.startswith('blocked_login_')):
-                                keys.append(k)
-                    except Exception:
-                        pass
-                for k in set(keys):
-                    try:
-                        if cache.get(k) is not None:
-                            cache.delete(k)
-                            cleared += 1
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+            if ip_val or username_val:
+                try:
+                    clear_login_locks(ip_val, username_val)
+                except Exception:
+                    logger.exception("Échec du nettoyage après vérification administrateur")
+                    messages.error(request, "Impossible de retirer le blocage. Réessayez plus tard.")
+                    return render(request, 'utilisateurs/admin_verify.html', {
+                        'ip': ip_val, 'username': username_val,
+                    })
 
             # Marquer la session comme vérifiée et retourner au login
             request.session['admin_verified'] = True
@@ -468,49 +439,14 @@ def security_clear_login_lock(request):
         messages.error(request, "Veuillez fournir au moins une IP ou un nom d'utilisateur.")
         return redirect('utilisateurs:security_dashboard')
 
-    cleared = 0
-    keys = []
     try:
-        if ip and username:
-            keys = [
-                f'failed_login_{ip}',
-                f'failed_login_{ip}_{username}',
-                f'blocked_login_{ip}',
-                f'blocked_login_{ip}_{username}',
-                # Blocage 24h posé par SecurityMiddleware (SQLi/XSS/UA suspect)
-                f'blocked_ip_{ip}',
-                f'rate_limit_{ip}',
-            ]
-        elif ip:
-            keys = [
-                f'failed_login_{ip}',
-                f'blocked_login_{ip}',
-                # Blocage 24h posé par SecurityMiddleware (SQLi/XSS/UA suspect)
-                f'blocked_ip_{ip}',
-                f'rate_limit_{ip}',
-            ]
-        else:
-            # username seul: tenter de purger les clés exposées par le backend
-            try:
-                for k in list(getattr(cache, '_cache', {}).keys()):
-                    if isinstance(k, str) and (k.endswith(f'_{username}') or k.startswith('failed_login_') or k.startswith('blocked_login_')):
-                        keys.append(k)
-            except Exception:
-                pass
-
-        for k in set(keys):
-            try:
-                if cache.get(k) is not None:
-                    cache.delete(k)
-                    cleared += 1
-            except Exception:
-                pass
+        cleared = clear_login_locks(ip, username)
     except Exception as e:
         messages.error(request, f"Erreur lors du nettoyage: {e}")
         return redirect('utilisateurs:security_dashboard')
 
     if cleared:
-        messages.success(request, f"Blocage(s) nettoyé(s): {cleared} clé(s) supprimée(s).")
+        messages.success(request, f"Blocage(s) nettoyé(s): {cleared} entrée(s) supprimée(s).")
     else:
         messages.info(request, "Aucune entrée de blocage trouvée pour ces critères.")
     return redirect('utilisateurs:security_dashboard')
@@ -611,7 +547,7 @@ def admin_unlock(request):
     """
     Formulaire de vérification pour administrateur afin de réactiver un compte bloqué.
     Le code est défini via SECURITY_VERIFICATION_CODE dans .env. En cas de validation,
-    supprime les verrous (failed_login_*, blocked_login_*) pour l'IP et/ou l'utilisateur saisis.
+    supprime les verrous applicatifs et AXES pour l'IP et/ou l'utilisateur saisis.
     Réservé aux utilisateurs staff.
     """
     if not request.user.is_staff:
@@ -631,51 +567,13 @@ def admin_unlock(request):
             context.update({'prefill_ip': ip, 'prefill_username': username})
             return render(request, 'utilisateurs/admin_unlock.html', context)
 
-        # Nettoyer les verrous comme dans security_clear_login_lock
-        cleared = 0
-        keys = []
         try:
-            if ip and username:
-                keys = [
-                    f'failed_login_{ip}',
-                    f'failed_login_{ip}_{username}',
-                    f'blocked_login_{ip}',
-                    f'blocked_login_{ip}_{username}',
-                    # Blocage 24h posé par SecurityMiddleware (SQLi/XSS/UA suspect)
-                    f'blocked_ip_{ip}',
-                    f'rate_limit_{ip}',
-                ]
-            elif ip:
-                keys = [
-                    f'failed_login_{ip}',
-                    f'blocked_login_{ip}',
-                    # Blocage 24h posé par SecurityMiddleware (SQLi/XSS/UA suspect)
-                    f'blocked_ip_{ip}',
-                    f'rate_limit_{ip}',
-                ]
-            elif username:
-                try:
-                    for k in list(getattr(cache, '_cache', {}).keys()):
-                        if isinstance(k, str) and (k.endswith(f'_{username}') or k.startswith('failed_login_') or k.startswith('blocked_login_')):
-                            keys.append(k)
-                except Exception:
-                    pass
-            else:
-                messages.error(request, "Veuillez fournir au moins une IP ou un nom d'utilisateur.")
-                return render(request, 'utilisateurs/admin_unlock.html')
-
-            for k in set(keys):
-                try:
-                    if cache.get(k) is not None:
-                        cache.delete(k)
-                        cleared += 1
-                except Exception:
-                    pass
+            cleared = clear_login_locks(ip, username)
         except Exception as e:
             messages.error(request, f"Erreur lors du nettoyage: {e}")
             return render(request, 'utilisateurs/admin_unlock.html')
 
-        messages.success(request, f"Déverrouillage réussi. Clé(s) supprimée(s): {cleared}.")
+        messages.success(request, f"Déverrouillage réussi. Entrée(s) supprimée(s): {cleared}.")
         return redirect('utilisateurs:security_dashboard')
 
     # GET: Pré-remplir depuis la query string si fournie

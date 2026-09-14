@@ -14,6 +14,8 @@ from django.core.mail import mail_admins
 from django.conf import settings
 import time
 
+from ecole_moderne.client_ip import get_client_ip
+
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
@@ -310,14 +312,6 @@ def sanitize_input(view_func):
         return view_func(request, *args, **kwargs)
     return wrapper
 
-def get_client_ip(request):
-    """Obtient l'adresse IP réelle du client"""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0]
-    else:
-        ip = request.META.get('REMOTE_ADDR')
-    return ip
 
 def sanitize_string(value):
     """
