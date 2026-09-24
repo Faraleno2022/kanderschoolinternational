@@ -38,6 +38,64 @@ class SourceHeuresSalaire(models.TextChoices):
     FIXE = 'FIXE', 'Salaire fixe négocié'
 
 
+class CategoriePaie(models.TextChoices):
+    """Regroupement des employés sur les états de salaire (Direction, Primaire...)."""
+    DIRECTION = 'DIRECTION', 'Direction'
+    PRIMAIRE = 'PRIMAIRE', 'Maternelle / Primaire'
+    SECONDAIRE = 'SECONDAIRE', 'Secondaire'
+    APPUI = 'APPUI', "Personnel d'appui"
+
+
+TYPES_PAR_CATEGORIE_PAIE = {
+    CategoriePaie.DIRECTION: (
+        TypeEnseignant.CADRE,
+        TypeEnseignant.ADMINISTRATEUR,
+    ),
+    CategoriePaie.PRIMAIRE: (
+        TypeEnseignant.GARDERIE,
+        TypeEnseignant.MATERNELLE,
+        TypeEnseignant.PRIMAIRE,
+    ),
+    CategoriePaie.SECONDAIRE: (TypeEnseignant.SECONDAIRE,),
+    CategoriePaie.APPUI: (
+        TypeEnseignant.CHAUFFEUR,
+        TypeEnseignant.VIGILE,
+        TypeEnseignant.ENTRETIEN,
+        TypeEnseignant.NOUNOU,
+        TypeEnseignant.RESTAURATION,
+    ),
+}
+
+
+def categorie_paie_du_type(type_enseignant):
+    for categorie, types in TYPES_PAR_CATEGORIE_PAIE.items():
+        if type_enseignant in types:
+            return categorie
+    return CategoriePaie.APPUI
+
+
+# Rubriques de primes reprises des états de salaire papier.
+RUBRIQUES_PRIMES = (
+    ('prime_fonction', 'Prime de fonction'),
+    ('prime_craie_revision', 'Prime de craie / révision'),
+    ('prime_anciennete', "Prime d'ancienneté"),
+    ('prime_eloignement', "Prime d'éloignement"),
+    ('prime_performance', 'Prime de performance'),
+    ('prime_exceptionnelle', 'Prime exceptionnelle'),
+)
+
+
+def _champ_prime(libelle):
+    return models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0'),
+        blank=True,
+        verbose_name=libelle,
+        validators=[MinValueValidator(Decimal('0'))],
+    )
+
+
 class Enseignant(SyncTrackedModel):
     """Modèle représentant un enseignant"""
     
@@ -49,6 +107,12 @@ class Enseignant(SyncTrackedModel):
     adresse = models.TextField(blank=True, verbose_name="Adresse")
     
     # Informations professionnelles
+    matricule = models.CharField(
+        max_length=30,
+        blank=True,
+        verbose_name="Matricule",
+        help_text="Numéro matricule repris sur les états et bulletins de paie",
+    )
     ecole = models.ForeignKey(Ecole, on_delete=models.CASCADE, verbose_name="École")
     type_enseignant = models.CharField(
         max_length=20, 
@@ -131,6 +195,23 @@ class Enseignant(SyncTrackedModel):
     def nom_complet(self):
         return f"{self.nom} {self.prenoms}"
     
+    @property
+    def categorie_paie(self):
+        """Catégorie utilisée pour les états de salaire et la masse salariale."""
+        return categorie_paie_du_type(self.type_enseignant)
+
+    @property
+    def anciennete_annees(self):
+        """Ancienneté en années révolues à la date du jour."""
+        from datetime import date
+        if not self.date_embauche:
+            return 0
+        aujourd_hui = date.today()
+        annees = aujourd_hui.year - self.date_embauche.year
+        if (aujourd_hui.month, aujourd_hui.day) < (self.date_embauche.month, self.date_embauche.day):
+            annees -= 1
+        return max(0, annees)
+
     @property
     def est_taux_horaire(self):
         """Vérifie si l'enseignant est payé au taux horaire"""
@@ -557,6 +638,20 @@ class EtatSalaire(SyncTrackedModel):
         default=Decimal('0'),
         verbose_name="Primes",
         validators=[MinValueValidator(Decimal('0'))],
+        help_text="Total de toutes les primes (rubriques détaillées + autres primes).",
+    )
+    prime_fonction = _champ_prime('Prime de fonction')
+    prime_craie_revision = _champ_prime('Prime de craie / révision')
+    prime_anciennete = _champ_prime("Prime d'ancienneté")
+    prime_eloignement = _champ_prime("Prime d'éloignement")
+    prime_performance = _champ_prime('Prime de performance')
+    prime_exceptionnelle = _champ_prime('Prime exceptionnelle')
+    jours_travailles = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Jours travaillés",
+        validators=[MaxValueValidator(31)],
+        help_text="Laisser vide pour reprendre le nombre de jours pointés.",
     )
     deductions = models.DecimalField(
         max_digits=10, 
@@ -639,6 +734,11 @@ class EtatSalaire(SyncTrackedModel):
                 'Le total des retenues et avances ne peut pas dépasser le salaire brut.'
             )
 
+        if self.primes_detaillees > primes:
+            errors['primes'] = (
+                'Le total des primes ne peut pas être inférieur à la somme des rubriques détaillées.'
+            )
+
         if (
             self.enseignant_id
             and self.periode_id
@@ -670,6 +770,28 @@ class EtatSalaire(SyncTrackedModel):
     @property
     def salaire_brut(self):
         return (self.salaire_base or Decimal('0')) + (self.primes or Decimal('0'))
+
+    @property
+    def primes_detaillees(self):
+        return sum(
+            (getattr(self, champ) or Decimal('0') for champ, _ in RUBRIQUES_PRIMES),
+            Decimal('0'),
+        )
+
+    @property
+    def prime_autres(self):
+        """Part des primes non ventilée dans une rubrique détaillée."""
+        return max(Decimal('0'), (self.primes or Decimal('0')) - self.primes_detaillees)
+
+    @property
+    def lignes_primes(self):
+        """Liste ``(libellé, montant)`` de toutes les primes, y compris « autres »."""
+        lignes = [
+            (libelle, getattr(self, champ) or Decimal('0'))
+            for champ, libelle in RUBRIQUES_PRIMES
+        ]
+        lignes.append(('Autres primes', self.prime_autres))
+        return lignes
     
     @property
     def peut_etre_valide(self):

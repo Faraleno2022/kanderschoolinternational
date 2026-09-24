@@ -188,6 +188,11 @@
             <a href="{% url 'salaires:export_etats_salaire_pdf' %}{% if qs %}?{{ qs }}{% endif %}" class="btn btn-outline-danger">
                 <i class="fas fa-file-pdf me-1"></i> Exporter PDF
             </a>
+            {% if periode_selectionnee %}
+            <a href="{% url 'salaires:masse_salariale' periode_selectionnee %}" class="btn btn-outline-primary">
+                <i class="fas fa-file-invoice-dollar me-1"></i> Masse salariale &amp; documents
+            </a>
+            {% endif %}
             {% endwith %}
         </div>
     </div>

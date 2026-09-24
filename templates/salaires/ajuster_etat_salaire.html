@@ -98,7 +98,27 @@
                         </div>
                         {% endif %}
 
-                        <h5 class="border-bottom pb-2 mt-4 mb-3">Primes et retenues</h5>
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-4">
+                                <label class="form-label" for="{{ form.jours_travailles.id_for_label }}">{{ form.jours_travailles.label }}</label>
+                                {{ form.jours_travailles }}
+                                {% for error in form.jours_travailles.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                                <div class="form-text">{{ form.jours_travailles.help_text }}</div>
+                            </div>
+                        </div>
+
+                        <h5 class="border-bottom pb-2 mt-4 mb-3">Primes</h5>
+                        <div class="row g-3">
+                            {% for field in form %}{% if field.name|slice:":6" == "prime_" %}
+                            <div class="col-md-4">
+                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                            {% endif %}{% endfor %}
+                        </div>
+
+                        <h5 class="border-bottom pb-2 mt-4 mb-3">Autres primes et retenues</h5>
                         <div class="row g-3">
                             <div class="col-md-4">
                                 <label class="form-label" for="{{ form.primes.id_for_label }}">{{ form.primes.label }}</label>
@@ -177,11 +197,14 @@ document.addEventListener('DOMContentLoaded', function () {
             base = numberValue(hoursInput) * numberValue(rateInput);
             if (baseInput) baseInput.value = base.toFixed(2);
         }
-        const net = Math.max(0, base + numberValue(primesInput) - numberValue(deductionsInput) - advances);
+        const detailPrimes = Array.from(form.querySelectorAll('[data-role="prime-detail"]'))
+            .reduce((total, input) => total + numberValue(input), 0);
+        const net = Math.max(0, base + detailPrimes + numberValue(primesInput) - numberValue(deductionsInput) - advances);
         netPreview.textContent = Math.round(net).toLocaleString('fr-FR') + ' GNF';
     }
 
-    [baseInput, sourceInput, hoursInput, rateInput, primesInput, deductionsInput]
+    [baseInput, sourceInput, hoursInput, rateInput, primesInput, deductionsInput,
+     ...form.querySelectorAll('[data-role="prime-detail"]')]
         .filter(Boolean)
         .forEach(element => {
             element.addEventListener('input', updatePreview);

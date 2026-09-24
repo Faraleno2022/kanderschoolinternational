@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import documents_paie, views
 
 app_name = 'salaires'
 
@@ -46,6 +46,14 @@ urlpatterns = [
     path('periodes/', views.gestion_periodes, name='gestion_periodes'),
     path('periodes/creer/', views.creer_periode, name='creer_periode'),
     path('periodes/cloturer/<int:periode_id>/', views.cloturer_periode, name='cloturer_periode'),
+
+    # Documents de paie (repris du classeur Excel)
+    path('periodes/<int:periode_id>/masse-salariale/', documents_paie.masse_salariale, name='masse_salariale'),
+    path('periodes/<int:periode_id>/masse-salariale/pdf/', documents_paie.masse_salariale_pdf, name='masse_salariale_pdf'),
+    path('periodes/<int:periode_id>/etat-paie/pdf/', documents_paie.etat_paie_pdf, name='etat_paie_pdf'),
+    path('periodes/<int:periode_id>/emargement/pdf/', documents_paie.emargement_pdf, name='emargement_pdf'),
+    path('periodes/<int:periode_id>/acomptes/pdf/', documents_paie.acomptes_pdf, name='acomptes_pdf'),
+    path('periodes/<int:periode_id>/bulletins/pdf/', documents_paie.bulletins_periode_pdf, name='bulletins_periode_pdf'),
 
     # Rapport paiements (totaux par mois/année)
     path('rapport/paiements/', views.rapport_paiements, name='rapport_paiements'),

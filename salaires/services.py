@@ -18,6 +18,7 @@ from .models import (
     Enseignant,
     EtatSalaire,
     PeriodeSalaire,
+    RUBRIQUES_PRIMES,
     SourceHeuresSalaire,
 )
 
@@ -312,11 +313,15 @@ def appliquer_ajustement_etat_salaire(
     primes=Decimal('0'),
     deductions=Decimal('0'),
     observations='',
+    details_primes=None,
+    jours_travailles=None,
 ):
     """Applique un ajustement complet à un état encore ouvert.
 
     Les valeurs modifiées sont propres à la période : elles ne remplacent pas
     le taux ou le salaire de référence enregistré sur la fiche de l'employé.
+    ``primes`` est le total ; ``details_primes`` ventile une partie de ce
+    total dans les rubriques (fonction, craie, ancienneté...).
     """
     etat = (
         EtatSalaire.objects.select_for_update()
@@ -331,7 +336,11 @@ def appliquer_ajustement_etat_salaire(
         enseignant,
         etat.periode,
     )
-    etat.primes = arrondir_montant(primes)
+    details_primes = details_primes or {}
+    for champ, _libelle in RUBRIQUES_PRIMES:
+        setattr(etat, champ, arrondir_montant(details_primes.get(champ)))
+    etat.primes = max(arrondir_montant(primes), etat.primes_detaillees)
+    etat.jours_travailles = jours_travailles
     etat.deductions = arrondir_montant(deductions)
     etat.observations = observations or ''
     etat.calcule_par = utilisateur
