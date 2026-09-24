@@ -10,6 +10,7 @@ from .models import (
     EtatSalaire,
     PeriodeSalaire,
     PresenceEnseignant,
+    RUBRIQUES_PRIMES,
     SourceHeuresSalaire,
     StatutEnseignant,
     TypeEnseignant,
@@ -85,7 +86,7 @@ class EnseignantForm(forms.ModelForm):
         model = Enseignant
         fields = [
             'nom', 'prenoms', 'telephone', 'email', 'adresse',
-            'ecole', 'type_enseignant', 'statut', 'fonction',
+            'matricule', 'ecole', 'type_enseignant', 'statut', 'fonction',
             'taux_horaire', 'salaire_fixe', 'primes_mensuelles', 'heures_mensuelles', 'date_embauche'
         ]
         widgets = {
@@ -122,6 +123,10 @@ class EnseignantForm(forms.ModelForm):
             'fonction': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Ex. Directeur, secrétaire, comptable...'
+            }),
+            'matricule': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex. 0499120'
             }),
             'taux_horaire': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -547,7 +552,9 @@ class EtatSalaireAjustementForm(forms.ModelForm):
         model = EtatSalaire
         fields = [
             'salaire_base', 'source_heures', 'total_heures',
-            'taux_horaire_applique', 'primes', 'deductions', 'observations',
+            'taux_horaire_applique', 'jours_travailles',
+            *[champ for champ, _libelle in RUBRIQUES_PRIMES],
+            'primes', 'deductions', 'observations',
         ]
         widgets = {
             'salaire_base': forms.NumberInput(attrs={
@@ -576,13 +583,24 @@ class EtatSalaireAjustementForm(forms.ModelForm):
                 'class': 'form-control', 'rows': 4,
                 'placeholder': 'Motif des modifications, primes ou retenues',
             }),
+            'jours_travailles': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'max': '31', 'step': '1',
+            }),
+            **{
+                champ: forms.NumberInput(attrs={
+                    'class': 'form-control', 'min': '0', 'step': '0.01',
+                    'data-role': 'prime-detail',
+                })
+                for champ, _libelle in RUBRIQUES_PRIMES
+            },
         }
         labels = {
             'salaire_base': 'Salaire de base pour cette période (GNF)',
             'source_heures': 'Source des heures',
             'total_heures': "Nombre d'heures travaillées",
             'taux_horaire_applique': 'Taux horaire pour cette période (GNF/h)',
-            'primes': 'Primes (GNF)',
+            'primes': 'Autres primes (GNF)',
+            'jours_travailles': 'Jours travaillés',
             'deductions': 'Retenues (GNF)',
             'observations': 'Observations et motif de modification',
         }
@@ -592,6 +610,17 @@ class EtatSalaireAjustementForm(forms.ModelForm):
         self.est_taux_horaire = bool(
             getattr(self.instance, 'enseignant_id', None)
             and self.instance.enseignant.est_taux_horaire
+        )
+        # Le champ « primes » saisit la part non ventilée ; le total est
+        # recalculé dans clean() à partir des rubriques.
+        if not self.is_bound and self.instance.pk:
+            self.initial['primes'] = self.instance.prime_autres
+        for champ, _libelle in RUBRIQUES_PRIMES:
+            self.fields[champ].required = False
+        self.fields['primes'].required = False
+        self.fields['primes'].help_text = 'Primes hors rubriques ci-dessus.'
+        self.fields['jours_travailles'].help_text = (
+            'Laisser vide pour reprendre le nombre de jours pointés.'
         )
 
         if self.est_taux_horaire:
@@ -616,7 +645,19 @@ class EtatSalaireAjustementForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        primes = cleaned_data.get('primes') or Decimal('0')
+        details = {}
+        for champ, _libelle in RUBRIQUES_PRIMES:
+            valeur = cleaned_data.get(champ) or Decimal('0')
+            if valeur < 0:
+                self.add_error(champ, 'Une prime ne peut pas être négative.')
+            details[champ] = valeur
+            cleaned_data[champ] = valeur
+        self.details_primes = details
+        primes = (cleaned_data.get('primes') or Decimal('0')) + sum(
+            details.values(), Decimal('0')
+        )
+        # Le total est stocké dans « primes » (autres + rubriques).
+        cleaned_data['primes'] = primes
         deductions = cleaned_data.get('deductions') or Decimal('0')
         montant_avances = self.instance.montant_avances or Decimal('0')
 

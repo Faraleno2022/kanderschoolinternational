@@ -1227,6 +1227,8 @@ def ajuster_etat_salaire(request, etat_id):
                     primes=form.cleaned_data.get('primes'),
                     deductions=form.cleaned_data.get('deductions'),
                     observations=form.cleaned_data.get('observations'),
+                    details_primes=form.details_primes,
+                    jours_travailles=form.cleaned_data.get('jours_travailles'),
                 )
             except ValueError as exc:
                 form.add_error(None, str(exc))
@@ -1505,8 +1507,22 @@ def fiche_paie_pdf(request, etat_id):
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="fiche_paie_{etat.enseignant.nom}_{etat.periode.mois}_{etat.periode.annee}.pdf"'
     
-    # Créer le PDF
     p = canvas.Canvas(response, pagesize=A4)
+    dessiner_fiche_paie(p, etat)
+    p.save()
+
+    return response
+
+
+def dessiner_fiche_paie(p, etat):
+    """Dessine le bulletin de paie d'un état sur une page du canevas ``p``."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    from reportlab.platypus import Table, TableStyle
+    from datetime import datetime
+    from .documents_paie import lignes_bulletin, montant_en_lettres, fmt
+
     width, height = A4
     
     # Logo et filigrane de l'école concernée par la paie.
@@ -1569,82 +1585,79 @@ def fiche_paie_pdf(request, etat_id):
     
     # Titre FICHE DE PAIE centré
     p.setFont("Helvetica-Bold", 16)
-    fiche_text = f"FICHE DE PAIE - {etat.periode.mois:02d}/{etat.periode.annee}"
+    fiche_text = f"BULLETIN DE PAIE - {etat.periode.nom_periode}"
     p.drawCentredString(width/2, height - 5.2*cm, fiche_text)
     
     # Informations période
     p.setFont("Helvetica", 10)
     p.drawString(2*cm, height - 5.8*cm, f"Date d'édition: {datetime.now().strftime('%d/%m/%Y')}")
     
-    # Informations enseignant
+    # Informations employé
+    enseignant = etat.enseignant
     y_pos = height - 6.5*cm
     p.setFont("Helvetica-Bold", 12)
-    p.drawString(2*cm, y_pos, "INFORMATIONS ENSEIGNANT")
-    
-    y_pos -= 0.8*cm
-    p.setFont("Helvetica", 10)
-    p.drawString(2*cm, y_pos, f"Nom: {etat.enseignant.nom} {etat.enseignant.prenoms}")
-    y_pos -= 0.5*cm
-    p.drawString(2*cm, y_pos, f"Téléphone: {etat.enseignant.telephone or 'Non renseigné'}")
-    y_pos -= 0.5*cm
-    p.drawString(2*cm, y_pos, f"Email: {etat.enseignant.email or 'Non renseigné'}")
-    y_pos -= 0.5*cm
-    p.drawString(2*cm, y_pos, f"Type: {'Salaire fixe' if etat.enseignant.est_salaire_fixe else 'Taux horaire'}")
-    
-    # Détails du salaire
-    y_pos -= 1.5*cm
-    p.setFont("Helvetica-Bold", 12)
-    p.drawString(2*cm, y_pos, "DÉTAILS DU SALAIRE")
-    
-    # Tableau des montants et de la présence du mois
-    jours_presence = nombre_jours_presence(etat.enseignant, etat.periode)
-    data = [
-        ['Élément', 'Valeur'],
-        ['Salaire de base', f"{etat.salaire_base:,.0f} GNF".replace(',', ' ')],
-        ['Jours de présence', f"{jours_presence} jour(s)"],
+    p.drawString(2*cm, y_pos, "INFORMATIONS EMPLOYÉ")
+
+    jours = etat.jours_travailles
+    if jours is None:
+        jours = nombre_jours_presence(enseignant, etat.periode)
+    infos = [
+        ('Prénoms et nom :', f"{enseignant.prenoms} {enseignant.nom}",
+         'Matricule :', enseignant.matricule or '-'),
+        ("Date d'embauche :", enseignant.date_embauche.strftime('%d/%m/%Y') if enseignant.date_embauche else '-',
+         'Ancienneté :', f"{enseignant.anciennete_annees} an(s)"),
+        ('Fonction :', enseignant.fonction or enseignant.get_type_enseignant_display(),
+         'Jours travaillés :', str(jours)),
+        ('Catégorie :', enseignant.categorie_paie.label,
+         'Salaire brut :', f"{fmt(etat.salaire_brut)} GNF"),
     ]
-    
-    if etat.total_heures is not None:
-        data.append(['Heures travaillées', f"{etat.total_heures}h"])
-        data.append(['Source des heures', etat.get_source_heures_display()])
-        data.append(['Taux horaire', f"{etat.taux_horaire_applique or 0:,.0f}".replace(',', ' ')])
-    
-    if etat.primes:
-        data.append(['Primes', f"{etat.primes:,.0f}".replace(',', ' ')])
-    
-    if etat.deductions:
-        data.append(['Déductions', f"-{etat.deductions:,.0f}".replace(',', ' ')])
-    if etat.montant_avances:
-        data.append([
-            'Avances sur salaire',
-            f"-{etat.montant_avances:,.0f}".replace(',', ' '),
-        ])
-    
-    data.append(['SALAIRE NET', f"{etat.salaire_net:,.0f}".replace(',', ' ')])
-    
-    # Créer le tableau
+    p.setFont("Helvetica", 9)
+    for libelle_g, valeur_g, libelle_d, valeur_d in infos:
+        y_pos -= 0.5*cm
+        p.setFont("Helvetica-Bold", 9)
+        p.drawString(2*cm, y_pos, libelle_g)
+        p.drawString(11*cm, y_pos, libelle_d)
+        p.setFont("Helvetica", 9)
+        p.drawString(5*cm, y_pos, str(valeur_g)[:45])
+        p.drawString(14*cm, y_pos, str(valeur_d))
+
+    # Tableau des rubriques (base, primes, acompte, solde)
+    lignes = lignes_bulletin(etat)
+    total_primes = etat.primes or 0
+    total_retenues = (etat.deductions or 0) + (etat.montant_avances or 0)
+    data = [['N°', 'Rubriques', 'Base', 'Primes', 'Acompte / Retenue', 'Solde']]
+    data += lignes
+    data.append(['', 'TOTAL', fmt(etat.salaire_base), fmt(total_primes),
+                 fmt(total_retenues), fmt(etat.salaire_net)])
+
     y_pos -= 0.8*cm
-    table = Table(data, colWidths=[8*cm, 4*cm])
+    table = Table(data, colWidths=[1*cm, 7.3*cm, 2.4*cm, 2.2*cm, 2.6*cm, 2.4*cm])
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#d9e2f3')),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
         ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
     ]))
-    
-    table.wrapOn(p, width, height)
-    table.drawOn(p, 2*cm, y_pos - len(data) * 0.6*cm)
-    
+    _largeur, hauteur_table = table.wrapOn(p, width, height)
+    table.drawOn(p, 2*cm, y_pos - hauteur_table)
+    y_pos -= hauteur_table + 0.7*cm
+
+    p.setFont("Helvetica-Bold", 10)
+    p.drawString(2*cm, y_pos, f"Salaire brut : {fmt(etat.salaire_brut)} GNF")
+    p.setFont("Helvetica-Oblique", 8)
+    p.drawString(8*cm, y_pos, montant_en_lettres(etat.salaire_brut))
+    y_pos -= 0.5*cm
+    p.setFont("Helvetica-Bold", 10)
+    p.drawString(2*cm, y_pos, f"Net à payer : {fmt(etat.salaire_net)} GNF")
+    p.setFont("Helvetica-Oblique", 8)
+    p.drawString(8*cm, y_pos, montant_en_lettres(etat.salaire_net))
+    y_pos -= 1*cm
+
     # Statut
-    y_pos -= (len(data) + 2) * 0.6*cm
     p.setFont("Helvetica-Bold", 10)
     statut_text = "VALIDÉ" if etat.valide else "EN ATTENTE DE VALIDATION"
     if etat.paye:
@@ -1661,7 +1674,7 @@ def fiche_paie_pdf(request, etat_id):
         p.drawString(2*cm, y_pos, f"Payé le {etat.date_paiement.strftime('%d/%m/%Y')}")
     
     # Section signatures
-    y_pos -= 3*cm
+    y_pos -= 1*cm
     p.setFont("Helvetica-Bold", 12)
     p.drawString(2*cm, y_pos, "SIGNATURES")
     
@@ -1674,7 +1687,7 @@ def fiche_paie_pdf(request, etat_id):
     
     # Signature enseignant (gauche)
     p.setFont("Helvetica-Bold", 10)
-    p.drawString(2*cm, y_pos, "L'ENSEIGNANT")
+    p.drawString(2*cm, y_pos, "L'EMPLOYÉ")
     p.setFont("Helvetica", 9)
     p.drawString(2*cm, y_pos-0.4*cm, f"Nom: {etat.enseignant.nom} {etat.enseignant.prenoms}")
     
@@ -1706,9 +1719,6 @@ def fiche_paie_pdf(request, etat_id):
     p.drawString(2*cm, 1.5*cm, "Ce document est confidentiel et ne doit pas être divulgué à des tiers.")
     
     p.showPage()
-    p.save()
-    
-    return response
 
 
 @login_required

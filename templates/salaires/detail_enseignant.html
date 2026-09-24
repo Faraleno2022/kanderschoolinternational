@@ -210,6 +210,13 @@
                     <span class="info-value">{{ enseignant.get_type_enseignant_display }}</span>
                 </div>
 
+                {% if enseignant.matricule %}
+                <div class="info-row">
+                    <span class="info-label">Matricule :</span>
+                    <span class="info-value">{{ enseignant.matricule }}</span>
+                </div>
+                {% endif %}
+
                 {% if enseignant.fonction %}
                 <div class="info-row">
                     <span class="info-label">Fonction :</span>

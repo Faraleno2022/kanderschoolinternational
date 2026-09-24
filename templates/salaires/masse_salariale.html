@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Masse salariale - {{ periode.nom_periode }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h3 class="mb-1"><i class="fas fa-file-invoice-dollar me-2"></i>Masse salariale</h3>
+            <div class="text-muted">{{ periode.ecole.nom }} — {{ periode.nom_periode }}</div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'salaires:etats_salaire' %}?periode={{ periode.id }}" class="btn btn-outline-secondary">
+                <i class="fas fa-list me-1"></i> États de salaire
+            </a>
+            <a href="{% url 'salaires:masse_salariale_pdf' periode.id %}" class="btn btn-danger">
+                <i class="fas fa-file-pdf me-1"></i> Masse salariale PDF
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            {% if lignes %}
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle mb-2">
+                    <thead class="table-light">
+                        <tr>
+                            <th>N°</th>
+                            <th>Catégorie</th>
+                            <th class="text-end">Effectif</th>
+                            <th class="text-end">Montant brut</th>
+                            <th class="text-end">Acompte</th>
+                            <th class="text-end">Retenues</th>
+                            <th class="text-end">Net à payer</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ligne in lignes %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>{{ ligne.libelle }}</td>
+                            <td class="text-end">{{ ligne.effectif }}</td>
+                            <td class="text-end">{{ ligne.brut|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ ligne.acompte|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ ligne.retenues|floatformat:0|intcomma }}</td>
+                            <td class="text-end fw-semibold">{{ ligne.net|floatformat:0|intcomma }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-light fw-bold">
+                        <tr>
+                            <td colspan="2">TOTAL</td>
+                            <td class="text-end">{{ total.effectif }}</td>
+                            <td class="text-end">{{ total.brut|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ total.acompte|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ total.retenues|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ total.net|floatformat:0|intcomma }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <p class="small text-muted mb-0">
+                Arrêtée à la somme de : <strong>{{ total_en_lettres }} ({{ total.brut|floatformat:0|intcomma }} GNF)</strong>.
+            </p>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                Aucun état de salaire pour cette période. Lancez d'abord le calcul des salaires depuis
+                <a href="{% url 'salaires:gestion_periodes' %}">la gestion des périodes</a>.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if lignes %}
+    <h5 class="mb-3">Documents à imprimer</h5>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Personnel</th>
+                    <th>État de salaire à payer</th>
+                    <th>Fiche d'émargement</th>
+                    <th>Acomptes (bons)</th>
+                    <th>Bulletins de paie</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ligne in lignes %}
+                <tr>
+                    <td class="fw-semibold">{{ ligne.libelle }}</td>
+                    <td><a class="btn btn-sm btn-outline-danger" href="{% url 'salaires:etat_paie_pdf' periode.id %}?categorie={{ ligne.categorie }}"><i class="fas fa-file-pdf me-1"></i>PDF</a></td>
+                    <td><a class="btn btn-sm btn-outline-danger" href="{% url 'salaires:emargement_pdf' periode.id %}?categorie={{ ligne.categorie }}"><i class="fas fa-file-signature me-1"></i>PDF</a></td>
+                    <td><a class="btn btn-sm btn-outline-danger" href="{% url 'salaires:acomptes_pdf' periode.id %}?categorie={{ ligne.categorie }}"><i class="fas fa-hand-holding-usd me-1"></i>PDF</a></td>
+                    <td><a class="btn btn-sm btn-outline-danger" href="{% url 'salaires:bulletins_periode_pdf' periode.id %}?categorie={{ ligne.categorie }}"><i class="fas fa-file-invoice me-1"></i>PDF</a></td>
+                </tr>
+                {% endfor %}
+                <tr class="table-light">
+                    <td class="fw-semibold">Tout le personnel</td>
+                    <td><a class="btn btn-sm btn-danger" href="{% url 'salaires:etat_paie_pdf' periode.id %}"><i class="fas fa-file-pdf me-1"></i>PDF</a></td>
+                    <td><a class="btn btn-sm btn-danger" href="{% url 'salaires:emargement_pdf' periode.id %}"><i class="fas fa-file-signature me-1"></i>PDF</a></td>
+                    <td><a class="btn btn-sm btn-danger" href="{% url 'salaires:acomptes_pdf' periode.id %}"><i class="fas fa-hand-holding-usd me-1"></i>PDF</a></td>
+                    <td><a class="btn btn-sm btn-danger" href="{% url 'salaires:bulletins_periode_pdf' periode.id %}"><i class="fas fa-file-invoice me-1"></i>PDF</a></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="small text-muted">
+        Les primes par rubrique (fonction, craie/révision, ancienneté, éloignement, performance, exceptionnelle),
+        les jours travaillés et le matricule se renseignent via « Modifier avant validation » sur chaque état
+        et sur la fiche de l'employé.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
