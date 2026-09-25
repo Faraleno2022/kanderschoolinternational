@@ -143,6 +143,10 @@ class EleveForm(forms.ModelForm):
             'statut', 'responsable_principal', 'responsable_secondaire',
             'groupe_sanguin', 'allergies', 'maladies_chroniques',
             'traitement_en_cours', 'observations_medicales',
+            'personne_autorisee_1_nom', 'personne_autorisee_1_lien',
+            'personne_autorisee_1_telephone', 'personne_autorisee_1_piece',
+            'personne_autorisee_2_nom', 'personne_autorisee_2_lien',
+            'personne_autorisee_2_telephone', 'personne_autorisee_2_piece',
         ]
         widgets = {
             'matricule': forms.TextInput(attrs={
@@ -218,6 +222,14 @@ class EleveForm(forms.ModelForm):
                 'rows': 2,
                 'placeholder': 'Régime alimentaire particulier, informations utiles pour l\'équipe...'
             }),
+            'personne_autorisee_1_nom': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nom et prénom'}),
+            'personne_autorisee_1_lien': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: Oncle, Tante, Chauffeur...'}),
+            'personne_autorisee_1_telephone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Téléphone'}),
+            'personne_autorisee_1_piece': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'N° CNI / passeport (optionnel)'}),
+            'personne_autorisee_2_nom': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nom et prénom'}),
+            'personne_autorisee_2_lien': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: Oncle, Tante, Chauffeur...'}),
+            'personne_autorisee_2_telephone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Téléphone'}),
+            'personne_autorisee_2_piece': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'N° CNI / passeport (optionnel)'}),
         }
     
     def __init__(self, *args, **kwargs):
@@ -368,6 +380,18 @@ class EleveForm(forms.ModelForm):
         - Autres niveaux: 2 à 25 ans.
         """
         cleaned = super().clean()
+
+        # Une personne autorisée doit au moins avoir un nom si d'autres infos sont saisies
+        for i in (1, 2):
+            prefixe = f'personne_autorisee_{i}_'
+            for suffixe in ('nom', 'lien', 'telephone', 'piece'):
+                valeur = cleaned.get(prefixe + suffixe)
+                if isinstance(valeur, str):
+                    cleaned[prefixe + suffixe] = valeur.strip()
+            autres = any(cleaned.get(prefixe + s) for s in ('lien', 'telephone', 'piece'))
+            if autres and not cleaned.get(prefixe + 'nom'):
+                self.add_error(prefixe + 'nom', "Indiquez le nom de la personne autorisée.")
+
         date_naissance = cleaned.get('date_naissance')
         classe = cleaned.get('classe')
 

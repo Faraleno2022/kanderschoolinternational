@@ -1,0 +1,35 @@
+<div class="border rounded p-3 mb-3">
+    <h6 class="fw-bold mb-3">Personne autorisée {{ numero }}</h6>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="form-group">
+                <label class="form-label">Nom complet</label>
+                {{ nom }}
+                {% if nom.errors %}<div class="text-danger small mt-1">{{ nom.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="form-group">
+                <label class="form-label">Lien avec l'enfant</label>
+                {{ lien }}
+                {% if lien.errors %}<div class="text-danger small mt-1">{{ lien.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="form-group">
+                <label class="form-label">Téléphone</label>
+                {{ telephone }}
+                {% if telephone.errors %}<div class="text-danger small mt-1">{{ telephone.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="form-group">
+                <label class="form-label">N° pièce d'identité</label>
+                {{ piece }}
+                {% if piece.errors %}<div class="text-danger small mt-1">{{ piece.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>

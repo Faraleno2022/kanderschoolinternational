@@ -528,7 +528,33 @@ class Eleve(SyncTrackedModel):
         related_name='eleves_secondaire', blank=True, null=True,
         verbose_name="Responsable secondaire"
     )
-    
+
+    # Personnes autorisées à récupérer l'enfant (verso du ticket de retrait)
+    personne_autorisee_1_nom = models.CharField(
+        max_length=150, blank=True, default='', verbose_name="Personne autorisée 1 - Nom complet"
+    )
+    personne_autorisee_1_lien = models.CharField(
+        max_length=50, blank=True, default='', verbose_name="Personne autorisée 1 - Lien avec l'enfant"
+    )
+    personne_autorisee_1_telephone = models.CharField(
+        max_length=20, blank=True, default='', verbose_name="Personne autorisée 1 - Téléphone"
+    )
+    personne_autorisee_1_piece = models.CharField(
+        max_length=50, blank=True, default='', verbose_name="Personne autorisée 1 - N° pièce d'identité"
+    )
+    personne_autorisee_2_nom = models.CharField(
+        max_length=150, blank=True, default='', verbose_name="Personne autorisée 2 - Nom complet"
+    )
+    personne_autorisee_2_lien = models.CharField(
+        max_length=50, blank=True, default='', verbose_name="Personne autorisée 2 - Lien avec l'enfant"
+    )
+    personne_autorisee_2_telephone = models.CharField(
+        max_length=20, blank=True, default='', verbose_name="Personne autorisée 2 - Téléphone"
+    )
+    personne_autorisee_2_piece = models.CharField(
+        max_length=50, blank=True, default='', verbose_name="Personne autorisée 2 - N° pièce d'identité"
+    )
+
     # Métadonnées
     date_creation = models.DateTimeField(auto_now_add=True)
     date_modification = models.DateTimeField(auto_now=True)
@@ -570,6 +596,21 @@ class Eleve(SyncTrackedModel):
     @property
     def nom_complet(self):
         return f"{self.prenom} {self.nom}"
+
+    @property
+    def personnes_autorisees(self):
+        """Personnes autorisées renseignées, sous forme de dictionnaires."""
+        personnes = []
+        for i in (1, 2):
+            nom = (getattr(self, f'personne_autorisee_{i}_nom', '') or '').strip()
+            if nom:
+                personnes.append({
+                    'nom': nom,
+                    'lien': (getattr(self, f'personne_autorisee_{i}_lien', '') or '').strip(),
+                    'telephone': (getattr(self, f'personne_autorisee_{i}_telephone', '') or '').strip(),
+                    'piece': (getattr(self, f'personne_autorisee_{i}_piece', '') or '').strip(),
+                })
+        return personnes
 
     @property
     def echeancier(self):

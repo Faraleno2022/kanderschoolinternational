@@ -2491,7 +2491,10 @@ def generer_ticket_retrait_pdf(request, eleve_id):
         main_font = 'Helvetica'
         main_font_bold = 'Helvetica-Bold'
     
+    # Recto (page 1) puis verso avec les personnes autorisées (page 2)
     _dessiner_ticket_retrait(c, eleve, 0, 0, width, height, main_font, main_font_bold)
+    c.showPage()
+    _dessiner_ticket_retrait_verso(c, eleve, 0, 0, width, height, main_font, main_font_bold)
     c.showPage()
     c.save()
 
@@ -2862,7 +2865,10 @@ def generer_ticket_bus_pdf(request, eleve_id):
         main_font = 'Helvetica'
         main_font_bold = 'Helvetica-Bold'
     
+    # Recto (page 1) puis verso (page 2), comme le ticket de retrait
     _dessiner_ticket_bus(c, eleve, abonnement, 0, 0, width, height, main_font, main_font_bold)
+    c.showPage()
+    _dessiner_ticket_retrait_verso(c, eleve, 0, 0, width, height, main_font, main_font_bold)
     c.showPage()
     c.save()
 
@@ -3207,6 +3213,22 @@ def _positions_huit_cartes_a4(page_width, page_height, card_width, card_height):
     ]
 
 
+def _dessiner_planches_recto_verso(c, elements, positions, dessiner_recto, dessiner_verso):
+    """Impression recto verso par lots de 8 : chaque feuille de rectos est suivie
+    de la feuille des versos. Les colonnes du verso sont inversées (pos ^ 1) pour
+    que chaque verso tombe au dos de son recto en impression recto verso bord long
+    (la grille étant centrée, la colonne miroir occupe exactement le même emplacement)."""
+    elements = list(elements)
+    for debut in range(0, len(elements), 8):
+        lot = elements[debut:debut + 8]
+        for pos_index, element in enumerate(lot):
+            dessiner_recto(element, *positions[pos_index])
+        c.showPage()
+        for pos_index, element in enumerate(lot):
+            dessiner_verso(element, *positions[pos_index ^ 1])
+        c.showPage()
+
+
 @login_required
 def generer_ticket_cantine_pdf(request, eleve_id):
     """Génère la carte d'abonnement cantine d'un élève."""
@@ -3361,23 +3383,11 @@ def generer_tickets_retrait_classe_pdf(request, classe_id):
         width_page, height_page, ticket_width, ticket_height,
     )
 
-    ticket_count = 0
-
-    for eleve in eleves:
-        # Calculer la position du ticket
-        pos_index = ticket_count % 8
-        x_offset, y_offset = positions[pos_index]
-
-        # Dessiner un ticket
-        _dessiner_ticket_retrait(c, eleve, x_offset, y_offset, ticket_width, ticket_height, main_font, main_font_bold)
-
-        ticket_count += 1
-
-        # Nouvelle page toutes les 8 cartes
-        if ticket_count % 8 == 0 and ticket_count < eleves.count():
-            c.showPage()
-    
-    c.showPage()
+    _dessiner_planches_recto_verso(
+        c, eleves, positions,
+        lambda eleve, px, py: _dessiner_ticket_retrait(c, eleve, px, py, ticket_width, ticket_height, main_font, main_font_bold),
+        lambda eleve, px, py: _dessiner_ticket_retrait_verso(c, eleve, px, py, ticket_width, ticket_height, main_font, main_font_bold),
+    )
     c.save()
     
     return response
@@ -3439,32 +3449,20 @@ def generer_tickets_bus_classe_pdf(request, classe_id):
         width_page, height_page, ticket_width, ticket_height,
     )
 
-    ticket_count = 0
-
+    cartes = []
     for eleve in eleves:
-        # Récupérer l'abonnement
         abonnement = AbonnementBus.objects.filter(
             eleve=eleve,
             statut='ACTIF'
         ).order_by('-date_debut').first()
+        if abonnement:
+            cartes.append((eleve, abonnement))
 
-        if not abonnement:
-            continue
-
-        # Calculer la position du ticket
-        pos_index = ticket_count % 8
-        x_offset, y_offset = positions[pos_index]
-
-        # Dessiner un ticket
-        _dessiner_ticket_bus(c, eleve, abonnement, x_offset, y_offset, ticket_width, ticket_height, main_font, main_font_bold)
-
-        ticket_count += 1
-
-        # Nouvelle page toutes les 8 cartes
-        if ticket_count % 8 == 0 and ticket_count < eleves.count():
-            c.showPage()
-    
-    c.showPage()
+    _dessiner_planches_recto_verso(
+        c, cartes, positions,
+        lambda carte, px, py: _dessiner_ticket_bus(c, carte[0], carte[1], px, py, ticket_width, ticket_height, main_font, main_font_bold),
+        lambda carte, px, py: _dessiner_ticket_retrait_verso(c, carte[0], px, py, ticket_width, ticket_height, main_font, main_font_bold),
+    )
     c.save()
     
     return response
@@ -3730,6 +3728,134 @@ def _dessiner_ticket_carte(c, eleve, x, y, width, height, main_font, main_font_b
     c.setFont(main_font, 4.6)
     c.drawRightString(x + width - margin, y + 2.4 * mm, f'{serial_label} #{getattr(eleve, "id", 0):06d}')
 
+    c.setStrokeColor(colors.HexColor(primary))
+    c.setLineWidth(0.9)
+    c.roundRect(x, y, width, height, radius, stroke=1, fill=0)
+    c.restoreState()
+
+
+def _ticket_fit_text_centre(c, text, cx, y, max_width, font_name, max_size, min_size=5, color=None):
+    """Comme _ticket_fit_text, mais centré sur cx."""
+    text = _ticket_safe_text(text)
+    size = max_size
+    while size > min_size and pdfmetrics.stringWidth(text, font_name, size) > max_width:
+        size -= 0.5
+    if pdfmetrics.stringWidth(text, font_name, size) > max_width:
+        while text and pdfmetrics.stringWidth(text + '...', font_name, size) > max_width:
+            text = text[:-1]
+        text = text + '...' if text else '...'
+    if color:
+        c.setFillColor(colors.HexColor(color))
+    c.setFont(font_name, size)
+    c.drawCentredString(cx, y, text)
+
+
+def _dessiner_ticket_retrait_verso(c, eleve, x, y, width, height, main_font, main_font_bold):
+    """Verso du ticket de retrait : logo et nom de l'école en haut,
+    noms et numéros des deux personnes autorisées en bas.
+    Mêmes dimensions que le recto (_dessiner_ticket_carte)."""
+    from reportlab.lib.units import mm
+
+    c.saveState()
+    ecole = eleve.classe.ecole
+    primary = '#1746a2'
+    accent = '#0f766e'
+    dark = '#0f172a'
+    muted = '#64748b'
+    line = '#dbe3ef'
+    soft = '#f5f8fc'
+
+    margin = 2.2 * mm
+    radius = 4.5
+    cx = x + width / 2
+    school_name = _ticket_safe_text(getattr(ecole, 'nom', '')).upper()
+
+    c.setFillColor(colors.white)
+    c.roundRect(x, y, width, height, radius, stroke=0, fill=1)
+
+    # Logo de l'école en haut, centré
+    logo_size = 13 * mm
+    logo_x = cx - logo_size / 2
+    logo_y = y + height - 2.2 * mm - logo_size
+    logo_drawn = False
+    try:
+        if ecole.logo and hasattr(ecole.logo, 'path') and os.path.exists(ecole.logo.path):
+            c.drawImage(ecole.logo.path, logo_x, logo_y, width=logo_size, height=logo_size,
+                        preserveAspectRatio=True, anchor='c', mask='auto')
+            logo_drawn = True
+    except Exception:
+        logo_drawn = False
+    if not logo_drawn:
+        c.setFillColor(colors.HexColor(primary))
+        c.circle(cx, logo_y + logo_size / 2, logo_size / 2, stroke=0, fill=1)
+        c.setFillColor(colors.white)
+        c.setFont(main_font_bold, 11)
+        c.drawCentredString(cx, logo_y + logo_size / 2 - 4, school_name[:2] or 'EC')
+
+    # Nom de l'école en gros caractères gras, sous le logo
+    # Sur deux lignes si le nom est trop long pour rester en gros caractères
+    name_w = width - 2 * margin
+    name_size = 12
+    lignes = [school_name]
+    mots = school_name.split()
+    if pdfmetrics.stringWidth(school_name, main_font_bold, name_size) > name_w and len(mots) > 1:
+        coupure = min(
+            range(1, len(mots)),
+            key=lambda k: max(
+                pdfmetrics.stringWidth(' '.join(mots[:k]), main_font_bold, name_size),
+                pdfmetrics.stringWidth(' '.join(mots[k:]), main_font_bold, name_size),
+            ),
+        )
+        lignes = [' '.join(mots[:coupure]), ' '.join(mots[coupure:])]
+    name_y = logo_y - 5 * mm
+    for ligne in lignes:
+        _ticket_fit_text_centre(c, ligne, cx, name_y, name_w, main_font_bold, name_size, 6, primary)
+        name_y -= 4.6 * mm
+    name_y += 4.6 * mm
+    c.setStrokeColor(colors.HexColor(accent))
+    c.setLineWidth(1)
+    c.line(cx - 12 * mm, name_y - 1.8 * mm, cx + 12 * mm, name_y - 1.8 * mm)
+
+    # Personnes autorisées en bas, côte à côte
+    gap = 1.6 * mm
+    block_w = (width - 2 * margin - gap) / 2
+    block_h = 15.5 * mm
+    block_y = y + 2.2 * mm
+    title_y = block_y + block_h + 1.5 * mm
+    _ticket_fit_text_centre(c, "PERSONNES AUTORISÉES À RÉCUPÉRER L'ENFANT", cx, title_y,
+                            width - 2 * margin, main_font_bold, 5.6, 4.2, muted)
+
+    personnes = eleve.personnes_autorisees
+    for index in range(2):
+        bx = x + margin + index * (block_w + gap)
+        c.setFillColor(colors.HexColor(soft))
+        c.setStrokeColor(colors.HexColor(line))
+        c.setLineWidth(0.6)
+        c.roundRect(bx, block_y, block_w, block_h, 3, stroke=1, fill=1)
+
+        # Pastille numérotée
+        badge = 3.6 * mm
+        c.setFillColor(colors.HexColor(accent))
+        c.circle(bx + 1.2 * mm + badge / 2, block_y + block_h - 1.2 * mm - badge / 2, badge / 2, stroke=0, fill=1)
+        c.setFillColor(colors.white)
+        c.setFont(main_font_bold, 6.5)
+        c.drawCentredString(bx + 1.2 * mm + badge / 2, block_y + block_h - 1.2 * mm - badge / 2 - 2.2, str(index + 1))
+
+        tx = bx + 1.5 * mm
+        tw = block_w - 3 * mm
+        personne = personnes[index] if index < len(personnes) else None
+        if not personne:
+            _ticket_fit_text(c, 'Non renseignée', tx, block_y + 4.5 * mm, tw, main_font, 6.5, 5, muted)
+            continue
+
+        lien_x = tx + badge + 1.2 * mm
+        if personne['lien']:
+            _ticket_fit_text(c, personne['lien'], lien_x, block_y + block_h - 3.9 * mm,
+                             bx + block_w - 1.5 * mm - lien_x, main_font, 5.6, 4.2, muted)
+        _ticket_fit_text(c, personne['nom'].upper(), tx, block_y + 6.6 * mm, tw, main_font_bold, 7.4, 4.8, dark)
+        _ticket_fit_text(c, personne['telephone'] or '-', tx, block_y + 2.2 * mm, tw, main_font_bold, 8, 5, accent)
+
+    # Bordure identique au recto
     c.setStrokeColor(colors.HexColor(primary))
     c.setLineWidth(0.9)
     c.roundRect(x, y, width, height, radius, stroke=1, fill=0)

@@ -76,6 +76,27 @@ class CartesHuitParPageTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
                 # 9 élèves => 8 cartes sur la première page, 1 sur la seconde.
+                # Retrait, bus et cartes scolaires sont recto verso :
+                # une feuille de versos par feuille de rectos.
+                pages_attendues = 2 if 'cantine' in url else 4
+                self.assertEqual(compter_pages_pdf(response.content), pages_attendues)
+
+    def test_ticket_retrait_individuel_recto_verso_avec_personnes_autorisees(self):
+        eleve = Eleve.objects.filter(classe=self.classe).first()
+        eleve.personne_autorisee_1_nom = 'Alpha Condé'
+        eleve.personne_autorisee_1_lien = 'Oncle'
+        eleve.personne_autorisee_1_telephone = '+224620000001'
+        eleve.personne_autorisee_2_nom = 'Aïssatou Sow'
+        eleve.save()
+
+        self.assertEqual(
+            [p['nom'] for p in eleve.personnes_autorisees],
+            ['Alpha Condé', 'Aïssatou Sow'],
+        )
+        for vue in ('ticket_retrait_pdf', 'ticket_bus_pdf', 'carte_scolaire_pdf'):
+            with self.subTest(vue=vue):
+                response = self.client.get(reverse(f'eleves:{vue}', args=[eleve.id]))
+                self.assertEqual(response.status_code, 200)
                 self.assertEqual(compter_pages_pdf(response.content), 2)
 
     def test_export_complet_est_reimportable_sans_classe_forcee(self):
