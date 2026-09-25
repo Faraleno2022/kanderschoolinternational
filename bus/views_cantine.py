@@ -6,19 +6,26 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
+from django.db import transaction
 from django.db.models import Q, Sum, Count
 from django.utils import timezone
+from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_POST
 from datetime import timedelta
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 import io
 
+from administration.corbeille import archiver_avant_suppression
+from administration.models import ObjetSupprime
 from eleves.models import Eleve
 from .models import AbonnementCantine, TypeRepasCantine
 from .forms import AbonnementCantineForm
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school
 from utilisateurs.permissions import can_delete_subscriptions
 from ecole_moderne.security_decorators import require_school_object
+
+CANTINE_MODEL_LABEL = 'bus.abonnementcantine'
 
 
 @login_required
@@ -212,13 +219,19 @@ def modifier_abonnement_cantine(request, pk):
 @can_delete_subscriptions
 @require_school_object(model=AbonnementCantine, pk_kwarg='pk', field_path='eleve__classe__ecole')
 def supprimer_abonnement_cantine(request, pk):
-    """Supprimer définitivement un abonnement cantine"""
+    """Supprime un abonnement cantine en le plaçant dans la corbeille (restaurable)."""
     abonnement = get_object_or_404(AbonnementCantine, pk=pk)
-    
+
     if request.method == 'POST':
         eleve_nom = str(abonnement.eleve)
-        abonnement.delete()
-        messages.success(request, f"Abonnement cantine supprimé définitivement pour {eleve_nom}")
+        with transaction.atomic():
+            archiver_avant_suppression(abonnement, request.user)
+            abonnement.delete()
+        messages.success(
+            request,
+            f"Abonnement cantine de {eleve_nom} placé dans la corbeille. "
+            "Il peut être restauré depuis la corbeille de la cantine.",
+        )
         return redirect('bus:liste_abonnements_cantine')
     
     context = {
@@ -226,6 +239,76 @@ def supprimer_abonnement_cantine(request, pk):
         'abonnement': abonnement,
     }
     return render(request, 'bus/cantine/confirmer_suppression.html', context)
+
+
+def _archives_cantine_visibles(user):
+    """Abonnements cantine dans la corbeille (non restaurés), limités à l'école de l'utilisateur."""
+    archives = list(
+        ObjetSupprime.objects.filter(model_label=CANTINE_MODEL_LABEL, restaure=False)
+        .select_related('supprime_par')
+    )
+    eleve_ids = set()
+    for archive in archives:
+        archive.champs = _champs_archive_cantine(archive)
+        if archive.champs.get('eleve'):
+            eleve_ids.add(archive.champs['eleve'])
+
+    eleves = Eleve.objects.filter(pk__in=eleve_ids).select_related('classe', 'classe__ecole')
+    if not user_is_superadmin(user):
+        eleves = filter_by_user_school(eleves, user, 'classe__ecole')
+    eleves = {eleve.pk: eleve for eleve in eleves}
+
+    visibles = []
+    for archive in archives:
+        archive.eleve = eleves.get(archive.champs.get('eleve'))
+        if archive.eleve is not None:
+            visibles.append(archive)
+    return visibles
+
+
+def _champs_archive_cantine(archive):
+    for obj in archive.donnees or []:
+        if obj.get('model') == CANTINE_MODEL_LABEL and str(obj.get('pk')) == str(archive.object_pk):
+            return obj.get('fields', {})
+    return {}
+
+
+@login_required
+@can_delete_subscriptions
+def corbeille_cantine(request):
+    """Liste des abonnements cantine supprimés, restaurables."""
+    archives = _archives_cantine_visibles(request.user)
+    for archive in archives:
+        champs = archive.champs
+        archive.montant = champs.get('montant')
+        archive.date_debut = parse_date(champs.get('date_debut') or '')
+        archive.date_expiration = parse_date(champs.get('date_expiration') or '')
+        archive.type_repas = TypeRepasCantine.libelle_pour(
+            champs.get('type_repas'),
+            dict(AbonnementCantine.TypeRepas.choices).get(champs.get('type_repas'), champs.get('type_repas')),
+        )
+    return render(request, 'bus/cantine/corbeille.html', {
+        'titre_page': 'Corbeille des abonnements cantine',
+        'archives': archives,
+    })
+
+
+@login_required
+@can_delete_subscriptions
+@require_POST
+def restaurer_abonnement_cantine(request, archive_id):
+    """Restaure un abonnement cantine depuis la corbeille."""
+    archive = next((a for a in _archives_cantine_visibles(request.user) if a.pk == archive_id), None)
+    if archive is None:
+        messages.error(request, "Abonnement introuvable dans la corbeille.")
+        return redirect('bus:corbeille_cantine')
+    try:
+        archive.restaurer()
+    except Exception as exc:
+        messages.error(request, f"Restauration impossible : {exc}")
+    else:
+        messages.success(request, f"Abonnement cantine de {archive.eleve} restauré.")
+    return redirect('bus:corbeille_cantine')
 
 
 @login_required
