@@ -1,0 +1,6 @@
+<!-- Personnes autorisées à récupérer l'enfant (imprimées au verso du ticket de retrait) -->
+<h4 class="section-title mt-4"><i class="fas fa-user-check me-2"></i>Personnes autorisées à récupérer l'enfant (optionnel)</h4>
+<p class="text-muted small mb-3">Ces informations apparaissent au verso du ticket de retrait.</p>
+
+{% include "eleves/partials/_personne_autorisee.html" with numero=1 nom=form.personne_autorisee_1_nom lien=form.personne_autorisee_1_lien telephone=form.personne_autorisee_1_telephone piece=form.personne_autorisee_1_piece %}
+{% include "eleves/partials/_personne_autorisee.html" with numero=2 nom=form.personne_autorisee_2_nom lien=form.personne_autorisee_2_lien telephone=form.personne_autorisee_2_telephone piece=form.personne_autorisee_2_piece %}

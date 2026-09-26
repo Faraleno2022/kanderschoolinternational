@@ -130,6 +130,10 @@ def generer_carte_scolaire_moderne(eleve, response, custom_canvas=None,
     # Utiliser le moteur robuste partage avec les cartes en lot.
     _dessiner_carte_simple(c, eleve, offset_x, offset_y, width, height, main_font, bold_font)
     if not custom_canvas:
+        # Recto (page 1) puis verso (page 2), même verso que le ticket de retrait
+        from .views import _dessiner_ticket_retrait_verso
+        c.showPage()
+        _dessiner_ticket_retrait_verso(c, eleve, 0, 0, width, height, main_font, bold_font)
         c.showPage()
         c.save()
     return response
@@ -654,22 +658,13 @@ def generer_cartes_classe_moderne(classe, eleves, response):
         main_font = 'Helvetica'
         bold_font = 'Helvetica-Bold'
     
-    card_count = 0
-    
-    for eleve in eleves:
-        pos_index = card_count % 8  # 8 cartes par page
-        x, y = positions[pos_index]
-        
-        # Dessiner la carte à la position donnée
-        _dessiner_carte_simple(c, eleve, x, y, card_width, card_height, main_font, bold_font)
-        
-        card_count += 1
-        
-        # Nouvelle page après 8 cartes
-        if card_count % 8 == 0 and card_count < len(eleves):
-            c.showPage()
-    
-    c.showPage()
+    # Recto verso : une feuille de versos après chaque feuille de rectos
+    from .views import _dessiner_planches_recto_verso, _dessiner_ticket_retrait_verso
+    _dessiner_planches_recto_verso(
+        c, eleves, positions,
+        lambda eleve, x, y: _dessiner_carte_simple(c, eleve, x, y, card_width, card_height, main_font, bold_font),
+        lambda eleve, x, y: _dessiner_ticket_retrait_verso(c, eleve, x, y, card_width, card_height, main_font, bold_font),
+    )
     c.save()
     return response
 
