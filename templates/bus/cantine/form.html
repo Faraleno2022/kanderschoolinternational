@@ -86,6 +86,9 @@
                                         </div>
                                     </div>
                                 </div>
+                                {% if not form.instance.pk %}
+                                    {% include "bus/partials/_reprise_abonnement.html" with service="cantine" %}
+                                {% endif %}
                             </div>
                         </div>
 

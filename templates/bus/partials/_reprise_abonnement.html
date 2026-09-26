@@ -1,0 +1,62 @@
+{# Reprise des informations du dernier abonnement de l'élève (création uniquement). #}
+<div id="repriseAbonnement" class="alert alert-success d-none" role="status"></div>
+<script>
+(function() {
+  const service = '{{ service }}';
+  const urlModele = '{% url "bus:dernier_abonnement_json" 0 service %}';
+  const encadre = document.getElementById('repriseAbonnement');
+  let dernierEleve = null;
+
+  function remplir(nom, valeur) {
+    const champ = document.querySelector(`[name="${nom}"]`);
+    if (!champ || valeur === undefined || valeur === null || valeur === '') return;
+    if (champ.tagName === 'SELECT' && !Array.from(champ.options).some(o => o.value === valeur)) return;
+    champ.value = valeur;
+    champ.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  async function reprendre(eleveId) {
+    if (!eleveId || eleveId === dernierEleve) return;
+    dernierEleve = eleveId;
+    encadre.classList.add('d-none');
+    try {
+      const resp = await fetch(urlModele.replace('/0/', `/${eleveId}/`), {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      });
+      const data = await resp.json();
+      if (!data.success || !data.existe || String(eleveId) !== String(dernierEleve)) return;
+
+      const valeurs = data.valeurs;
+      // Date d'expiration proposée d'abord : le calcul automatique du formulaire
+      // la remplace si la périodicité a une durée configurée.
+      remplir('date_expiration', valeurs.date_expiration);
+      Object.keys(valeurs).forEach(nom => {
+        if (nom !== 'date_debut' && nom !== 'date_expiration') remplir(nom, valeurs[nom]);
+      });
+      remplir('date_debut', valeurs.date_debut);
+      const dateDebut = document.querySelector('[name="date_debut"]');
+      dateDebut && dateDebut.dispatchEvent(new Event('change', { bubbles: true }));
+
+      encadre.innerHTML =
+        `<i class="fas fa-history me-2"></i><strong>Élève déjà abonné</strong> ` +
+        `(${data.nombre} abonnement${data.nombre > 1 ? 's' : ''}, dernier du ${data.dernier.date_debut} ` +
+        `au ${data.dernier.date_expiration}). Ses informations ont été reprises : vérifiez les dates ` +
+        `et le montant, puis ajoutez la référence du paiement. ` +
+        `<a href="${data.historique_url}" class="alert-link">Voir ses abonnements</a>`;
+      encadre.classList.remove('d-none');
+    } catch (e) {
+      dernierEleve = null;
+    }
+  }
+
+  // Appelée aussi par la recherche par matricule du formulaire bus.
+  window.repriseAbonnement = reprendre;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const eleveSelect = document.querySelector('[name="eleve"]');
+    if (!eleveSelect) return;
+    eleveSelect.addEventListener('change', () => reprendre(eleveSelect.value));
+    {% if not form.is_bound %}if (eleveSelect.value) reprendre(eleveSelect.value);{% endif %}
+  });
+})();
+</script>

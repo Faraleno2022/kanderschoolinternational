@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas {% if service == 'cantine' %}fa-utensils text-success{% else %}fa-bus text-primary{% endif %}"></i>
+                Abonnements {{ config.titre|lower }}
+            </h2>
+            <p class="text-muted mb-0">Historique de tous les abonnements de l'élève</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url config.url_liste %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Retour à la liste
+            </a>
+            <a href="{% url config.url_nouveau %}?eleve={{ eleve.id }}" class="btn btn-success">
+                <i class="fas fa-plus"></i> Nouvel abonnement
+            </a>
+            <a href="{% url 'bus:historique_eleve_excel' eleve.id service %}" class="btn btn-outline-success">
+                <i class="fas fa-file-excel"></i> Excel
+            </a>
+            <a href="{% url 'bus:historique_eleve_pdf' eleve.id service %}" class="btn btn-outline-danger">
+                <i class="fas fa-file-pdf"></i> PDF
+            </a>
+            <a href="{% url 'bus:carnet_abonnement_pdf' eleve.id service %}" class="btn btn-primary">
+                <i class="fas fa-book"></i> Carnet d'abonnement
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body d-flex flex-wrap align-items-center gap-4">
+            {% if eleve.photo %}
+                <img src="{{ eleve.photo.url }}" alt="Photo" class="rounded" style="width:72px;height:72px;object-fit:cover;">
+            {% else %}
+                <div class="rounded bg-light d-flex align-items-center justify-content-center text-muted" style="width:72px;height:72px;">
+                    <i class="fas fa-user fa-2x"></i>
+                </div>
+            {% endif %}
+            <div>
+                <h4 class="mb-1">{{ eleve.prenom }} {{ eleve.nom }}</h4>
+                <div class="text-muted">
+                    Matricule : <strong>{{ eleve.matricule|default:"-" }}</strong>
+                    &nbsp;·&nbsp; Classe : <strong>{{ eleve.classe.nom|default:"-" }}</strong>
+                </div>
+            </div>
+            <div class="ms-auto text-end">
+                <div class="text-muted small">{{ lignes|length }} abonnement{{ lignes|length|pluralize }}</div>
+                <div class="fs-4 fw-bold text-success">{{ total|intcomma }} GNF</div>
+                <div class="text-muted small">Total payé</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mois</th>
+                            <th>Type</th>
+                            <th>{% if service == 'cantine' %}Repas{% else %}Zone / Arrêt{% endif %}</th>
+                            <th class="text-end">Montant payé</th>
+                            <th>Référence</th>
+                            <th>Date début</th>
+                            <th>Date d'expiration</th>
+                            <th>Jour d'expiration</th>
+                            <th>Jours restants</th>
+                            <th>Statut</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ligne in lignes %}
+                        <tr>
+                            <td class="fw-semibold">{{ ligne.mois }}</td>
+                            <td>{{ ligne.periodicite }}</td>
+                            <td>{{ ligne.detail }}</td>
+                            <td class="text-end">{{ ligne.montant|intcomma }} GNF</td>
+                            <td>{{ ligne.reference|default:"-" }}</td>
+                            <td>{{ ligne.date_debut|date:"d/m/Y" }}</td>
+                            <td>{{ ligne.date_expiration|date:"d/m/Y" }}</td>
+                            <td>{{ ligne.jour_expiration }}</td>
+                            <td>
+                                {% if ligne.jours_restants is None %}-
+                                {% elif ligne.jours_restants < 0 %}<span class="text-muted">—</span>
+                                {% elif ligne.jours_restants <= 7 %}<span class="badge bg-warning text-dark">{{ ligne.jours_restants }} j</span>
+                                {% else %}{{ ligne.jours_restants }} j{% endif %}
+                            </td>
+                            <td>
+                                <span class="badge {% if ligne.statut == 'Actif' %}bg-success{% elif ligne.statut == 'Expiré' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {{ ligne.statut }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url config.url_modifier ligne.abonnement.id %}" class="btn btn-outline-primary" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="{% url config.url_recu ligne.abonnement.id %}" class="btn btn-outline-secondary" title="Reçu PDF" target="_blank">
+                                        <i class="fas fa-file-pdf"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="11" class="text-center text-muted py-5">
+                                <i class="fas fa-inbox fa-3x mb-3"></i>
+                                <p>Aucun abonnement pour cet élève.</p>
+                                <a href="{% url config.url_nouveau %}?eleve={{ eleve.id }}" class="btn btn-success">
+                                    <i class="fas fa-plus"></i> Créer le premier abonnement
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

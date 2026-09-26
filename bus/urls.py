@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from . import views_cantine
+from . import historique
 from .whatsapp_bus import apercu_message_whatsapp_abonnement, apercu_message_whatsapp_expiration
 from .abonnement_public import abonnement_public_pdf
 
@@ -32,6 +33,13 @@ urlpatterns = [
     path('cantine/api/alertes/', views_cantine.alertes_cantine_json, name='alertes_cantine_json'),
     path('cantine/api/eleve/<int:eleve_id>/', views_cantine.get_eleve_info_json, name='get_eleve_info_json'),
     
+    # Historique et carnet d'abonnement par élève (service = bus ou cantine)
+    path('eleve/<int:eleve_id>/<str:service>/', historique.historique_eleve, name='historique_eleve'),
+    path('eleve/<int:eleve_id>/<str:service>/excel/', historique.export_historique_excel, name='historique_eleve_excel'),
+    path('eleve/<int:eleve_id>/<str:service>/pdf/', historique.export_historique_pdf, name='historique_eleve_pdf'),
+    path('eleve/<int:eleve_id>/<str:service>/carnet/', historique.carnet_abonnement_pdf, name='carnet_abonnement_pdf'),
+    path('api/eleve/<int:eleve_id>/<str:service>/dernier-abonnement/', historique.dernier_abonnement_json, name='dernier_abonnement_json'),
+
     # WhatsApp - Abonnements Bus
     path('whatsapp/apercu-abonnement/', apercu_message_whatsapp_abonnement, name='apercu_whatsapp_abonnement'),
     path('whatsapp/apercu-expiration/', apercu_message_whatsapp_expiration, name='apercu_whatsapp_expiration'),

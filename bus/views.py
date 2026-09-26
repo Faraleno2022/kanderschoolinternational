@@ -17,6 +17,7 @@ import csv
 from eleves.models import Eleve
 from .models import AbonnementBus, TypePeriodiciteAbonnement
 from .forms import AbonnementBusForm
+from .historique import valeurs_reprises
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school
 from utilisateurs.permissions import can_delete_subscriptions
 from ecole_moderne.security_decorators import require_school_object
@@ -175,6 +176,11 @@ def abonnement_create(request):
             initial['eleve'] = eleves_autorises.get(id=int(eleve_id))
         except (TypeError, ValueError, Eleve.DoesNotExist):
             pass
+        else:
+            # Élève déjà abonné : reprendre les informations du dernier abonnement
+            reprise = valeurs_reprises(initial['eleve'], 'bus')
+            if reprise:
+                initial.update({k: v for k, v in reprise['valeurs'].items() if v not in (None, '')})
     if request.method == 'POST':
         form = AbonnementBusForm(request.POST, user=request.user)
         if form.is_valid():

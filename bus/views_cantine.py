@@ -21,6 +21,7 @@ from administration.models import ObjetSupprime
 from eleves.models import Eleve
 from .models import AbonnementCantine, TypeRepasCantine
 from .forms import AbonnementCantineForm
+from .historique import valeurs_reprises
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school
 from utilisateurs.permissions import can_delete_subscriptions
 from ecole_moderne.security_decorators import require_school_object
@@ -181,6 +182,10 @@ def creer_abonnement_cantine(request):
                 initial['eleve'] = eleve
                 if eleve.responsable_principal:
                     initial['contact_parent'] = eleve.responsable_principal.telephone
+                # Élève déjà abonné : reprendre les informations du dernier abonnement
+                reprise = valeurs_reprises(eleve, 'cantine')
+                if reprise:
+                    initial.update({k: v for k, v in reprise['valeurs'].items() if v not in (None, '')})
             except (TypeError, ValueError, Eleve.DoesNotExist):
                 pass
         form = AbonnementCantineForm(initial=initial, user=request.user)
