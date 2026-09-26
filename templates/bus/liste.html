@@ -214,6 +214,7 @@
         <div class="btn-group btn-group-sm">
           <a class="btn btn-outline-primary" href="{% url 'bus:modifier' a.id %}" title="Modifier"><i class="fas fa-edit"></i></a>
           <a class="btn btn-outline-secondary" href="{% url 'bus:recu_pdf' a.id %}" target="_blank" title="Reçu PDF"><i class="fas fa-file-pdf"></i></a>
+          <a class="btn btn-outline-info" href="{% url 'bus:historique_eleve' a.eleve_id 'bus' %}" title="Abonnements de l'élève et carnet"><i class="fas fa-history"></i></a>
           <button type="button" class="btn btn-success" onclick="envoyerAbonnementWhatsApp({{ a.id }})" title="Envoyer par WhatsApp"><i class="fab fa-whatsapp"></i></button>
         </div>
       </td>

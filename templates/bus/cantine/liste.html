@@ -152,6 +152,10 @@
                                        class="btn btn-outline-secondary" title="Reçu PDF" target="_blank">
                                         <i class="fas fa-file-pdf"></i>
                                     </a>
+                                    <a href="{% url 'bus:historique_eleve' abo.eleve_id 'cantine' %}"
+                                       class="btn btn-outline-info" title="Abonnements de l'élève et carnet">
+                                        <i class="fas fa-history"></i>
+                                    </a>
                                     <a href="{% url 'bus:supprimer_abonnement_cantine' abo.id %}" 
                                        class="btn btn-danger" title="Placer dans la corbeille">
                                         <i class="fas fa-trash"></i>

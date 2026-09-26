@@ -82,6 +82,7 @@
           </div>
 
           <div id="eleveError" class="text-danger small" style="display:none;">Veuillez sélectionner un élève.</div>
+          <div class="col-12">{% include "bus/partials/_reprise_abonnement.html" with service="bus" %}</div>
           {% else %}
             {{ form.eleve.as_hidden }}
           {% endif %}
@@ -224,6 +225,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     eleveInfoSection.style.display = 'block';
     eleveError && (eleveError.style.display = 'none');
+    window.repriseAbonnement && window.repriseAbonnement(String(e.id));
   }
 
   async function fetchByMatricule(m, resetClass = false) {
